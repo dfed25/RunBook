@@ -44,13 +44,7 @@ export default function DashboardPage() {
   const [selectedHireId, setSelectedHireId] = useState<string>("");
   const [chatInput, setChatInput] = useState("");
   const [chatBusy, setChatBusy] = useState(false);
-  const [messages, setMessages] = useState<ChatMessage[]>([
-    {
-      id: "assistant-welcome",
-      role: "assistant",
-      text: `Hi ${DEMO_PERSONAS.newHire.name}, ask me anything about onboarding and I will cite the best matching docs.`,
-    },
-  ]);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [lessonDocId, setLessonDocId] = useState("engineering-setup");
   const [lessonLoading, setLessonLoading] = useState(false);
   const [lesson, setLesson] = useState<Lesson | null>(null);
@@ -85,7 +79,10 @@ export default function DashboardPage() {
       const data = (await res.json()) as { hires?: Hire[] };
       const active = (data.hires || []).filter((hire) => hire.active);
       setHires(active);
-      setSelectedHireId((current) => current || active[0]?.id || "");
+      setSelectedHireId((current) => {
+        if (current && active.some((hire) => hire.id === current)) return current;
+        return active[0]?.id || "";
+      });
     } catch (error) {
       console.error(error);
       setHires([]);
@@ -298,6 +295,11 @@ export default function DashboardPage() {
               ))}
             </div>
             <div className="mt-4 max-h-72 space-y-3 overflow-y-auto rounded-lg border border-slate-800 bg-slate-950 p-3">
+              <div className="space-y-2">
+                <p className="inline-block max-w-[95%] rounded-lg bg-slate-800 px-3 py-2 text-sm text-slate-100">
+                  Hi {selectedHire?.name || "there"}, ask me anything about onboarding and I will cite the best matching docs.
+                </p>
+              </div>
               {messages.map((message) => (
                 <div key={message.id} className={`space-y-2 ${message.role === "user" ? "text-right" : ""}`}>
                   <p

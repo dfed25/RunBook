@@ -28,14 +28,17 @@ export type SourceDoc = {
     updatedAt: string;
   };
 
-  export type KnowledgeSourceType =
-    | "notion_page"
-    | "notion_database"
-    | "google_doc"
-    | "google_drive_folder"
-    | "google_drive_file"
-    | "slack_channel"
-    | "url";
+export const KNOWLEDGE_SOURCE_TYPES = [
+  "notion_page",
+  "notion_database",
+  "google_doc",
+  "google_drive_folder",
+  "google_drive_file",
+  "slack_channel",
+  "url"
+] as const;
+
+export type KnowledgeSourceType = (typeof KNOWLEDGE_SOURCE_TYPES)[number];
 
   export type HireKnowledgeSource = {
     id: string;

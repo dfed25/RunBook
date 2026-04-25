@@ -15,12 +15,20 @@ export async function GET() {
 
 export async function POST(req: Request) {
   try {
-    const body = await req.json();
-    const name = String(body.name || "").trim();
-    const role = String(body.role || "").trim();
-    const email = String(body.email || "").trim();
+    const body = await req.json().catch(() => null);
+    if (!body || typeof body !== "object") {
+      return NextResponse.json({ error: "invalid or missing JSON body" }, { status: 400 });
+    }
+
+    const name = String((body as { name?: unknown }).name || "").trim().slice(0, 120);
+    const role = String((body as { role?: unknown }).role || "").trim().slice(0, 120);
+    const email = String((body as { email?: unknown }).email || "").trim().slice(0, 254).toLowerCase();
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!name) {
       return NextResponse.json({ error: "name is required" }, { status: 400 });
+    }
+    if (email && !emailRegex.test(email)) {
+      return NextResponse.json({ error: "invalid email" }, { status: 400 });
     }
 
     const created = await addHire({

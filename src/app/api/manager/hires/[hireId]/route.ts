@@ -10,7 +10,10 @@ type Params = {
 export async function PATCH(req: Request, { params }: Params) {
   try {
     const { hireId } = await params;
-    const body = await req.json();
+    const body = await req.json().catch(() => null);
+    if (!body || typeof body !== "object") {
+      return NextResponse.json({ error: "Invalid JSON body" }, { status: 400 });
+    }
     const updated = await updateHire(hireId, {
       name: typeof body.name === "string" ? body.name : undefined,
       role: typeof body.role === "string" ? body.role : undefined,

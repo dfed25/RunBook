@@ -2,21 +2,13 @@
 
 import Link from "next/link";
 import { FormEvent, useEffect, useState } from "react";
-import { Hire, HireKnowledgeSource, KnowledgeSourceType, OnboardingTask } from "@/lib/types";
+import { Hire, HireKnowledgeSource, KNOWLEDGE_SOURCE_TYPES, KnowledgeSourceType, OnboardingTask } from "@/lib/types";
 
 type TaskFormState = { title: string; description: string; assigneeId: string; estimatedTime: string; sourceTitle: string };
 type HireFormState = { name: string; role: string; email: string };
 type SourceFormState = { type: KnowledgeSourceType; title: string; url: string };
 
-const SOURCE_TYPES: KnowledgeSourceType[] = [
-  "notion_page",
-  "notion_database",
-  "google_doc",
-  "google_drive_folder",
-  "google_drive_file",
-  "slack_channel",
-  "url"
-];
+const SOURCE_TYPES: readonly KnowledgeSourceType[] = KNOWLEDGE_SOURCE_TYPES;
 
 export default function ManagerTasksPage() {
   const [hires, setHires] = useState<Hire[]>([]);
@@ -57,11 +49,22 @@ export default function ManagerTasksPage() {
 
   useEffect(() => {
     if (!selectedHireId) return;
+    const controller = new AbortController();
     void (async () => {
-      const res = await fetch(`/api/manager/hires/${selectedHireId}/sources`);
-      const data = await res.json();
-      if (res.ok) setSources(data.sources || []);
+      try {
+        const res = await fetch(`/api/manager/hires/${selectedHireId}/sources`, { signal: controller.signal });
+        const data = await res.json();
+        if (controller.signal.aborted) return;
+        if (res.ok) setSources(data.sources || []);
+        else setMessage(data.error || "Failed to load sources.");
+      } catch (error) {
+        if ((error as { name?: string })?.name !== "AbortError") {
+          console.error(error);
+          setMessage("Failed to load sources.");
+        }
+      }
     })();
+    return () => controller.abort();
   }, [selectedHireId]);
 
   async function submitTask(event: FormEvent<HTMLFormElement>) {
@@ -145,6 +148,7 @@ export default function ManagerTasksPage() {
     setHires((prev) => prev.filter((hire) => hire.id !== hireId));
     setSelectedHireId("");
     setSources([]);
+    setForm((prev) => (prev.assigneeId === hireId ? { ...prev, assigneeId: "" } : prev));
     setMessage("Hire removed.");
   }
 

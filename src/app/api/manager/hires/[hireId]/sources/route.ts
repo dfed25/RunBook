@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { addHireSource, getHireSources } from "@/lib/dataStore";
-import type { KnowledgeSourceType } from "@/lib/types";
+import { KNOWLEDGE_SOURCE_TYPES, type KnowledgeSourceType } from "@/lib/types";
 
 export const runtime = "nodejs";
 
@@ -8,15 +8,7 @@ type Params = {
   params: Promise<{ hireId: string }>;
 };
 
-const sourceTypes: KnowledgeSourceType[] = [
-  "notion_page",
-  "notion_database",
-  "google_doc",
-  "google_drive_folder",
-  "google_drive_file",
-  "slack_channel",
-  "url"
-];
+const sourceTypes: readonly KnowledgeSourceType[] = KNOWLEDGE_SOURCE_TYPES;
 
 export async function GET(_req: Request, { params }: Params) {
   try {
@@ -33,13 +25,14 @@ export async function POST(req: Request, { params }: Params) {
   try {
     const { hireId } = await params;
     const body = await req.json();
-    const type = String(body.type || "").trim() as KnowledgeSourceType;
+    const rawType = String(body.type || "").trim();
     const title = String(body.title || "").trim();
     const url = String(body.url || "").trim();
     const providerRef = String(body.providerRef || "").trim();
-    if (!sourceTypes.includes(type)) {
+    if (!sourceTypes.includes(rawType as KnowledgeSourceType)) {
       return NextResponse.json({ error: "Invalid source type" }, { status: 400 });
     }
+    const type = rawType as KnowledgeSourceType;
     if (!title || !url) {
       return NextResponse.json({ error: "title and url are required" }, { status: 400 });
     }

@@ -2,8 +2,9 @@ import { promises as fs } from "fs";
 import path from "path";
 import { demoDocs } from "./demoDocs";
 import { initialTasks } from "./demoTasks";
-import { Hire, HireKnowledgeSource, KnowledgeSourceType, OnboardingTask, SourceDoc } from "./types";
+import { Hire, HireKnowledgeSource, KNOWLEDGE_SOURCE_TYPES, KnowledgeSourceType, OnboardingTask, SourceDoc } from "./types";
 import { DEFAULT_ASSIGNEE, TRAINEES } from "./trainees";
+import { supabaseAdmin } from "./supabase-admin";
 
 const DATA_DIR = path.join(process.cwd(), ".runbook-data");
 const TASKS_FILE = path.join(DATA_DIR, "tasks.json");
@@ -71,22 +72,13 @@ function normalizeHire(hire: Partial<Hire> & { id?: string }): Hire {
     email: hire.email ? String(hire.email).trim() : undefined,
     active: typeof hire.active === "boolean" ? hire.active : true,
     createdAt: hire.createdAt || current,
-    updatedAt: current
+    updatedAt: hire.updatedAt || current
   };
 }
 
 function normalizeSourceType(rawType: unknown): KnowledgeSourceType {
   const maybe = typeof rawType === "string" ? rawType : "";
-  const allowed: KnowledgeSourceType[] = [
-    "notion_page",
-    "notion_database",
-    "google_doc",
-    "google_drive_folder",
-    "google_drive_file",
-    "slack_channel",
-    "url"
-  ];
-  return allowed.includes(maybe as KnowledgeSourceType) ? (maybe as KnowledgeSourceType) : "url";
+  return KNOWLEDGE_SOURCE_TYPES.includes(maybe as KnowledgeSourceType) ? (maybe as KnowledgeSourceType) : "url";
 }
 
 function normalizeHireSource(source: Partial<HireKnowledgeSource> & { id?: string }): HireKnowledgeSource {
@@ -99,7 +91,7 @@ function normalizeHireSource(source: Partial<HireKnowledgeSource> & { id?: strin
     url: String(source.url || "").trim(),
     providerRef: source.providerRef ? String(source.providerRef).trim() : undefined,
     createdAt: source.createdAt || current,
-    updatedAt: current
+    updatedAt: source.updatedAt || current
   };
 }
 
@@ -175,12 +167,14 @@ export async function getHires(): Promise<Hire[]> {
 export async function addHire(input: { name: string; role?: string; email?: string }): Promise<Hire> {
   return runMutation(async () => {
     const hires = await getHires();
+    const updatedAt = nowIso();
     const next = normalizeHire({
       id: makeId("hire"),
       name: input.name,
       role: input.role,
       email: input.email,
-      active: true
+      active: true,
+      updatedAt
     });
     const updated = [...hires, next];
     await writeJson(HIRES_FILE, updated);
@@ -196,12 +190,35 @@ export async function updateHire(
     const hires = await getHires();
     const idx = hires.findIndex((hire) => hire.id === hireId);
     if (idx < 0) return null;
-    const merged = normalizeHire({ ...hires[idx], ...updates, id: hireId });
+    const merged = normalizeHire({ ...hires[idx], ...updates, id: hireId, updatedAt: nowIso() });
     const next = [...hires];
     next[idx] = merged;
     await writeJson(HIRES_FILE, next);
+
+    const tasks = await getTasks();
+    const renamedTasks = tasks.map((task) =>
+      task.assigneeId === hireId ? { ...task, assignee: merged.name } : task
+    );
+    if (JSON.stringify(renamedTasks) !== JSON.stringify(tasks)) {
+      await writeJson(TASKS_FILE, renamedTasks);
+    }
     return merged;
   });
+}
+
+async function removeHireVectors(hireId: string): Promise<void> {
+  try {
+    const { error } = await supabaseAdmin
+      .from("runbook_documents")
+      .delete()
+      .like("external_id", `${hireId}:%`);
+    if (error) {
+      console.error("Failed to purge hire-scoped vectors:", error.message);
+    }
+  } catch (error) {
+    // Local demo can run without Supabase service-role env vars.
+    console.warn("Skipping hire vector cleanup:", error);
+  }
 }
 
 export async function removeHire(
@@ -216,8 +233,10 @@ export async function removeHire(
     await writeJson(HIRES_FILE, remainingHires);
 
     const tasks = await getTasks();
-    let nextTasks = tasks.filter((task) => task.assigneeId !== hireId);
-    if (!options?.cascadeTasks) {
+    let nextTasks = tasks;
+    if (options?.cascadeTasks) {
+      nextTasks = tasks.filter((task) => task.assigneeId !== hireId);
+    } else {
       const reassignedHire = remainingHires.find((hire) => hire.id === options?.reassignToHireId) || remainingHires[0];
       if (reassignedHire) {
         nextTasks = tasks.map((task) =>
@@ -232,6 +251,7 @@ export async function removeHire(
       HIRE_SOURCES_FILE,
       sources.filter((source) => source.hireId !== hireId)
     );
+    await removeHireVectors(hireId);
     return true;
   });
 }
@@ -266,13 +286,15 @@ export async function addHireSource(input: {
       throw new Error("Unknown hireId");
     }
     const sources = await getHireSources();
+    const updatedAt = nowIso();
     const next = normalizeHireSource({
       id: makeId("source"),
       hireId: input.hireId,
       type: input.type,
       title: input.title,
       url: input.url,
-      providerRef: input.providerRef
+      providerRef: input.providerRef,
+      updatedAt
     });
     const updated = [...sources, next];
     await writeJson(HIRE_SOURCES_FILE, updated);
@@ -414,7 +436,9 @@ export async function getManagerOverview() {
   const tasks = await getTasks();
   const hires = await getHires();
   const activeHires = hires.filter((hire) => hire.active);
-  const grouped = tasks.reduce<Record<string, OnboardingTask[]>>((acc, task) => {
+  const activeHireIds = new Set(activeHires.map((hire) => hire.id));
+  const scopedTasks = tasks.filter((task) => activeHireIds.has(task.assigneeId));
+  const grouped = scopedTasks.reduce<Record<string, OnboardingTask[]>>((acc, task) => {
     if (!acc[task.assigneeId]) acc[task.assigneeId] = [];
     acc[task.assigneeId].push(task);
     return acc;
@@ -438,7 +462,7 @@ export async function getManagerOverview() {
   return {
     employees,
     totalEmployees: activeHires.length,
-    totalTasks: tasks.length
+    totalTasks: scopedTasks.length
   };
 }
 

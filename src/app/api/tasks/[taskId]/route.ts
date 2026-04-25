@@ -50,7 +50,7 @@ export async function PATCH(req: Request, { params }: Params) {
       const validAssigneeIds = assigneeIds
         .filter((id): id is string => typeof id === "string")
         .filter((id) => hireIdSet.has(id));
-      if (assigneeIds.length > 0 && validAssigneeIds.length === 0) {
+      if (validAssigneeIds.length === 0) {
         return NextResponse.json({ error: "No valid assignees provided" }, { status: 400 });
       }
       const copies = await duplicateTask(taskId, validAssigneeIds);

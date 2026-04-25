@@ -18,15 +18,20 @@ const STATIC_LESSON = {
   narrationScript: "Welcome! Today we will go over the Engineering Setup Guide. First..."
 };
 
+async function resolveLessonDoc(docId: string, query: unknown, hireId?: string) {
+  const staticDoc = demoDocs.find((d) => d.id === docId);
+  if (staticDoc) return staticDoc;
+  if (!query) return undefined;
+  return (await retrieveDocs(String(query), hireId))[0]?.doc;
+}
+
 export async function POST(req: Request) {
   try {
     const body = await req.json();
     const docId = body.docId || "engineering-setup";
     const hireId = typeof body.hireId === "string" ? body.hireId : undefined;
 
-    const doc = demoDocs.find(d => d.id === docId);
-    const scopedDoc = !doc && body.query ? (await retrieveDocs(String(body.query), hireId))[0]?.doc : undefined;
-    const selectedDoc = doc || scopedDoc;
+    const selectedDoc = await resolveLessonDoc(docId, body.query, hireId);
     if (!selectedDoc) {
       return NextResponse.json({ error: "Document not found" }, { status: 404 });
     }

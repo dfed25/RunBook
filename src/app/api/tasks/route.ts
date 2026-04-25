@@ -29,6 +29,9 @@ export async function POST(req: Request) {
 
     const hires = await getHires();
     const activeHires = hires.filter((hire) => hire.active);
+    if (assigneeId && !activeHires.some((hire) => hire.id === assigneeId)) {
+      return NextResponse.json({ error: "Unknown or inactive assigneeId" }, { status: 400 });
+    }
     const chosenAssigneeId = assigneeId || activeHires[0]?.id || "";
     if (!chosenAssigneeId) {
       return NextResponse.json({ error: "No active hires available to assign tasks." }, { status: 400 });

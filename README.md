@@ -39,7 +39,7 @@ With the dev server running (`npm run dev` in another terminal), install browser
 
 1. Open `/manager/tasks`.
 2. Add a hire (name/role/email).
-3. Select the hire and attach knowledge links (Notion pages/databases, Google docs/folders/files, Slack channels, URLs).
+3. Select the hire and attach knowledge links (Notion pages/databases, Google Docs/folders/files, Slack channels, URLs).
 4. Click **Sync selected hire** to ingest sources into the vector store (hybrid mode: links always work; richer provider ingestion runs when API credentials are configured).
 5. Create/duplicate onboarding tasks and assign by hire.
 6. Open `/dashboard`, select the same hire, then test:
