@@ -1,6 +1,6 @@
 /* Runbook widget styles — injected into every page */
 
-#runbook-root * {
+#runbook-extension-root * {
   box-sizing: border-box;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   line-height: 1.4;
@@ -258,7 +258,7 @@
   border-radius: 12px;
   font-size: 13px;
   line-height: 1.5;
-  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 .rb-msg-user {
   align-self: flex-end;

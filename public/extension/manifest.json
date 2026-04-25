@@ -3,7 +3,7 @@
   "name": "Runbook",
   "version": "1.0",
   "description": "Onboarding copilot",
-  "permissions": ["scripting"],
+  "permissions": ["storage"],
   "host_permissions": ["<all_urls>"],
   "content_scripts": [
     {

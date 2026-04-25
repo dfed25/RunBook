@@ -1,7 +1,7 @@
 // content.js — Runbook widget content script
 console.log("Runbook content script initialized on", window.location.href);
 
-const RUNBOOK_API = "http://localhost:3000";
+let RUNBOOK_API = "http://localhost:3000";
 const PAGE_TEXT_LIMIT = 12000;
 const MAX_CANDIDATES = 120;
 
@@ -34,6 +34,35 @@ let highlightedEl = null;
 let activeOverlayEl = null;
 let overlayRepositionHandler = null;
 let rootEl = null;
+let apiConfigLoaded = false;
+
+function sanitizeApiBaseUrl(value) {
+  if (typeof value !== "string") return null;
+  try {
+    const parsed = new URL(value.trim());
+    if (!["http:", "https:"].includes(parsed.protocol)) return null;
+    return parsed.origin;
+  } catch {
+    return null;
+  }
+}
+
+function loadApiBaseUrl() {
+  if (apiConfigLoaded) return Promise.resolve();
+  return new Promise((resolve) => {
+    if (typeof chrome === "undefined" || !chrome.storage?.local) {
+      apiConfigLoaded = true;
+      resolve();
+      return;
+    }
+    chrome.storage.local.get(["runbookApiBaseUrl"], (result) => {
+      const configured = sanitizeApiBaseUrl(result?.runbookApiBaseUrl);
+      if (configured) RUNBOOK_API = configured;
+      apiConfigLoaded = true;
+      resolve();
+    });
+  });
+}
 
 function getDemoTaskForLocation() {
   const path = (window.location.pathname || "").toLowerCase();
@@ -174,10 +203,14 @@ function renderHighlightOverlay(el, text, stepLabel) {
 
   const overlay = document.createElement("div");
   overlay.id = "rb-step-overlay";
-  overlay.innerHTML = `
-    <div class="rb-step-overlay-label">${stepLabel || "Runbook step"}</div>
-    <div class="rb-step-overlay-text">${text || "Follow the highlighted action."}</div>
-  `;
+  const labelEl = document.createElement("div");
+  labelEl.className = "rb-step-overlay-label";
+  labelEl.textContent = stepLabel || "Runbook step";
+  const textEl = document.createElement("div");
+  textEl.className = "rb-step-overlay-text";
+  textEl.textContent = text || "Follow the highlighted action.";
+  overlay.appendChild(labelEl);
+  overlay.appendChild(textEl);
   document.body.appendChild(overlay);
   activeOverlayEl = overlay;
 
@@ -385,7 +418,10 @@ async function findOnPage() {
   // Deterministic fallback for real GitHub profile pages.
   if (
     currentTask.taskId === "github-profile-setup" &&
-    window.location.hostname.includes("github.com")
+    (() => {
+      const hostname = window.location.hostname.toLowerCase();
+      return hostname === "github.com" || hostname.endsWith(".github.com");
+    })()
   ) {
     const profileStepTargets = [
       [
@@ -469,14 +505,23 @@ async function completeTask() {
       taskId: currentTask.taskId,
       status: "complete",
     });
-    const content = byId("rb-task-content");
-    if (content) {
-      content.innerHTML = `
-        <div style="text-align:center; padding:20px 0;">
-          <div style="font-size:36px;">✅</div>
-          <div style="font-weight:600; color:#16a34a;">Task complete!</div>
-        </div>
-      `;
+    const taskContent = byId("rb-task-content");
+    const taskView = byId("rb-task-view");
+    if (taskContent && taskView) {
+      taskContent.classList.add("rb-hidden");
+      let success = byId("rb-success");
+      if (!success) {
+        success = document.createElement("div");
+        success.id = "rb-success";
+        success.innerHTML = `
+          <div style="text-align:center; padding:20px 0;">
+            <div style="font-size:36px;">✅</div>
+            <div style="font-weight:600; color:#16a34a;">Task complete!</div>
+          </div>
+        `;
+        taskView.appendChild(success);
+      }
+      success.classList.remove("rb-hidden");
     }
     setTimeout(clearHighlight, 2000);
   } catch (err) {
@@ -606,6 +651,7 @@ Assistant guidance: ${answer}`,
 function detectDemo() {
   const demoTask = getDemoTaskForLocation();
   if (!demoTask) return;
+  byId("rb-success")?.classList.add("rb-hidden");
   currentTask = demoTask;
   currentStepIndex = 0;
   updateTaskPanel();
@@ -729,12 +775,14 @@ function init() {
     if (window.top !== window.self) return;
     if (document.getElementById("runbook-extension-root")) return;
     if (!document.body) return;
-    injectCSS();
-    injectWidget();
-    if (!rootEl) return;
-    bindEvents();
-    detectDemo();
-    addMessage("assistant", "Runbook is ready. Use Scan this page to start.");
+    loadApiBaseUrl().then(() => {
+      injectCSS();
+      injectWidget();
+      if (!rootEl) return;
+      bindEvents();
+      detectDemo();
+      addMessage("assistant", "Runbook is ready. Use Scan this page to start.");
+    });
   } catch (err) {
     console.error("Runbook init failed", err);
   }

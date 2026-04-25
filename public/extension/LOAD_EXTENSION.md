@@ -17,7 +17,7 @@
    - A file browser will open
 
 5. **Select Extension Folder**
-   - Navigate to: `C:\Users\bryan\Hackathons\RunBook\RunBook\public\extension`
+   - Navigate to your cloned repo's `public/extension` folder
    - Click "Select Folder"
 
 6. **Wait for Load**
@@ -27,8 +27,7 @@
 
 If you see an **error message** on the Runbook extension card:
 - Click "Details" or "Errors"
-- Screenshot the error
-- Send it to me
+- Screenshot the error and open an issue (or post in your team channel)
 
 If the extension **doesn't appear**:
 1. Check address bar - make sure you're at `chrome://extensions`

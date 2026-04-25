@@ -8,9 +8,23 @@ import { generateFromGemini } from "@/lib/ai";
 
 function fallbackTaskFromUrlOrText(url: string, pageText: string) {
   const haystack = `${url}\n${pageText}`.toLowerCase();
+  let hostname = "";
+  let pathname = "";
+  try {
+    const parsedUrl = new URL(url);
+    hostname = parsedUrl.hostname.toLowerCase();
+    pathname = parsedUrl.pathname.toLowerCase();
+  } catch {
+    // keep hostname/pathname empty
+  }
+  const isGitHubHost = hostname === "github.com" || hostname.endsWith(".github.com");
+  const isSlackHost = hostname === "slack.com" || hostname.endsWith(".slack.com");
+  const isRampHost = hostname === "ramp.com" || hostname.endsWith(".ramp.com");
+  const isDemoGitHubPath = pathname.startsWith("/demo/github");
+  const isDemoExpensesPath = pathname.startsWith("/demo/expenses");
 
   if (
-    haystack.includes("github.com/") &&
+    isGitHubHost &&
     (haystack.includes("followers") ||
       haystack.includes("following") ||
       haystack.includes("contributions") ||
@@ -39,7 +53,12 @@ function fallbackTaskFromUrlOrText(url: string, pageText: string) {
     };
   }
 
-  if (haystack.includes("/demo/github") || haystack.includes("github") || haystack.includes("eng-access")) {
+  if (
+    isDemoGitHubPath ||
+    isGitHubHost ||
+    haystack.includes("#eng-access") ||
+    haystack.includes("request github access")
+  ) {
     return {
       found: true,
       task: {
@@ -53,7 +72,12 @@ function fallbackTaskFromUrlOrText(url: string, pageText: string) {
     };
   }
 
-  if (haystack.includes("slack.com") || haystack.includes("slack") || haystack.includes("#eng-onboarding") || haystack.includes("#dev-help")) {
+  if (
+    isSlackHost ||
+    haystack.includes("#eng-onboarding") ||
+    haystack.includes("#dev-help") ||
+    haystack.includes("join required slack")
+  ) {
     return {
       found: true,
       task: {
@@ -68,7 +92,12 @@ function fallbackTaskFromUrlOrText(url: string, pageText: string) {
     };
   }
 
-  if (haystack.includes("/demo/expenses") || haystack.includes("expense") || haystack.includes("ramp")) {
+  if (
+    isDemoExpensesPath ||
+    isRampHost ||
+    haystack.includes("expense report") ||
+    haystack.includes("reimbursement")
+  ) {
     return {
       found: true,
       task: {
@@ -164,7 +193,28 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ found: false }, { status: 400 });
     }
 
-    if (String(url).toLowerCase().includes("/demo/github")) {
+    const widgetSecret = process.env.WIDGET_SHARED_SECRET?.trim();
+    if (widgetSecret) {
+      const providedSecret = req.headers.get("x-runbook-widget-secret")?.trim();
+      if (!providedSecret || providedSecret !== widgetSecret) {
+        return NextResponse.json({ found: false }, { status: 401 });
+      }
+    }
+
+    if (String(pageText).length > 30000 || String(taskDescription || "").length > 4000) {
+      return NextResponse.json({ found: false }, { status: 400 });
+    }
+
+    let parsedUrl: URL | null = null;
+    try {
+      parsedUrl = new URL(String(url));
+    } catch {
+      return NextResponse.json({ found: false }, { status: 400 });
+    }
+    const hostname = parsedUrl.hostname.toLowerCase();
+    const pathname = parsedUrl.pathname.toLowerCase();
+
+    if (pathname.startsWith("/demo/github")) {
       return NextResponse.json({
         found: true,
         task: {
@@ -178,7 +228,7 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    if (String(url).toLowerCase().includes("/demo/expenses")) {
+    if (pathname.startsWith("/demo/expenses")) {
       return NextResponse.json({
         found: true,
         task: {
@@ -193,6 +243,13 @@ export async function POST(req: NextRequest) {
     }
 
     if (taskTitle && taskDescription) {
+      if (
+        !hostname ||
+        ["localhost", "127.0.0.1"].includes(hostname) ||
+        hostname.endsWith(".local")
+      ) {
+        // allow internal/demo/test domains and continue
+      }
       if (!process.env.GEMINI_API_KEY) {
         return NextResponse.json({
           found: false,
