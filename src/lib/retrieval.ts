@@ -1,20 +1,50 @@
-import { demoDocs } from "./demoDocs";
-import { SourceDoc } from "./types";
+import { supabaseAdmin } from "./supabase-admin";
+import { generateEmbedding } from "./ai";
 
-export function retrieveDocs(question: string): { doc: SourceDoc; score: number }[] {
-  const q = question.toLowerCase();
+interface RetrievedDoc {
+  doc: {
+    id: string;
+    title: string;
+    content: string;
+  };
+  score: number;
+}
 
-  const scored = demoDocs.map((doc) => {
-    const text = `${doc.title} ${doc.content}`.toLowerCase();
-    const score = q
-      .split(/\s+/)
-      .filter((word) => word.length > 3)
-      .reduce((sum, word) => sum + (text.includes(word) ? 1 : 0), 0);
+interface MatchedDocument {
+  id: string;
+  title: string;
+  content: string;
+  url: string;
+  provider: string;
+  similarity: number;
+}
 
-    return { doc, score };
-  });
+export async function retrieveDocs(question: string): Promise<RetrievedDoc[]> {
+  try {
+    const embedding = await generateEmbedding(question);
+    if (!embedding) return [];
 
-  return scored
-    .sort((a, b) => b.score - a.score)
-    .slice(0, 2);
+    const { data: documents, error } = await supabaseAdmin.rpc("match_documents", {
+      query_embedding: `[${embedding.join(",")}]`,
+      match_threshold: 0.7,
+      match_count: 3
+    });
+
+    if (error) {
+      console.error("Vector Search Error:", error);
+      return [];
+    }
+
+    return (documents as MatchedDocument[]).map((doc) => ({
+      doc: {
+        id: doc.id,
+        title: doc.title,
+        content: doc.content
+      },
+      score: doc.similarity
+    }));
+  } catch (err) {
+    console.error("Retrieval Pipeline Error:", err);
+    return [];
+  }
 }
