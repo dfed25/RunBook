@@ -42,6 +42,15 @@ export default function DemoGithubPage() {
           containerClassName: "border border-blue-200 bg-blue-50 text-blue-900",
         }}
       />
+      <div className="mx-auto mt-4 flex max-w-3xl items-center justify-end">
+        <button
+          id="request-access-btn"
+          type="button"
+          className="rounded-lg bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-indigo-500"
+        >
+          Request Access
+        </button>
+      </div>
       <RunbookWidget key="github" pageKey="github" />
     </DemoPageLayout>
   );

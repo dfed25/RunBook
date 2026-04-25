@@ -46,3 +46,7 @@ next-env.d.ts
 QA_BUG_LOG.md
 screenshots/
 .runbook-data/
+
+# Playwright local browser profiles (temporary)
+.tmp-pw-user/
+.tmp-pw-user-headless/

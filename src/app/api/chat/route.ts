@@ -125,7 +125,28 @@ export async function POST(req: Request) {
       return NextResponse.json({ answer, sources });
     } catch (e) {
       console.error("Chat API Gemini Error:", e);
-      return NextResponse.json({ answer: "Runbook AI is temporarily unavailable.", sources }, { status: 500 });
+      const errorText = e instanceof Error ? e.message : String(e);
+      const isQuotaError =
+        /RESOURCE_EXHAUSTED|quota|429|rate[- ]?limit/i.test(errorText);
+      const fallbackAnswer = isQuotaError
+        ? "Runbook hit model quota temporarily. I can still help using retrieved docs, but answers may be less detailed for the next minute."
+        : "Runbook AI is temporarily unavailable. I can still provide a best-effort response from retrieved docs.";
+
+      if (sources.length > 0) {
+        const top = sources.slice(0, 3);
+        const summarized = top
+          .map((s, idx) => `${idx + 1}. ${s.title}: ${s.excerpt}`)
+          .join("\n");
+        return NextResponse.json({
+          answer: `${fallbackAnswer}\n\nRelevant references:\n${summarized}`,
+          sources: top,
+        });
+      }
+
+      return NextResponse.json({
+        answer: fallbackAnswer,
+        sources: [],
+      });
     }
   } catch (error) {
     console.error(error);
