@@ -63,7 +63,10 @@ export default function DashboardPage() {
             Welcome, Alex. Track onboarding task progress and complete actions from
             demo pages.
           </p>
-          <div className="mt-4 inline-flex rounded-full bg-blue-50 px-4 py-2 text-sm font-semibold text-blue-700">
+          <div
+            data-testid="dashboard-progress"
+            className="mt-4 inline-flex rounded-full bg-blue-50 px-4 py-2 text-sm font-semibold text-blue-700"
+          >
             Progress: {completedCount}/{demoTasks.length} tasks complete
           </div>
         </header>
