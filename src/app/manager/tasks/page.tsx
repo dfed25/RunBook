@@ -25,6 +25,9 @@ export default function ManagerTasksPage() {
   const [form, setForm] = useState<TaskFormState>({ title: "", description: "", assigneeId: "", estimatedTime: "", sourceTitle: "" });
   const [duplicateTargets, setDuplicateTargets] = useState<Record<string, string[]>>({});
 
+  const activeHires = hires.filter((hire) => hire.active);
+  const archivedHires = hires.filter((hire) => !hire.active);
+
   useEffect(() => {
     const timer = window.setTimeout(async () => {
       try {
@@ -33,9 +36,9 @@ export default function ManagerTasksPage() {
         const hiresData = await hiresRes.json();
         if (tasksRes.ok) setTasks(tasksData);
         if (hiresRes.ok) {
-          const activeHires = (hiresData.hires || []).filter((hire: Hire) => hire.active);
-          setHires(activeHires);
-          const defaultHire = activeHires[0]?.id || "";
+          const allHires = (hiresData.hires || []) as Hire[];
+          const defaultHire = allHires.find((hire) => hire.active)?.id || "";
+          setHires(allHires);
           setSelectedHireId(defaultHire);
           setForm((prev) => ({ ...prev, assigneeId: defaultHire }));
         }
@@ -137,21 +140,45 @@ export default function ManagerTasksPage() {
     const data = await res.json();
     if (!res.ok) return setMessage(data.error || "Failed to create hire.");
     const created = data.hire as Hire;
-    setHires((prev) => [...prev, created]);
+    setHires((prev) => [...prev, { ...created, active: true }]);
     setSelectedHireId(created.id);
     setForm((prev) => ({ ...prev, assigneeId: created.id }));
     setHireForm({ name: "", role: "", email: "" });
   }
 
   async function deleteHire(hireId: string) {
-    const res = await fetch(`/api/manager/hires/${hireId}`, { method: "DELETE" });
+    const firstConfirm = window.confirm("Remove this hire from active onboarding?");
+    if (!firstConfirm) return;
+    const secondConfirm = window.confirm(
+      "Please confirm again: this hire will be archived and removed from active workflows."
+    );
+    if (!secondConfirm) return;
+    const res = await fetch(`/api/manager/hires/${hireId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ active: false })
+    });
     const data = await res.json();
     if (!res.ok) return setMessage(data.error || "Failed to remove hire.");
-    setHires((prev) => prev.filter((hire) => hire.id !== hireId));
-    setSelectedHireId("");
+    setHires((prev) => prev.map((hire) => (hire.id === hireId ? { ...hire, active: false } : hire)));
+    setSelectedHireId((current) => (current === hireId ? (activeHires.find((hire) => hire.id !== hireId)?.id || "") : current));
     setSources([]);
     setForm((prev) => (prev.assigneeId === hireId ? { ...prev, assigneeId: "" } : prev));
-    setMessage("Hire removed.");
+    setMessage("Hire archived. You can restore them below.");
+  }
+
+  async function restoreHire(hireId: string) {
+    const res = await fetch(`/api/manager/hires/${hireId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ active: true })
+    });
+    const data = await res.json();
+    if (!res.ok) return setMessage(data.error || "Failed to restore hire.");
+    setHires((prev) => prev.map((hire) => (hire.id === hireId ? { ...hire, active: true } : hire)));
+    setSelectedHireId(hireId);
+    setForm((prev) => ({ ...prev, assigneeId: hireId }));
+    setMessage("Hire restored.");
   }
 
   async function addSource(event: FormEvent<HTMLFormElement>) {
@@ -166,6 +193,20 @@ export default function ManagerTasksPage() {
     if (!res.ok) return setMessage(data.error || "Failed to add source.");
     setSources((prev) => [...prev, data.source]);
     setSourceForm((prev) => ({ ...prev, title: "", url: "" }));
+    setMessage("Source added. Syncing now...");
+    setSyncing(true);
+    const syncRes = await fetch("/api/sync/knowledge", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ hireId: selectedHireId }),
+    });
+    const syncData = await syncRes.json().catch(() => ({}));
+    setSyncing(false);
+    if (!syncRes.ok) {
+      setMessage(syncData.error || "Source added, but sync failed. Try syncing manually.");
+      return;
+    }
+    setMessage(`Source added and synced: ${syncData.result?.synced ?? 0}/${syncData.result?.scanned ?? 0} docs.`);
   }
 
   async function deleteSource(sourceId: string) {
@@ -208,7 +249,7 @@ export default function ManagerTasksPage() {
             <AppButton variant="primary" type="submit">Add hire</AppButton>
           </form>
           <div className="mt-3 flex flex-wrap gap-2">
-            {hires.map((hire) => (
+            {activeHires.map((hire) => (
               <AppButton
                 key={hire.id}
                 type="button"
@@ -222,6 +263,23 @@ export default function ManagerTasksPage() {
             ))}
           </div>
           {selectedHireId ? <AppButton type="button" variant="danger" onClick={() => void deleteHire(selectedHireId)} className="mt-3 px-3 py-1 text-xs">Remove selected hire</AppButton> : null}
+          {archivedHires.length > 0 ? (
+            <div className="mt-4 rounded border border-slate-700 bg-slate-950 p-3">
+              <p className="text-xs font-semibold text-slate-300">Archived hires</p>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {archivedHires.map((hire) => (
+                  <AppButton
+                    key={hire.id}
+                    variant="ghost"
+                    className="rounded-full px-3 py-1 text-xs"
+                    onClick={() => void restoreHire(hire.id)}
+                  >
+                    Restore {hire.name}
+                  </AppButton>
+                ))}
+              </div>
+            </div>
+          ) : null}
         </SectionCard>
 
         <SectionCard
@@ -254,7 +312,7 @@ export default function ManagerTasksPage() {
             <textarea className="w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm" placeholder="Task description" value={form.description} onChange={(e) => setForm((p) => ({ ...p, description: e.target.value }))} required />
             <div className="grid gap-3 sm:grid-cols-3">
               <select className="rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm" value={form.assigneeId} onChange={(e) => setForm((p) => ({ ...p, assigneeId: e.target.value }))}>
-                {hires.map((hire) => <option key={hire.id} value={hire.id}>{hire.name}</option>)}
+                {activeHires.map((hire) => <option key={hire.id} value={hire.id}>{hire.name}</option>)}
               </select>
               <input className="rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm" placeholder="Estimated time" value={form.estimatedTime} onChange={(e) => setForm((p) => ({ ...p, estimatedTime: e.target.value }))} />
               <input className="rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm" placeholder="Source title" value={form.sourceTitle} onChange={(e) => setForm((p) => ({ ...p, sourceTitle: e.target.value }))} />
@@ -279,7 +337,7 @@ export default function ManagerTasksPage() {
                   <div className="mt-3 space-y-2 rounded border border-slate-800 bg-slate-900 p-2">
                     <p className="text-xs text-slate-300">Duplicate to hires:</p>
                     <div className="flex flex-wrap gap-2">
-                      {hires.filter((hire) => hire.id !== task.assigneeId).map((hire) => {
+                      {activeHires.filter((hire) => hire.id !== task.assigneeId).map((hire) => {
                         const active = (duplicateTargets[task.id] || []).includes(hire.id);
                         return (
                           <AppButton

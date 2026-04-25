@@ -1,5 +1,5 @@
 import { fetchNotionPages } from "./ingestion/notion";
-import { fetchDriveDocuments } from "./ingestion/gdrive";
+import { fetchDriveDocuments, fetchGoogleDriveUrlContent, parseDriveGoogleUrl } from "./ingestion/gdrive";
 import { fetchSlackChannelHistory } from "./ingestion/slack";
 import { fetchUrlDocument } from "./ingestion/url";
 import { supabaseAdmin } from "./supabase-admin";
@@ -69,7 +69,24 @@ Source title: ${source.title}
 Source URL: ${source.url}
 Source type: ${source.type}`;
 
-  const fetched = await fetchUrlDocument(source.url);
+  const url = source.url.trim();
+  const driveParsed = parseDriveGoogleUrl(url);
+  let fetched: { title: string; content: string } | null = null;
+
+  // drive.google.com folder/file links must use the Drive API — HTTP fetch only returns the web UI shell.
+  if (driveParsed) {
+    fetched = await fetchGoogleDriveUrlContent(url);
+    if (!fetched) {
+      fetched = {
+        title: source.title || "Google Drive",
+        content: `Could not read this Google Drive resource via the Drive API. Confirm GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, and GOOGLE_REFRESH_TOKEN (with Drive file read scope), then re-sync.\nLink: ${url}`,
+      };
+    }
+  } else {
+    const web = await fetchUrlDocument(url);
+    fetched = web ? { title: web.title, content: web.content } : null;
+  }
+
   const content = fetched?.content || fallbackContent;
   const title = fetched?.title || source.title || "Knowledge source";
   const scopedContent = content.includes(scopeToken) ? content : `${scopeToken}\n${content}`;

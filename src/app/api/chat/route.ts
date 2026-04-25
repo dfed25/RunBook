@@ -32,6 +32,14 @@ function escapeRegExp(string: string) {
   return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+/** Strip hire scope lines and collapse whitespace for compact source previews. */
+function excerptForChatSource(content: string, maxLen: number): string {
+  const lines = (content || "").split("\n").filter((line) => !/^\[hire:[^\]]+\]$/.test(line.trim()));
+  const body = lines.join(" ").replace(/\s+/g, " ").trim();
+  if (!body) return "";
+  return body.length > maxLen ? `${body.slice(0, maxLen)}…` : body;
+}
+
 export async function POST(req: Request) {
   try {
     const body = await req.json();
@@ -58,14 +66,15 @@ export async function POST(req: Request) {
     }
 
     const retrieved = await retrieveDocs(question, hireId);
-    const validDocs = retrieved.filter(r => r.score > 0).map(r => r.doc);
+    // NOTE: `match_documents` uses cosine *distance* semantics; similarity scores are not guaranteed to be > 0.
+    const validDocs = retrieved
+      .slice()
+      .sort((a, b) => b.score - a.score)
+      .map((r) => r.doc);
 
     const sources: ChatSource[] = validDocs.map((d) => ({
-      title: d.title,
-      excerpt: (() => {
-        const content = d.content || "";
-        return content.length > 180 ? `${content.slice(0, 180)}...` : content;
-      })(),
+      title: d.title.replace(/^\[hire:[^\]]+\]\s*/i, "").trim() || d.title,
+      excerpt: excerptForChatSource(d.content || "", 260),
       url: d.url || undefined,
     }));
     const context = validDocs
@@ -83,7 +92,7 @@ export async function POST(req: Request) {
     }
 
     try {
-      const userPrompt = `Company Context:\n${context || "No context found."}\n\nUser Question: ${question}\n\nAnswer with concise guidance and ground it in the provided sources.`;
+      const userPrompt = `Company Context:\n${context || "No context found."}\n\nUser Question: ${question}\n\nWrite the answer in clear, scannable markdown: use "## " section headings, "- " bullets or numbered steps where appropriate, and **bold** for key terms. Ground every claim in the sources above.`;
       const answer = await generateFromGemini(CHAT_SYSTEM_PROMPT, userPrompt);
       return NextResponse.json({ answer, sources });
     } catch (e) {
