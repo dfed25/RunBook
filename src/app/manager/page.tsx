@@ -6,11 +6,12 @@ import { DEMO_PERSONAS, DEMO_QUESTIONS } from "@/lib/demoScenario";
 import { OnboardingTask } from "@/lib/types";
 
 type PersonSummary = {
+  hireId: string;
   name: string;
   tasks: OnboardingTask[];
   progress: number;
-  completed: number;
-  total: number;
+  completedTasks: number;
+  totalTasks: number;
   status: "On Track" | "At Risk";
 };
 
@@ -145,7 +146,7 @@ export default function ManagerPage() {
                       </span>
                     </div>
                     <p className="mt-2 text-sm text-slate-300">
-                      Progress: {person.progress}% ({person.completed}/{person.total} tasks complete)
+                      Progress: {person.progress}% ({person.completedTasks}/{person.totalTasks} tasks complete)
                     </p>
                     <div className="mt-2 h-2 w-full rounded bg-slate-700">
                       <div className="h-2 rounded bg-cyan-400" style={{ width: `${person.progress}%` }} />

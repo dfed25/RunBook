@@ -35,6 +35,7 @@ export async function POST(req: Request) {
   try {
     const body = await req.json();
     const question = body.question || "";
+    const hireId = typeof body.hireId === "string" ? body.hireId : undefined;
     const qLower = question.toLowerCase().trim().replace(/[?!.]$/, "");
 
     const fallbackKeys = Object.keys(FALLBACKS).sort((a, b) => b.length - a.length);
@@ -46,7 +47,7 @@ export async function POST(req: Request) {
       }
     }
 
-    const retrieved = await retrieveDocs(question);
+    const retrieved = await retrieveDocs(question, hireId);
     const validDocs = retrieved.filter(r => r.score > 0).map(r => r.doc);
     
     const sources: ChatSource[] = validDocs.map(d => ({ title: d.title, excerpt: d.content.substring(0, 150) + "..." }));

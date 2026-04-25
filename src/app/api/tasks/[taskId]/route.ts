@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
-import { duplicateTask, moveTask, removeTask } from "@/lib/dataStore";
-import { TRAINEES, type TraineeName } from "@/lib/trainees";
+import { duplicateTask, getHires, moveTask, removeTask } from "@/lib/dataStore";
 
 export const runtime = "nodejs";
 
@@ -41,14 +40,20 @@ export async function PATCH(req: Request, { params }: Params) {
     }
 
     if (action === "duplicate") {
-      const assignees: unknown[] = Array.isArray(body.assignees) ? body.assignees : [];
-      const validAssignees = assignees
-        .filter((name): name is string => typeof name === "string")
-        .filter((name): name is TraineeName => TRAINEES.includes(name as TraineeName));
-      if (Array.isArray(body.assignees) && body.assignees.length > 0 && validAssignees.length === 0) {
+      const assigneeIds: unknown[] = Array.isArray(body.assigneeIds)
+        ? body.assigneeIds
+        : Array.isArray(body.assignees)
+          ? body.assignees
+          : [];
+      const hires = await getHires();
+      const hireIdSet = new Set(hires.filter((hire) => hire.active).map((hire) => hire.id));
+      const validAssigneeIds = assigneeIds
+        .filter((id): id is string => typeof id === "string")
+        .filter((id) => hireIdSet.has(id));
+      if (assigneeIds.length > 0 && validAssigneeIds.length === 0) {
         return NextResponse.json({ error: "No valid assignees provided" }, { status: 400 });
       }
-      const copies = await duplicateTask(taskId, validAssignees);
+      const copies = await duplicateTask(taskId, validAssigneeIds);
       if (copies === null) {
         return NextResponse.json({ error: "Task not found" }, { status: 404 });
       }

@@ -3,6 +3,7 @@ import { demoDocs } from "@/lib/demoDocs";
 import { LESSON_GENERATION_SYSTEM_PROMPT } from "@/lib/prompts";
 import { generateJsonFromGemini } from "@/lib/ai";
 import { Lesson } from "@/lib/types";
+import { retrieveDocs } from "@/lib/retrieval";
 
 const STATIC_LESSON = {
   title: "Engineering Setup Basic Training",
@@ -21,9 +22,12 @@ export async function POST(req: Request) {
   try {
     const body = await req.json();
     const docId = body.docId || "engineering-setup";
+    const hireId = typeof body.hireId === "string" ? body.hireId : undefined;
 
     const doc = demoDocs.find(d => d.id === docId);
-    if (!doc) {
+    const scopedDoc = !doc && body.query ? (await retrieveDocs(String(body.query), hireId))[0]?.doc : undefined;
+    const selectedDoc = doc || scopedDoc;
+    if (!selectedDoc) {
       return NextResponse.json({ error: "Document not found" }, { status: 404 });
     }
 
@@ -31,7 +35,7 @@ export async function POST(req: Request) {
       return NextResponse.json(STATIC_LESSON);
     }
 
-    const userPrompt = `Document Title: ${doc.title}\nContent:\n${doc.content}\n\nGenerate the micro-lesson.`;
+    const userPrompt = `Document Title: ${selectedDoc.title}\nContent:\n${selectedDoc.content}\n\nGenerate the micro-lesson.`;
     
     try {
       const parsedLesson = await generateJsonFromGemini<Lesson>(LESSON_GENERATION_SYSTEM_PROMPT, userPrompt);

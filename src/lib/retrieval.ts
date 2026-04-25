@@ -21,7 +21,14 @@ interface MatchedDocument {
   similarity: number;
 }
 
-export async function retrieveDocs(question: string): Promise<RetrievedDoc[]> {
+function matchesHireScope(content: string, hireId?: string): boolean {
+  if (!hireId) return true;
+  if (content.includes(`[hire:${hireId}]`)) return true;
+  if (content.includes("[hire:global]")) return true;
+  return !content.includes("[hire:");
+}
+
+export async function retrieveDocs(question: string, hireId?: string): Promise<RetrievedDoc[]> {
   try {
     const embedding = await generateEmbedding(question);
     if (!embedding) return [];
@@ -39,7 +46,8 @@ export async function retrieveDocs(question: string): Promise<RetrievedDoc[]> {
 
     if (!documents) return [];
 
-    return (documents as MatchedDocument[]).map((doc) => ({
+    const scoped = (documents as MatchedDocument[]).filter((doc) => matchesHireScope(doc.content, hireId));
+    return scoped.map((doc) => ({
       doc: {
         id: doc.id,
         title: doc.title,

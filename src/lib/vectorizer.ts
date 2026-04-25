@@ -3,8 +3,14 @@ import { fetchDriveDocuments } from "./ingestion/gdrive";
 import { fetchSlackChannelHistory } from "./ingestion/slack";
 import { supabaseAdmin } from "./supabase-admin";
 import { generateEmbedding } from "./ai";
+import { getHireSources } from "./dataStore";
+import type { KnowledgeSourceType } from "./types";
 
 export type SyncKnowledgeResult = {
+  scope: {
+    hireId?: string;
+    sourceCount: number;
+  };
   scanned: number;
   synced: number;
   embeddingFailed: number;
@@ -16,10 +22,19 @@ export type SyncKnowledgeResult = {
   };
 };
 
-export async function syncUserKnowledge(): Promise<SyncKnowledgeResult> {
+function providerForType(type: KnowledgeSourceType): "notion" | "google_drive" | "slack" | "manual" {
+  if (type.startsWith("notion")) return "notion";
+  if (type.startsWith("google")) return "google_drive";
+  if (type === "slack_channel") return "slack";
+  return "manual";
+}
+
+export async function syncUserKnowledge(hireId?: string): Promise<SyncKnowledgeResult> {
   console.log("Starting Enterprise Integration Sync...");
 
   const slackChannel = process.env.SLACK_ONBOARDING_CHANNEL_ID;
+  const hireSources = await getHireSources(hireId);
+  const scopeToken = hireId ? `[hire:${hireId}]` : "[hire:global]";
 
   const [notionPages, gDocs, slackMsgs] = await Promise.all([
     fetchNotionPages(),
@@ -28,12 +43,23 @@ export async function syncUserKnowledge(): Promise<SyncKnowledgeResult> {
   ]);
 
   const rawDocuments = [
-    ...notionPages.map((p) => ({ ...p, provider: "notion" })),
-    ...gDocs.map((d) => ({ ...d, provider: "google_drive" })),
-    ...slackMsgs.map((m) => ({ ...m, provider: "slack" })),
+    ...notionPages.map((p) => ({ ...p, provider: "notion" as const })),
+    ...gDocs.map((d) => ({ ...d, provider: "google_drive" as const })),
+    ...slackMsgs.map((m) => ({ ...m, provider: "slack" as const })),
+    ...hireSources.map((source) => ({
+      id: source.id,
+      title: source.title,
+      content: `${scopeToken}\nKnowledge source URL: ${source.url}\nProvider type: ${source.type}`,
+      provider: providerForType(source.type),
+      url: source.url
+    }))
   ];
 
   const result: SyncKnowledgeResult = {
+    scope: {
+      hireId,
+      sourceCount: hireSources.length
+    },
     scanned: rawDocuments.length,
     synced: 0,
     embeddingFailed: 0,
@@ -62,10 +88,10 @@ export async function syncUserKnowledge(): Promise<SyncKnowledgeResult> {
       const { error } = await supabaseAdmin.from("runbook_documents").upsert(
         {
           provider: doc.provider,
-          external_id: doc.id,
-          title: doc.title,
-          content: doc.content,
-          url: null,
+          external_id: hireId ? `${hireId}:${doc.id}` : doc.id,
+          title: `${scopeToken} ${doc.title}`,
+          content: doc.content.includes(scopeToken) ? doc.content : `${scopeToken}\n${doc.content}`,
+          url: "url" in doc ? doc.url : null,
           embedding: `[${embedding.join(",")}]`,
         },
         { onConflict: "provider,external_id" }
@@ -80,10 +106,10 @@ export async function syncUserKnowledge(): Promise<SyncKnowledgeResult> {
           // Dev-friendly fallback: allow ingestion even when DB migration/constraint wasn't applied yet.
           const { error: insertError } = await supabaseAdmin.from("runbook_documents").insert({
             provider: doc.provider,
-            external_id: doc.id,
-            title: doc.title,
-            content: doc.content,
-            url: null,
+            external_id: hireId ? `${hireId}:${doc.id}` : doc.id,
+            title: `${scopeToken} ${doc.title}`,
+            content: doc.content.includes(scopeToken) ? doc.content : `${scopeToken}\n${doc.content}`,
+            url: "url" in doc ? doc.url : null,
             embedding: `[${embedding.join(",")}]`,
           });
           if (insertError) {

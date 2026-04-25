@@ -8,7 +8,7 @@ Runbook is an AI onboarding copilot that turns scattered company knowledge into 
 - Tracks task progress
 - Shows manager visibility into onboarding
 - Turns docs into short onboarding lessons
-- Demonstrates a browser assistant that guides users across work tools
+- Supports a manager control plane to add/remove hires and attach per-hire knowledge links (Notion, Google, Slack, URL)
 
 ## Supabase Integration Guide (For Teammates)
 
@@ -35,6 +35,26 @@ The architecture heavily relies on pre-built client wrappers mapped under `src/u
 
 With the dev server running (`npm run dev` in another terminal), install browsers once (`npx playwright install chromium`), then run `npm run qa:flow`. The script writes `QA_BUG_LOG.md` and `screenshots/` in the project root (both are gitignored). Set `BASE_URL` if the app is not on `http://localhost:3000`. The process exits with a non-zero code when bugs are logged or the run crashes.
 
+## Manager onboarding control plane flow
+
+1. Open `/manager/tasks`.
+2. Add a hire (name/role/email).
+3. Select the hire and attach knowledge links (Notion pages/databases, Google docs/folders/files, Slack channels, URLs).
+4. Click **Sync selected hire** to ingest sources into the vector store (hybrid mode: links always work; richer provider ingestion runs when API credentials are configured).
+5. Create/duplicate onboarding tasks and assign by hire.
+6. Open `/dashboard`, select the same hire, then test:
+   - task checklist is scoped to that hire
+   - chat answers are generated from hire-scoped context
+   - lesson generation can use hire-scoped retrieval when a query is provided
+
+## API endpoints (manager flow)
+
+- `GET/POST /api/manager/hires`
+- `PATCH/DELETE /api/manager/hires/:hireId`
+- `GET/POST /api/manager/hires/:hireId/sources`
+- `DELETE /api/manager/hires/:hireId/sources/:sourceId`
+- `POST /api/sync/knowledge` (optional body: `{ "hireId": "..." }`)
+
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
 **Example Usage in `page.tsx`:**
@@ -58,19 +78,7 @@ export default async function Page() {
 }
 ```
 
-## 🚀 The To-Do List (What needs to be done next)
+## Setup reminders
 
-**1. Data Source Setup (Database Admin)**
-- Navigate to the Supabase Studio SQL editor and execute the file at `supabase/migrations/00000000000000_init_vector_db.sql`. This spins up the PGVector `runbook_documents` table so our API can store embeddings.
-- Track down the API Keys for Google Drive, Slack, and Notion and inject them into your `.env.local` alongside your `GEMINI_API_KEY`.
-
-**2. The Sync Trigger (Frontend Team)**
-- The backend synchronization engine is fully written inside `src/lib/vectorizer.ts`. 
-- The frontend team needs to build a "Sync Knowledge" button in the Dashboard that securely invokes `syncUserKnowledge()` to trigger the mass enterprise data pull and vector embedding cycle!
-
-**3. The UI Elements (Frontend Team)**
-- **Chat Panel**: Build a React UI to hit `POST /api/chat`. The backend will natively use Gemini embeddings to search the Supabase Postgres vector database and return markdown chat answers!
-- **Tasks & Checklists**: Build the visual checkmark boxes for onboarding tasks.
-- **Floating Browser Widget**: Build the Chrome-extension-style widget that floats on demo screens and intercepts workflows.
-
-**Note on "Demo Documents"**: Since we pivoted to live enterprise integrations, we purposefully **do not need fake hardcoded demo documents** locally in the codebase! HOWEVER, **you and your teammates MUST create "live" demonstration documents** inside the actual Notion and Google Drive workspaces, and post some real messages into your connected Slack channel so that when the API sync runs, it actually pulls real text down for your presentation!
+- Apply `supabase/migrations/00000000000000_init_vector_db.sql` in Supabase Studio.
+- Set provider credentials in `.env.local` to enable live ingestion depth.

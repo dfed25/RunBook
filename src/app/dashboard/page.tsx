@@ -2,8 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DEMO_PERSONAS, DEMO_QUESTIONS } from "@/lib/demoScenario";
-import { ChatSource, Lesson, LessonSlide, OnboardingTask } from "@/lib/types";
-import { TRAINEES, type TraineeName } from "@/lib/trainees";
+import { ChatSource, Hire, Lesson, LessonSlide, OnboardingTask } from "@/lib/types";
 
 type ChatMessage = {
   id: string;
@@ -38,10 +37,11 @@ function statusClasses(status: OnboardingTask["status"]): string {
 }
 
 export default function DashboardPage() {
+  const [hires, setHires] = useState<Hire[]>([]);
   const [tasks, setTasks] = useState<OnboardingTask[]>([]);
   const [tasksLoading, setTasksLoading] = useState(true);
   const [tasksError, setTasksError] = useState<string | null>(null);
-  const [selectedAssignee, setSelectedAssignee] = useState<TraineeName>(DEMO_PERSONAS.newHire.name as TraineeName);
+  const [selectedHireId, setSelectedHireId] = useState<string>("");
   const [chatInput, setChatInput] = useState("");
   const [chatBusy, setChatBusy] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([
@@ -78,12 +78,28 @@ export default function DashboardPage() {
     }
   }, []);
 
+  const loadHires = useCallback(async () => {
+    try {
+      const res = await fetch("/api/manager/hires");
+      if (!res.ok) throw new Error("Hires request failed");
+      const data = (await res.json()) as { hires?: Hire[] };
+      const active = (data.hires || []).filter((hire) => hire.active);
+      setHires(active);
+      setSelectedHireId((current) => current || active[0]?.id || "");
+    } catch (error) {
+      console.error(error);
+      setHires([]);
+      setSelectedHireId("");
+    }
+  }, []);
+
   useEffect(() => {
     const timer = window.setTimeout(() => {
+      void loadHires();
       void loadTasks();
     }, 0);
     return () => window.clearTimeout(timer);
-  }, [loadTasks]);
+  }, [loadHires, loadTasks]);
 
   async function updateStatus(taskId: string, status: OnboardingTask["status"]) {
     const previous = tasks;
@@ -117,7 +133,7 @@ export default function DashboardPage() {
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ question: trimmed }),
+        body: JSON.stringify({ question: trimmed, hireId: selectedHireId }),
       });
       const data = (await res.json()) as { answer?: string; sources?: ChatSource[] };
       setMessages((current) => [
@@ -150,7 +166,7 @@ export default function DashboardPage() {
       const res = await fetch("/api/lesson", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ docId: lessonDocId }),
+        body: JSON.stringify({ docId: lessonDocId, hireId: selectedHireId }),
       });
       const data = (await res.json()) as Lesson;
       if (!res.ok || !data?.slides?.length) throw new Error("Lesson generation failed");
@@ -171,8 +187,8 @@ export default function DashboardPage() {
   }
 
   const visibleTasks = useMemo(
-    () => tasks.filter((task) => task.assignee === selectedAssignee),
-    [tasks, selectedAssignee],
+    () => tasks.filter((task) => task.assigneeId === selectedHireId),
+    [tasks, selectedHireId],
   );
 
   const completed = useMemo(
@@ -182,13 +198,14 @@ export default function DashboardPage() {
 
   const progressPct = visibleTasks.length ? Math.round((completed / visibleTasks.length) * 100) : 0;
   const currentSlide = lesson?.slides?.[lessonSlideIndex] ?? EMPTY_LESSON_SLIDE;
+  const selectedHire = hires.find((hire) => hire.id === selectedHireId);
 
   return (
     <main className="min-h-screen bg-slate-950 p-6 text-slate-100 sm:p-10">
       <div className="mx-auto grid max-w-7xl gap-6 lg:grid-cols-[1.2fr_1fr]">
         <section className="space-y-6">
           <article className="rounded-2xl border border-slate-800 bg-slate-900 p-6">
-            <h1 className="text-3xl font-bold">Welcome, {DEMO_PERSONAS.newHire.name}</h1>
+            <h1 className="text-3xl font-bold">Welcome, {selectedHire?.name || DEMO_PERSONAS.newHire.name}</h1>
             <p className="mt-2 text-sm text-slate-300">
               Track onboarding tasks, ask Runbook for help, and review lessons with source-backed guidance.
             </p>
@@ -208,12 +225,12 @@ export default function DashboardPage() {
               <h2 className="text-xl font-semibold">Task checklist</h2>
               <select
                 className="rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
-                value={selectedAssignee}
-                onChange={(event) => setSelectedAssignee(event.target.value as TraineeName)}
+                value={selectedHireId}
+                onChange={(event) => setSelectedHireId(event.target.value)}
               >
-                {TRAINEES.map((name) => (
-                  <option key={name} value={name}>
-                    {name}
+                {hires.map((hire) => (
+                  <option key={hire.id} value={hire.id}>
+                    {hire.name}
                   </option>
                 ))}
               </select>
@@ -223,7 +240,7 @@ export default function DashboardPage() {
               <p className="mt-4 text-sm text-slate-300">Loading tasks...</p>
             ) : visibleTasks.length === 0 ? (
               <p className="mt-4 rounded-md border border-dashed border-slate-700 p-4 text-sm text-slate-400">
-                No tasks assigned yet for {selectedAssignee}.
+                No tasks assigned yet for {selectedHire?.name || "this hire"}.
               </p>
             ) : (
               <ul className="mt-4 space-y-3">

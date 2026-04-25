@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
-import { addTask, getTasks } from "@/lib/dataStore";
-import { DEFAULT_ASSIGNEE, TRAINEES, type TraineeName } from "@/lib/trainees";
+import { addTask, getHires, getTasks } from "@/lib/dataStore";
 
 export const runtime = "nodejs";
 
@@ -19,10 +18,8 @@ export async function POST(req: Request) {
     const body = await req.json();
     const title = String(body.title || "").trim();
     const description = String(body.description || "").trim();
-    const assigneeRaw = String(body.assignee || "").trim();
-    const assignee: TraineeName = TRAINEES.includes(assigneeRaw as TraineeName)
-      ? (assigneeRaw as TraineeName)
-      : DEFAULT_ASSIGNEE;
+    const assigneeId = String(body.assigneeId || "").trim();
+    const assignee = String(body.assignee || "").trim();
     const estimatedTime = String(body.estimatedTime || "").trim();
     const sourceTitle = String(body.sourceTitle || "").trim();
 
@@ -30,7 +27,14 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "title and description are required" }, { status: 400 });
     }
 
-    const created = await addTask({ title, description, assignee, estimatedTime, sourceTitle });
+    const hires = await getHires();
+    const activeHires = hires.filter((hire) => hire.active);
+    const chosenAssigneeId = assigneeId || activeHires[0]?.id || "";
+    if (!chosenAssigneeId) {
+      return NextResponse.json({ error: "No active hires available to assign tasks." }, { status: 400 });
+    }
+
+    const created = await addTask({ title, description, assigneeId: chosenAssigneeId, assignee, estimatedTime, sourceTitle });
     return NextResponse.json(created, { status: 201 });
   } catch (error) {
     console.error(error);
