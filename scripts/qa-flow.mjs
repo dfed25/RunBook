@@ -148,6 +148,10 @@ async function run() {
   if (bugs.length > 0) {
     console.error(`QA flow completed with ${bugs.length} bug(s). See ${bugLogPath}.`);
     process.exitCode = 1;
+  } else {
+    console.log(
+      `QA flow passed (0 bugs). Wrote ${bugLogPath} and screenshots under ${outputDir}.`,
+    );
   }
 }
 

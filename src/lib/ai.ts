@@ -2,7 +2,7 @@ export async function generateFromGemini(
   systemPrompt: string, 
   userContext: string
 ): Promise<string> {
-  const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+  const GEMINI_API_KEY = process.env.GEMINI_API_KEY?.trim();
   if (!GEMINI_API_KEY) {
     throw new Error("Missing GEMINI_API_KEY");
   }
@@ -56,12 +56,13 @@ export async function generateJsonFromGemini<T>(
 }
 
 export async function generateEmbedding(text: string): Promise<number[] | null> {
-  const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+  const GEMINI_API_KEY = process.env.GEMINI_API_KEY?.trim();
   if (!GEMINI_API_KEY) return null;
 
   try {
+    const embeddingModel = "models/gemini-embedding-001";
     const response = await fetch(
-      "https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:embedContent",
+      `https://generativelanguage.googleapis.com/v1beta/${embeddingModel}:embedContent`,
       {
         method: "POST",
         headers: {
@@ -69,13 +70,18 @@ export async function generateEmbedding(text: string): Promise<number[] | null> 
           "x-goog-api-key": GEMINI_API_KEY,
         },
         body: JSON.stringify({
-          model: "models/text-embedding-004",
-          content: { parts: [{ text }] }
+          model: embeddingModel,
+          content: { parts: [{ text }] },
+          outputDimensionality: 768,
         })
       }
     );
 
-    if (!response.ok) return null;
+    if (!response.ok) {
+      const errorBody = await response.text().catch(() => "");
+      console.error("Embedding API request failed:", response.status, errorBody);
+      return null;
+    }
     const data = await response.json();
     return data.embedding?.values || null;
   } catch (err) {
