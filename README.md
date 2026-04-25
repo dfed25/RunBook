@@ -67,4 +67,4 @@ export default async function Page() {
 - **Tasks & Checklists**: Build the visual checkmark boxes for onboarding tasks.
 - **Floating Browser Widget**: Build the Chrome-extension-style widget that floats on demo screens and intercepts workflows.
 
-**Note on "Demo Documents"**: Since we pivoted to live enterprise integrations, we purposefully **do not need fake demo documents!** When you hit Sync, it will rip actual text from your live, connected Notion and GDrive workspaces.
+**Note on "Demo Documents"**: Since we pivoted to live enterprise integrations, we purposefully **do not need fake hardcoded demo documents** locally in the codebase! HOWEVER, **you and your teammates MUST create "live" demonstration documents** inside the actual Notion and Google Drive workspaces, and post some real messages into your connected Slack channel so that when the API sync runs, it actually pulls real text down for your presentation!
