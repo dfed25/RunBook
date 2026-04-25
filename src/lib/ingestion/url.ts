@@ -46,9 +46,9 @@ function decodeHtmlEntities(input: string): string {
 
 function stripHtmlTags(input: string): string {
   const textOnly = input
-    .replace(/<script\b[\s\S]*?<\/script\s*>/gi, " ")
-    .replace(/<style\b[\s\S]*?<\/style\s*>/gi, " ")
-    .replace(/<noscript\b[\s\S]*?<\/noscript\s*>/gi, " ")
+    .replace(/<script\b[\s\S]*?<\/script(?:\s[^>]*)?>/gi, " ")
+    .replace(/<style\b[\s\S]*?<\/style(?:\s[^>]*)?>/gi, " ")
+    .replace(/<noscript\b[\s\S]*?<\/noscript(?:\s[^>]*)?>/gi, " ")
     .replace(/<[^>]+>/g, " ")
     .trim();
   return decodeHtmlEntities(textOnly).replace(/\s+/g, " ").trim();
@@ -176,6 +176,20 @@ async function safeFetch(rawUrl: URL): Promise<{ finalUrl: URL; body: string; co
   return null;
 }
 
+function bodyContainsHost(rawBody: string, blockedHost: string): boolean {
+  const normalizedHost = blockedHost.toLowerCase();
+  const urlMatches = rawBody.match(/https?:\/\/[^\s"'<>]+/gi) || [];
+  for (const candidate of urlMatches) {
+    try {
+      const parsed = new URL(candidate);
+      if (parsed.hostname.toLowerCase() === normalizedHost) return true;
+    } catch {
+      // Ignore malformed URL candidates extracted from text.
+    }
+  }
+  return false;
+}
+
 async function fetchGoogleDocText(rawUrl: string): Promise<string | null> {
   const docId = googleDocIdFromUrl(rawUrl);
   if (!docId) return null;
@@ -189,7 +203,7 @@ async function fetchGoogleDocText(rawUrl: string): Promise<string | null> {
   if (
     lowerBody.startsWith("<!doctype") ||
     lowerBody.startsWith("<html") ||
-    lowerBody.includes("accounts.google.com") ||
+    bodyContainsHost(response.body, "accounts.google.com") ||
     lowerBody.includes("sign in")
   ) {
     return null;
