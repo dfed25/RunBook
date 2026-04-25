@@ -109,12 +109,9 @@ export default function ManagerPage() {
                 <AppButton
                   type="button"
                   onClick={() => setActiveHireId("ALL")}
-                  className={`rounded-full px-3 py-1 text-sm ${
-                    selectedHireId === "ALL"
-                      ? "border-cyan-400 bg-cyan-400/20 text-cyan-200"
-                      : "border-slate-700 bg-slate-950 text-slate-300 hover:border-slate-500"
-                  }`}
+                  className="rounded-full px-3 py-1 text-sm"
                   variant="ghost"
+                  tone={selectedHireId === "ALL" ? "active" : "inactive"}
                 >
                   All Employees
                 </AppButton>
@@ -123,12 +120,9 @@ export default function ManagerPage() {
                     key={person.hireId}
                     type="button"
                     onClick={() => setActiveHireId(person.hireId)}
-                    className={`rounded-full px-3 py-1 text-sm ${
-                      selectedHireId === person.hireId
-                        ? "border-cyan-400 bg-cyan-400/20 text-cyan-200"
-                        : "border-slate-700 bg-slate-950 text-slate-300 hover:border-slate-500"
-                    }`}
+                    className="rounded-full px-3 py-1 text-sm"
                     variant="ghost"
+                    tone={selectedHireId === person.hireId ? "active" : "inactive"}
                   >
                     {person.name}
                   </AppButton>

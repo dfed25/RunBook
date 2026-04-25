@@ -44,15 +44,25 @@ function sourceScopeToken(hireId: string): string {
   return `[hire:${hireId}]`;
 }
 
-function inferProvider(type: KnowledgeSourceType): "notion" | "google_drive" | "slack" | "manual" {
-  return providerForType(type);
-}
-
 function sourceExternalId(source: HireKnowledgeSource): string {
   return `${source.hireId}:${source.id}`;
 }
 
-async function resolveSourceDocument(source: HireKnowledgeSource): Promise<SyncDocument | null> {
+function chunkContent(content: string, chunkSize = 1800, overlap = 200): string[] {
+  if (content.length <= chunkSize) return [content];
+  const chunks: string[] = [];
+  let start = 0;
+  while (start < content.length) {
+    const end = Math.min(content.length, start + chunkSize);
+    const chunk = content.slice(start, end).trim();
+    if (chunk.length > 0) chunks.push(chunk);
+    if (end >= content.length) break;
+    start = Math.max(end - overlap, start + 1);
+  }
+  return chunks;
+}
+
+async function resolveSourceDocument(source: HireKnowledgeSource): Promise<SyncDocument[]> {
   const scopeToken = sourceScopeToken(source.hireId);
   const fallbackContent = `${scopeToken}
 Source title: ${source.title}
@@ -62,16 +72,17 @@ Source type: ${source.type}`;
   const fetched = await fetchUrlDocument(source.url);
   const content = fetched?.content || fallbackContent;
   const title = fetched?.title || source.title || "Knowledge source";
-
-  return {
-    id: sourceExternalId(source),
+  const scopedContent = content.includes(scopeToken) ? content : `${scopeToken}\n${content}`;
+  const chunks = chunkContent(scopedContent);
+  return chunks.map((chunk, index) => ({
+    id: `${sourceExternalId(source)}#${index}`,
     title,
-    content: content.includes(scopeToken) ? content : `${scopeToken}\n${content}`,
-    provider: inferProvider(source.type),
+    content: chunk.includes(scopeToken) ? chunk : `${scopeToken}\n${chunk}`,
+    provider: providerForType(source.type),
     url: source.url,
     scope: source.hireId,
     scopeToken,
-  };
+  }));
 }
 
 export async function syncUserKnowledge(hireId?: string): Promise<SyncKnowledgeResult> {
@@ -111,9 +122,8 @@ export async function syncUserKnowledge(hireId?: string): Promise<SyncKnowledgeR
       scopeToken: "[hire:global]"
     }))
   ];
-  const hireDocuments = (
-    await Promise.all(hireSources.map((source) => resolveSourceDocument(source)))
-  ).filter((doc): doc is SyncDocument => !!doc);
+  const hireDocumentsNested = await Promise.all(hireSources.map((source) => resolveSourceDocument(source)));
+  const hireDocuments = hireDocumentsNested.flat();
   const rawDocuments = hireId ? hireDocuments : globalDocuments;
 
   const result: SyncKnowledgeResult = {
@@ -148,7 +158,7 @@ export async function syncUserKnowledge(hireId?: string): Promise<SyncKnowledgeR
 
       const row = {
         provider: doc.provider,
-        external_id: doc.scope === "global" ? doc.id : doc.id,
+        external_id: doc.id,
         title: `${doc.scopeToken} ${doc.title}`,
         content: doc.content.includes(doc.scopeToken) ? doc.content : `${doc.scopeToken}\n${doc.content}`,
         url: doc.url,

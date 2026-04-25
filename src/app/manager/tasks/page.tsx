@@ -209,9 +209,16 @@ export default function ManagerTasksPage() {
           </form>
           <div className="mt-3 flex flex-wrap gap-2">
             {hires.map((hire) => (
-              <button key={hire.id} type="button" onClick={() => { setSelectedHireId(hire.id); setForm((p) => ({ ...p, assigneeId: hire.id })); }} className={`rounded-full border px-3 py-1 text-xs ${selectedHireId === hire.id ? "border-cyan-400 bg-cyan-400/20 text-cyan-200" : "border-slate-700 text-slate-300"}`}>
+              <AppButton
+                key={hire.id}
+                type="button"
+                variant="ghost"
+                tone={selectedHireId === hire.id ? "active" : "inactive"}
+                className="rounded-full px-3 py-1 text-xs"
+                onClick={() => { setSelectedHireId(hire.id); setForm((p) => ({ ...p, assigneeId: hire.id })); }}
+              >
                 {hire.name}
-              </button>
+              </AppButton>
             ))}
           </div>
           {selectedHireId ? <AppButton type="button" variant="danger" onClick={() => void deleteHire(selectedHireId)} className="mt-3 px-3 py-1 text-xs">Remove selected hire</AppButton> : null}
@@ -274,7 +281,18 @@ export default function ManagerTasksPage() {
                     <div className="flex flex-wrap gap-2">
                       {hires.filter((hire) => hire.id !== task.assigneeId).map((hire) => {
                         const active = (duplicateTargets[task.id] || []).includes(hire.id);
-                        return <button key={`${task.id}-${hire.id}`} type="button" onClick={() => toggleDuplicateTarget(task.id, hire.id)} className={`rounded-full border px-2 py-1 text-xs ${active ? "border-cyan-400 bg-cyan-400/20 text-cyan-200" : "border-slate-700 text-slate-300"}`}>{hire.name}</button>;
+                        return (
+                          <AppButton
+                            key={`${task.id}-${hire.id}`}
+                            type="button"
+                            variant="ghost"
+                            tone={active ? "active" : "inactive"}
+                            className="rounded-full px-2 py-1 text-xs"
+                            onClick={() => toggleDuplicateTarget(task.id, hire.id)}
+                          >
+                            {hire.name}
+                          </AppButton>
+                        );
                       })}
                     </div>
                     <AppButton type="button" variant="primary" onClick={() => void duplicateTask(task.id)} className="px-2 py-1 text-xs">Duplicate selected</AppButton>

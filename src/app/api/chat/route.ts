@@ -62,7 +62,10 @@ export async function POST(req: Request) {
 
     const sources: ChatSource[] = validDocs.map((d) => ({
       title: d.title,
-      excerpt: `${d.content.substring(0, 180)}...`,
+      excerpt: (() => {
+        const content = d.content || "";
+        return content.length > 180 ? `${content.slice(0, 180)}...` : content;
+      })(),
       url: d.url || undefined,
     }));
     const context = validDocs
@@ -82,7 +85,7 @@ export async function POST(req: Request) {
     try {
       const userPrompt = `Company Context:\n${context || "No context found."}\n\nUser Question: ${question}\n\nAnswer with concise guidance and ground it in the provided sources.`;
       const answer = await generateFromGemini(CHAT_SYSTEM_PROMPT, userPrompt);
-      return NextResponse.json({ answer, sources: sources.length > 0 ? sources : undefined });
+      return NextResponse.json({ answer, sources });
     } catch (e) {
       console.error("Chat API Gemini Error:", e);
       return NextResponse.json({ answer: "Runbook AI is temporarily unavailable.", sources }, { status: 500 });

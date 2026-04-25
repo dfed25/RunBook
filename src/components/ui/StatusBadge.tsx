@@ -1,6 +1,8 @@
+import { ReactNode } from "react";
+
 type StatusBadgeProps = {
   tone: "success" | "warning" | "neutral";
-  children: string;
+  children: ReactNode;
 };
 
 const toneMap: Record<StatusBadgeProps["tone"], string> = {

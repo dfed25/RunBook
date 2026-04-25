@@ -316,7 +316,7 @@ export default function DashboardPage() {
                             <a
                               href={source.url}
                               target="_blank"
-                              rel="noreferrer"
+                              rel="noopener noreferrer"
                               className="text-xs font-semibold text-cyan-200 underline-offset-2 hover:underline"
                             >
                               {source.title}
