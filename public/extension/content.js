@@ -508,24 +508,69 @@ User question: ${text}`;
       text,
     );
   const shouldTryHighlight = asksForLocation || asksForHowTo;
+  const likelyDocCoverageMiss =
+    /\b(missing information|unable to locate information|not available in (the )?company|company documents|who to ask)\b/i;
 
   try {
-    const data = await apiRequest("/api/chat", { question: context });
-    const answer = data?.answer || "No answer available right now.";
-    addMessage("assistant", answer);
-
-    // Combine chat + guided highlighting: after answering, attempt to locate
-    // the most relevant element using scraped page context.
+    // For page-layout questions, try locating first. If we can highlight,
+    // prefer the actionable guidance and suppress generic "missing docs" chat text.
+    let locateResult = null;
     if (shouldTryHighlight) {
       try {
-        const locateData = await apiRequest("/api/widget", {
+        locateResult = await apiRequest("/api/widget", {
           url: window.location.href,
           pageText: getPageText(),
           taskTitle: "Locate the page element for this chat request",
-          taskDescription: `User request: ${text}
-Assistant guidance: ${answer}`,
+          taskDescription: `User request: ${text}`,
           interactiveElements: collectClickableCandidates(),
         });
+      } catch (locateErr) {
+        console.error("Chat pre-locate failed", locateErr);
+      }
+    }
+
+    const data = await apiRequest("/api/chat", { question: context });
+    const answer = data?.answer || "No answer available right now.";
+
+    let highlightedFromChat = false;
+    if (shouldTryHighlight && locateResult?.found && locateResult?.elementText) {
+      const foundEl = findElementByText(locateResult.elementText);
+      if (foundEl) {
+        const instruction =
+          locateResult.instruction ||
+          `Try this element on the page: ${locateResult.elementText}`;
+        highlightElement(foundEl, instruction, "Guided step");
+        setInstruction(instruction);
+        addMessage(
+          "assistant",
+          `I highlighted it on the page: "${locateResult.elementText}".`,
+        );
+        highlightedFromChat = true;
+      }
+    }
+
+    // Only show the RAG answer if it adds value for this question.
+    // If we successfully highlighted and the answer is just a doc-coverage miss,
+    // skip it to avoid contradictory UX.
+    const shouldSuppressAnswer =
+      highlightedFromChat && likelyDocCoverageMiss.test(answer || "");
+    if (!shouldSuppressAnswer) {
+      addMessage("assistant", answer);
+    }
+
+    // If locate failed, still provide any locate instruction as a follow-up hint.
+    if (shouldTryHighlight && !highlightedFromChat) {
+      try {
+        const locateData = locateResult
+          ? locateResult
+          : await apiRequest("/api/widget", {
+              url: window.location.href,
+              pageText: getPageText(),
+              taskTitle: "Locate the page element for this chat request",
+              taskDescription: `User request: ${text}
+Assistant guidance: ${answer}`,
+              interactiveElements: collectClickableCandidates(),
+            });
 
         if (locateData?.found && locateData?.elementText) {
           const foundEl = findElementByText(locateData.elementText);
@@ -535,10 +580,13 @@ Assistant guidance: ${answer}`,
               `Try this element on the page: ${locateData.elementText}`;
             highlightElement(foundEl, instruction, "Guided step");
             setInstruction(instruction);
-            addMessage(
-              "assistant",
-              `I highlighted it on the page: "${locateData.elementText}".`,
-            );
+            // Add this only if not already shown.
+            if (!highlightedFromChat) {
+              addMessage(
+                "assistant",
+                `I highlighted it on the page: "${locateData.elementText}".`,
+              );
+            }
           } else if (locateData?.instruction) {
             addMessage("assistant", locateData.instruction);
           }
