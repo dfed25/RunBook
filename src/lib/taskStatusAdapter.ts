@@ -4,6 +4,9 @@ export type TaskStatusMap = Record<string, TaskStatus>;
 
 export type UpdateTaskStatusResult = "api" | "local" | "rejected";
 
+/** Stable empty map for `useSyncExternalStore` (must not return a fresh `{}` each render). */
+export const EMPTY_TASK_STATUS_MAP: TaskStatusMap = Object.freeze({});
+
 const STORAGE_KEY = "runbook-task-statuses";
 const STATUS_EVENT_NAME = "runbook-task-status-updated";
 
@@ -13,11 +16,19 @@ function isBrowser(): boolean {
   return typeof window !== "undefined";
 }
 
+/** Serialized localStorage value; `""` means missing / empty key (distinct from unset). */
+let snapshotKey: string | undefined;
+let snapshotMap: TaskStatusMap = EMPTY_TASK_STATUS_MAP;
+
+function storageKeyFromRaw(raw: string | null): string {
+  return raw === null ? "" : raw;
+}
+
 function parseStoredTaskStatuses(raw: string): TaskStatusMap {
   try {
     const parsed: unknown = JSON.parse(raw);
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-      return {};
+      return EMPTY_TASK_STATUS_MAP;
     }
     const out: TaskStatusMap = {};
     for (const [key, value] of Object.entries(parsed as Record<string, unknown>)) {
@@ -28,23 +39,24 @@ function parseStoredTaskStatuses(raw: string): TaskStatusMap {
         out[key] = value as TaskStatus;
       }
     }
-    return out;
+    return Object.keys(out).length === 0 ? EMPTY_TASK_STATUS_MAP : out;
   } catch {
-    return {};
+    return EMPTY_TASK_STATUS_MAP;
   }
 }
 
 export function getTaskStatuses(): TaskStatusMap {
   if (!isBrowser()) {
-    return {};
+    return EMPTY_TASK_STATUS_MAP;
   }
 
-  const storedValue = window.localStorage.getItem(STORAGE_KEY);
-  if (!storedValue) {
-    return {};
+  const raw = window.localStorage.getItem(STORAGE_KEY);
+  const key = storageKeyFromRaw(raw);
+  if (key !== snapshotKey) {
+    snapshotKey = key;
+    snapshotMap = key ? parseStoredTaskStatuses(raw!) : EMPTY_TASK_STATUS_MAP;
   }
-
-  return parseStoredTaskStatuses(storedValue);
+  return snapshotMap;
 }
 
 export function getTaskStatus(taskId: string): TaskStatus {
@@ -58,17 +70,20 @@ function saveTaskStatuses(taskStatuses: TaskStatusMap) {
   }
 
   window.localStorage.setItem(STORAGE_KEY, JSON.stringify(taskStatuses));
+  const raw = window.localStorage.getItem(STORAGE_KEY);
+  snapshotKey = storageKeyFromRaw(raw);
+  snapshotMap = snapshotKey ? parseStoredTaskStatuses(raw!) : EMPTY_TASK_STATUS_MAP;
   window.dispatchEvent(
     new CustomEvent(STATUS_EVENT_NAME, {
-      detail: taskStatuses,
+      detail: snapshotMap,
     }),
   );
 }
 
 function setTaskStatus(taskId: string, status: TaskStatus) {
-  const taskStatuses = getTaskStatuses();
-  taskStatuses[taskId] = status;
-  saveTaskStatuses(taskStatuses);
+  const current = getTaskStatuses();
+  const next: TaskStatusMap = { ...current, [taskId]: status };
+  saveTaskStatuses(next);
 }
 
 export async function updateTaskStatus(
@@ -117,12 +132,13 @@ export function subscribeToTaskStatus(
     if (storageEvent.key !== null && storageEvent.key !== STORAGE_KEY) {
       return;
     }
+    snapshotKey = undefined;
     callback(getTaskStatuses());
   };
 
   const customHandler = (event: Event) => {
     const customEvent = event as CustomEvent<TaskStatusMap>;
-    callback(customEvent.detail);
+    callback(customEvent.detail ?? getTaskStatuses());
   };
 
   window.addEventListener("storage", storageHandler);

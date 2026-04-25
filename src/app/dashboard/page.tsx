@@ -2,6 +2,7 @@
 
 import { useMemo, useSyncExternalStore } from "react";
 import {
+  EMPTY_TASK_STATUS_MAP,
   getTaskStatuses,
   subscribeToTaskStatus,
   type TaskStatus,
@@ -47,7 +48,7 @@ export default function DashboardPage() {
   const taskStatuses = useSyncExternalStore(
     (onStoreChange) => subscribeToTaskStatus(() => onStoreChange()),
     () => getTaskStatuses(),
-    (): TaskStatusMap => ({}),
+    (): TaskStatusMap => EMPTY_TASK_STATUS_MAP,
   );
 
   const completedCount = useMemo(() => {
