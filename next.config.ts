@@ -1,9 +1,9 @@
 import type { NextConfig } from "next";
-import path from "node:path";
 
 const nextConfig: NextConfig = {
   turbopack: {
-    root: path.resolve(__dirname),
+    // Keep module resolution anchored to the project root.
+    root: process.cwd(),
   },
 };
 
