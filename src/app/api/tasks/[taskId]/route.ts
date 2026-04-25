@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { duplicateTask, moveTask, removeTask } from "@/lib/dataStore";
-import { TRAINEES } from "@/lib/trainees";
+import { TRAINEES, type TraineeName } from "@/lib/trainees";
 
 export const runtime = "nodejs";
 
@@ -44,7 +44,10 @@ export async function PATCH(req: Request, { params }: Params) {
       const assignees: unknown[] = Array.isArray(body.assignees) ? body.assignees : [];
       const validAssignees = assignees
         .filter((name): name is string => typeof name === "string")
-        .filter((name) => TRAINEES.includes(name as (typeof TRAINEES)[number]));
+        .filter((name): name is TraineeName => TRAINEES.includes(name as TraineeName));
+      if (Array.isArray(body.assignees) && body.assignees.length > 0 && validAssignees.length === 0) {
+        return NextResponse.json({ error: "No valid assignees provided" }, { status: 400 });
+      }
       const copies = await duplicateTask(taskId, validAssignees);
       if (copies === null) {
         return NextResponse.json({ error: "Task not found" }, { status: 404 });

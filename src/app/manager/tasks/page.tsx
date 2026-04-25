@@ -88,6 +88,11 @@ export default function ManagerTasksPage() {
       return;
     }
     setTasks((prev) => prev.filter((task) => task.id !== taskId));
+    setDuplicateTargets((prev) => {
+      const next = { ...prev };
+      delete next[taskId];
+      return next;
+    });
     setMessage("Task removed.");
   }
 

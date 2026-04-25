@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { DEMO_PERSONAS } from "@/lib/demoScenario";
 
 export default function Home() {
   return (
@@ -33,8 +34,8 @@ export default function Home() {
           <article className="rounded-xl border border-slate-800 bg-slate-900 p-5">
             <h2 className="text-lg font-semibold">3) Create tasks</h2>
             <p className="mt-2 text-sm text-slate-300">
-              Use manager task setup to assign new onboarding tasks to Alex or other new hires and immediately surface
-              them in reporting.
+              Use manager task setup to assign new onboarding tasks to {DEMO_PERSONAS.newHire.name} or other new hires
+              and immediately surface them in reporting.
             </p>
           </article>
         </section>

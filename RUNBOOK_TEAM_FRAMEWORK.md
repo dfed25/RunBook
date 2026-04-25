@@ -75,13 +75,26 @@ Definition of done:
   - Request: `{ question: string }`
   - Response: `{ answer: string, sources?: { title: string, excerpt: string }[] }`
 
-- `POST /api/tasks/generate`
+- `GET /api/tasks`
   - Request: none
   - Response: `OnboardingTask[]`
 
+- `POST /api/tasks`
+  - Request: `{ title: string, description: string, assignee?: "Alex Rivera" | "Priya Sharma" | "Jordan Lee", estimatedTime?: string, sourceTitle?: string }`
+  - Response: `OnboardingTask`
+
+- `PATCH /api/tasks/[taskId]`
+  - Request (move): `{ action: "move", direction: "up" | "down" }`
+  - Request (duplicate): `{ action: "duplicate", assignees: ("Alex Rivera" | "Priya Sharma" | "Jordan Lee")[] }`
+  - Response: `{ success: true, tasks?: OnboardingTask[], created?: OnboardingTask[] }`
+
+- `DELETE /api/tasks/[taskId]`
+  - Request: none
+  - Response: `{ success: true }`
+
 - `POST /api/tasks/update`
   - Request: `{ taskId: string, status: "todo" | "in_progress" | "complete" }`
-  - Response: `{ success: true, taskId: string, status: string }`
+  - Response: `{ success: true, task: OnboardingTask }`
 
 - `POST /api/lesson`
   - Request: `{ docId: string }`

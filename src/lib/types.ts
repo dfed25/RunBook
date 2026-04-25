@@ -1,3 +1,5 @@
+import type { TraineeName } from "./trainees";
+
 export type SourceDoc = {
     id: string;
     title: string;
@@ -11,7 +13,7 @@ export type SourceDoc = {
     id: string;
     title: string;
     description: string;
-    assignee: string;
+    assignee: TraineeName;
     status: "todo" | "in_progress" | "complete";
     sourceTitle: string;
     estimatedTime: string;

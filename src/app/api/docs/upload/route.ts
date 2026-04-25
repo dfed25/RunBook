@@ -5,6 +5,7 @@ import { addCustomDoc } from "@/lib/dataStore";
 export const runtime = "nodejs";
 
 const ALLOWED_EXTENSIONS = new Set([".txt", ".md", ".markdown", ".csv", ".json"]);
+const MAX_UPLOAD_BYTES = 1_000_000;
 
 export async function POST(req: Request) {
   try {
@@ -21,6 +22,10 @@ export async function POST(req: Request) {
         { error: "Unsupported file type. Use txt, md, csv, or json." },
         { status: 400 }
       );
+    }
+
+    if (file.size > MAX_UPLOAD_BYTES) {
+      return NextResponse.json({ error: "File too large" }, { status: 413 });
     }
 
     const content = (await file.text()).trim();

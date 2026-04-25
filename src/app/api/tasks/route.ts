@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { addTask, getTasks } from "@/lib/dataStore";
+import { DEFAULT_ASSIGNEE, TRAINEES, type TraineeName } from "@/lib/trainees";
 
 export const runtime = "nodejs";
 
@@ -18,7 +19,10 @@ export async function POST(req: Request) {
     const body = await req.json();
     const title = String(body.title || "").trim();
     const description = String(body.description || "").trim();
-    const assignee = String(body.assignee || "").trim();
+    const assigneeRaw = String(body.assignee || "").trim();
+    const assignee: TraineeName = TRAINEES.includes(assigneeRaw as TraineeName)
+      ? (assigneeRaw as TraineeName)
+      : DEFAULT_ASSIGNEE;
     const estimatedTime = String(body.estimatedTime || "").trim();
     const sourceTitle = String(body.sourceTitle || "").trim();
 

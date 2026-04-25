@@ -1,10 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { DEMO_PERSONAS } from "@/lib/demoScenario";
 import { OnboardingTask } from "@/lib/types";
-import { TRAINEES } from "@/lib/trainees";
 
 type PersonSummary = {
   name: string;
@@ -16,50 +15,37 @@ type PersonSummary = {
 };
 
 export default function ManagerPage() {
-  const [tasks, setTasks] = useState<OnboardingTask[]>([]);
+  const [people, setPeople] = useState<PersonSummary[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [activeEmployee, setActiveEmployee] = useState<string>("ALL");
 
   useEffect(() => {
-    const timer = window.setTimeout(async () => {
+    const controller = new AbortController();
+    async function loadOverview() {
       try {
-        const res = await fetch("/api/tasks");
-        const data = await res.json();
-        if (res.ok) {
-          setTasks(data);
+        const res = await fetch("/api/manager/overview", { signal: controller.signal });
+        if (!res.ok) {
+          setError("Unable to load manager overview right now.");
+          return;
         }
+        const data = await res.json();
+        const employees = Array.isArray(data?.employees) ? data.employees : [];
+        setPeople(employees);
       } catch (error) {
-        console.error(error);
+        if ((error as { name?: string })?.name !== "AbortError") {
+          console.error(error);
+          setError("Unable to load manager overview right now.");
+        }
       } finally {
-        setLoading(false);
+        if (!controller.signal.aborted) {
+          setLoading(false);
+        }
       }
-    }, 0);
-    return () => window.clearTimeout(timer);
+    }
+    void loadOverview();
+    return () => controller.abort();
   }, []);
-
-  const people = useMemo<PersonSummary[]>(() => {
-    const grouped = tasks.reduce<Record<string, OnboardingTask[]>>((acc, task) => {
-      const assignee = task.assignee || "Unassigned";
-      if (!acc[assignee]) {
-        acc[assignee] = [];
-      }
-      acc[assignee].push(task);
-      return acc;
-    }, Object.fromEntries(TRAINEES.map((name) => [name, [] as OnboardingTask[]])));
-
-    return Object.entries(grouped).map(([name, personTasks]) => {
-      const completed = personTasks.filter((task) => task.status === "complete").length;
-      const progress = personTasks.length === 0 ? 0 : Math.round((completed / personTasks.length) * 100);
-      return {
-        name,
-        tasks: personTasks,
-        progress,
-        completed,
-        total: personTasks.length,
-        status: progress >= 70 ? "On Track" : "At Risk"
-      };
-    });
-  }, [tasks]);
 
   const avgProgress = people.length
     ? Math.round(people.reduce((sum, person) => sum + person.progress, 0) / people.length)
@@ -83,6 +69,7 @@ export default function ManagerPage() {
           <Link href="/manager/tasks" className="inline-block text-sm text-cyan-300 hover:text-cyan-200">
             Open manager task setup
           </Link>
+          {error ? <p className="text-sm text-amber-300">{error}</p> : null}
         </header>
 
         <section className="grid gap-4 sm:grid-cols-3">

@@ -1,3 +1,4 @@
+// TODO: Reuse in richer landing-page/company profile modules.
 export const DEMO_COMPANY = {
   name: "Northstar AI",
   industry: "AI workflow automation",
@@ -16,6 +17,7 @@ export const DEMO_PERSONAS = {
   }
 };
 
+// TODO: Reuse in scripted demo runner and walkthrough UI.
 export const DEMO_STORY_STEPS: string[] = [
   "Alex signs in and opens the new hire dashboard.",
   "Alex reviews checklist tasks and current progress.",
@@ -25,6 +27,7 @@ export const DEMO_STORY_STEPS: string[] = [
   "Maya opens the manager dashboard and sees Alex's progress update in real time."
 ];
 
+// TODO: Reuse in seeded question chips for chat experience.
 export const DEMO_QUESTIONS: string[] = [
   "How do I get GitHub access?",
   "What is required before I can merge production code?",
