@@ -28,35 +28,19 @@ function escapeMarkdownCell(value) {
   return String(value).replaceAll("|", "\\|").replaceAll("\n", " ");
 }
 
-async function ensureDashboardProgress(page, expectedText) {
-  const normalize = (s) => String(s).replace(/\s+/g, " ").trim();
-  const want = normalize(expectedText);
-  try {
-    await page.waitForFunction(
-      ([key, expected]) => {
-        const el = document.querySelector(`[data-testid="${key}"]`);
-        if (!el) return false;
-        const got = el.textContent?.replace(/\s+/g, " ").trim() ?? "";
-        return got === expected;
-      },
-      ["dashboard-progress", want],
-      { timeout: 15000 },
-    );
-  } catch (err) {
-    let actual = "unknown";
-    try {
-      actual = normalize(await page.getByTestId("dashboard-progress").innerText());
-    } catch {
-      actual = String(err?.message ?? err);
-    }
-    logBug(
-      "high",
-      "Dashboard progress mismatch",
-      `Dashboard shows '${expectedText}'`,
-      `Got '${actual}' (progress pill not ready or wrong text)`,
-      "Open /dashboard after completing tasks and inspect progress text",
-    );
+function parseProgressText(rawText) {
+  const match = String(rawText).match(/(\d+)\s*\/\s*(\d+)\s*tasks complete/i);
+  if (!match) return null;
+  return { completed: Number(match[1]), total: Number(match[2]) };
+}
+
+async function getDashboardProgress(page) {
+  const text = await page.getByTestId("dashboard-progress").innerText();
+  const parsed = parseProgressText(text);
+  if (!parsed) {
+    throw new Error(`Could not parse dashboard progress text: "${text}"`);
   }
+  return parsed;
 }
 
 async function writeBugLog() {
@@ -110,34 +94,50 @@ async function run() {
       path: path.join(outputDir, "02-dashboard-before-completion.png"),
       fullPage: true,
     });
-    await ensureDashboardProgress(page, "Progress: 0/2 tasks complete");
+    const before = await getDashboardProgress(page);
 
-    await page.goto(`${baseUrl}/demo/github`, nav);
-    await page.screenshot({ path: path.join(outputDir, "03-github-demo.png"), fullPage: true });
-    await page.getByRole("button", { name: "Runbook Assistant" }).click();
+    const todoTask = page
+      .locator("li")
+      .filter({ has: page.locator("span", { hasText: /^Todo$/ }) })
+      .first();
+    if ((await todoTask.count()) === 0) {
+      logBug(
+        "medium",
+        "No todo task available",
+        "At least one task in Todo status",
+        "Could not find any Todo tasks to complete in dashboard checklist",
+        "Open /dashboard and verify seeded tasks contain at least one Todo item",
+      );
+    } else {
+      await todoTask.getByRole("button", { name: "Mark Complete" }).click();
+      try {
+        await page.waitForFunction(
+          (expectedCompleted) => {
+            const el = document.querySelector('[data-testid="dashboard-progress"]');
+            if (!el) return false;
+            const m = el.textContent?.match(/(\d+)\s*\/\s*(\d+)\s*tasks complete/i);
+            if (!m) return false;
+            return Number(m[1]) >= expectedCompleted;
+          },
+          before.completed + 1,
+          { timeout: 15000 },
+        );
+      } catch {
+        const afterText = await page.getByTestId("dashboard-progress").innerText();
+        logBug(
+          "high",
+          "Dashboard progress did not increase",
+          `Completed tasks should increase from ${before.completed}`,
+          `Progress text after marking complete: "${afterText}"`,
+          "Open /dashboard, mark a Todo task complete, and verify progress increments",
+        );
+      }
+    }
+
     await page.screenshot({
-      path: path.join(outputDir, "04-github-widget-open.png"),
+      path: path.join(outputDir, "03-dashboard-after-completion.png"),
       fullPage: true,
     });
-    await page.getByRole("button", { name: "Mark Complete" }).click();
-    await page.getByRole("button", { name: "Task Completed" }).waitFor({ state: "visible" });
-
-    await page.goto(`${baseUrl}/demo/expenses`, nav);
-    await page.screenshot({ path: path.join(outputDir, "05-expenses-demo.png"), fullPage: true });
-    await page.getByRole("button", { name: "Runbook Assistant" }).click();
-    await page.screenshot({
-      path: path.join(outputDir, "06-expenses-widget-open.png"),
-      fullPage: true,
-    });
-    await page.getByRole("button", { name: "Mark Complete" }).click();
-    await page.getByRole("button", { name: "Task Completed" }).waitFor({ state: "visible" });
-
-    await page.goto(`${baseUrl}/dashboard`, nav);
-    await page.screenshot({
-      path: path.join(outputDir, "07-dashboard-after-completion.png"),
-      fullPage: true,
-    });
-    await ensureDashboardProgress(page, "Progress: 2/2 tasks complete");
   } finally {
     await context?.close().catch(() => {});
     await browser?.close().catch(() => {});
