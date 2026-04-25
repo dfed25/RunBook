@@ -344,7 +344,6 @@ export default function ManagerTasksPage() {
               placeholder="Objective (what success looks like)"
               value={form.objective}
               onChange={(e) => setForm((p) => ({ ...p, objective: e.target.value }))}
-              required
             />
             <textarea
               className="w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"

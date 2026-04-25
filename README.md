@@ -52,6 +52,8 @@ With the dev server running (`npm run dev` in another terminal), install browser
 
 - MP4 export uses `ffmpeg` from your system PATH.
 - Install on macOS: `brew install ffmpeg`
+- Install on Debian/Ubuntu: `sudo apt update && sudo apt install -y ffmpeg`
+- Install on Windows (Chocolatey): `choco install ffmpeg`
 - The app queues render jobs via:
   - `POST /api/lesson/render` (queue a render for a generated lesson payload)
   - `GET /api/lesson/render/:jobId` (poll status)

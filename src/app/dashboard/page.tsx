@@ -90,6 +90,7 @@ export default function DashboardPage() {
   const [renderElapsedSec, setRenderElapsedSec] = useState(0);
   const [lessonUiError, setLessonUiError] = useState<string | null>(null);
   const pollTimerRef = useRef<number | null>(null);
+  const currentJobIdRef = useRef<string | null>(null);
   const messageCounterRef = useRef(0);
   const narrationAudioRef = useRef<HTMLAudioElement | null>(null);
   const narrationObjectUrlRef = useRef<string | null>(null);
@@ -287,7 +288,7 @@ export default function DashboardPage() {
       const res = await fetch("/api/tts", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text }),
+        body: JSON.stringify({ text, hireId: selectedHireId }),
       });
       if (!res.ok) {
         throw new Error("Server TTS unavailable");
@@ -322,28 +323,35 @@ export default function DashboardPage() {
   }
 
   async function pollRenderJob(jobId: string) {
+    currentJobIdRef.current = jobId;
     if (pollTimerRef.current) {
       window.clearInterval(pollTimerRef.current);
       pollTimerRef.current = null;
     }
-    const tick = async () => {
+    const tick = async (): Promise<LessonRenderJob | null> => {
+      if (currentJobIdRef.current !== jobId) return null;
       const res = await fetch(`/api/lesson/render/${jobId}`);
       const data = (await res.json()) as LessonRenderJob;
-      if (!res.ok) return;
+      if (!res.ok) return null;
+      if (currentJobIdRef.current !== jobId) return null;
       setRenderJob(data);
       if (data.status === "completed" || data.status === "failed") {
         setRenderBusy(false);
         setRenderStartedAt(null);
+        currentJobIdRef.current = null;
         if (pollTimerRef.current) {
           window.clearInterval(pollTimerRef.current);
           pollTimerRef.current = null;
         }
       }
+      return data;
     };
-    await tick();
-    pollTimerRef.current = window.setInterval(() => {
-      void tick();
-    }, 1800);
+    const first = await tick();
+    if (first && first.status !== "completed" && first.status !== "failed") {
+      pollTimerRef.current = window.setInterval(() => {
+        void tick();
+      }, 1800);
+    }
   }
 
   async function renderLessonVideo() {
@@ -356,11 +364,11 @@ export default function DashboardPage() {
       const res = await fetch("/api/lesson/render", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ lesson }),
+        body: JSON.stringify({ lesson, hireId: selectedHireId }),
       });
-      const data = (await res.json()) as LessonRenderJob;
+      const parsed = (await res.json().catch(() => ({}))) as Partial<LessonRenderJob> & { error?: string };
       if (!res.ok) {
-        const message = data.error || "Failed to render lesson video";
+        const message = parsed.error || "Failed to render lesson video";
         setRenderJob((prev) => ({
           id: prev?.id || `local-${Date.now()}`,
           status: "failed",
@@ -379,6 +387,15 @@ export default function DashboardPage() {
         setRenderStartedAt(null);
         return;
       }
+      const isJob =
+        typeof parsed.id === "string" &&
+        typeof parsed.status === "string" &&
+        typeof parsed.createdAt === "string" &&
+        typeof parsed.updatedAt === "string";
+      if (!isJob) {
+        throw new Error("Invalid render job response");
+      }
+      const data = parsed as LessonRenderJob;
       setRenderJob(data);
       if (data.status !== "completed" && data.status !== "failed") {
         await pollRenderJob(data.id);
@@ -435,15 +452,18 @@ export default function DashboardPage() {
       if (pollTimerRef.current) {
         window.clearInterval(pollTimerRef.current);
       }
+      currentJobIdRef.current = null;
       if (typeof window !== "undefined") {
         window.speechSynthesis.cancel();
       }
       if (narrationAudioRef.current) {
         narrationAudioRef.current.pause();
         narrationAudioRef.current.currentTime = 0;
+        narrationAudioRef.current = null;
       }
       if (narrationObjectUrlRef.current) {
         URL.revokeObjectURL(narrationObjectUrlRef.current);
+        narrationObjectUrlRef.current = null;
       }
     };
   }, []);

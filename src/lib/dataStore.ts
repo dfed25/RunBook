@@ -109,7 +109,21 @@ function toBulletsFromSentence(text: string): string[] {
 
 function presetTaskPlaybook(title: string, sourceTitle: string): string | null {
   const t = title.toLowerCase();
-  if (t.includes("hr profile")) {
+  const hrIntent = /\b(complete|fill|update|setup|set up|create|submit|finish)\b.*\b(hr|payroll|profile|benefits|tax)\b/i.test(
+    t
+  );
+  const slackIntent = /\b(join|setup|set up|configure|connect|get|access|onboard|post)\b.*\b(slack|channel)\b/i.test(t);
+  const githubIntent = /\b(join|get|request|setup|set up|configure|access|clone|accept)\b.*\b(github|repo|repository|org)\b/i.test(
+    t
+  );
+  const localDevIntent = /\b(setup|set up|configure|install|run|start|boot|launch|debug)\b.*\b(local|environment|dev|development)\b/i.test(
+    t
+  );
+  const securityIntent = /\b(complete|enable|setup|set up|configure|review|finish)\b.*\b(security|2fa|training|policy)\b/i.test(
+    t
+  );
+
+  if (hrIntent) {
     return [
       "Objective:",
       "Complete all HR and payroll onboarding records correctly.",
@@ -130,7 +144,7 @@ function presetTaskPlaybook(title: string, sourceTitle: string): string | null {
       `Source: ${sourceTitle || "First Week Onboarding Plan"}`,
     ].join("\n");
   }
-  if (t.includes("slack")) {
+  if (slackIntent) {
     return [
       "Objective:",
       "Join required communication channels for onboarding and daily support.",
@@ -151,7 +165,7 @@ function presetTaskPlaybook(title: string, sourceTitle: string): string | null {
       `Source: ${sourceTitle || "Engineering Setup Guide"}`,
     ].join("\n");
   }
-  if (t.includes("github")) {
+  if (githubIntent) {
     return [
       "Objective:",
       "Get full GitHub org/repository access required for contribution.",
@@ -173,7 +187,7 @@ function presetTaskPlaybook(title: string, sourceTitle: string): string | null {
       `Source: ${sourceTitle || "Engineering Setup Guide"}`,
     ].join("\n");
   }
-  if (t.includes("local dev") || t.includes("environment")) {
+  if (localDevIntent) {
     return [
       "Objective:",
       "Run the project locally and confirm your development environment is healthy.",
@@ -195,7 +209,7 @@ function presetTaskPlaybook(title: string, sourceTitle: string): string | null {
       `Source: ${sourceTitle || "Engineering Setup Guide"}`,
     ].join("\n");
   }
-  if (t.includes("security")) {
+  if (securityIntent) {
     return [
       "Objective:",
       "Complete required security onboarding before broader access.",
@@ -221,13 +235,13 @@ function presetTaskPlaybook(title: string, sourceTitle: string): string | null {
 
 function ensureStructuredTaskDescription(title: string, description: string): string {
   const raw = String(description || "").replace(/\r/g, "").trim();
+  if (/Objective:|Steps:|Verification:|If blocked:/i.test(raw)) {
+    return raw;
+  }
   const preset = presetTaskPlaybook(title, "");
   if (preset) return preset;
   if (!raw) {
     return `Objective:\nComplete: ${title}.\n\nSteps:\n1. Follow your team runbook for this task.\n\nVerification:\n- Confirm expected result is visible.\n\nIf blocked:\n- Share error details with your manager or #dev-help.`;
-  }
-  if (/Objective:|Steps:|Verification:|If blocked:/i.test(raw)) {
-    return raw;
   }
 
   const bullets = toBulletsFromSentence(raw);

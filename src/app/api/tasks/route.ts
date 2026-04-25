@@ -17,8 +17,9 @@ function normalizeTaskDescription(input: {
   const verification = clean(input.verification);
   const escalation = clean(input.escalation);
 
-  // If caller already provided structured content, keep it.
-  if (/objective:|steps:|verification:|if blocked:/i.test(description)) {
+  const hasStructuredFields = Boolean(objective || steps || verification || escalation);
+  // If caller already provided structured content and didn't pass explicit fields, keep it.
+  if (!hasStructuredFields && /^\s*(objective:|steps:|verification:|if blocked:)/im.test(description)) {
     return description;
   }
 
@@ -34,7 +35,7 @@ function normalizeTaskDescription(input: {
       .split("\n")
       .map((line) => line.trim())
       .filter(Boolean)
-      .map((line, idx) => (/^\d+\./.test(line) ? line : `${idx + 1}. ${line}`))
+      .map((line, idx) => `${idx + 1}. ${line.replace(/^\d+\.\s*/, "")}`)
       .join("\n");
     parts.push(`Steps:\n${normalizedSteps}`);
   }

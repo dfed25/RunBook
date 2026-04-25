@@ -1,13 +1,29 @@
 import { NextResponse } from "next/server";
+import { requireHireAccess } from "@/lib/apiAuth";
 
 export const runtime = "nodejs";
+const MAX_TTS_TEXT_LENGTH = 4500;
 
 export async function POST(req: Request) {
   try {
     const body = await req.json();
+    const hireId = String(body?.hireId || "").trim();
+    if (!hireId) {
+      return NextResponse.json({ error: "hireId is required" }, { status: 400 });
+    }
+    const auth = await requireHireAccess(hireId);
+    if (!auth.ok) {
+      return NextResponse.json(
+        { error: auth.status === 401 ? "Authentication required" : "Forbidden" },
+        { status: auth.status }
+      );
+    }
     const text = String(body?.text || "").trim();
     if (!text) {
       return NextResponse.json({ error: "text is required" }, { status: 400 });
+    }
+    if (text.length > MAX_TTS_TEXT_LENGTH) {
+      return NextResponse.json({ error: `text exceeds max length (${MAX_TTS_TEXT_LENGTH})` }, { status: 400 });
     }
 
     const elevenLabsKey = process.env.ELEVENLABS_API_KEY?.trim();
@@ -24,8 +40,9 @@ export async function POST(req: Request) {
         Accept: "audio/mpeg",
         "xi-api-key": elevenLabsKey,
       },
+      signal: AbortSignal.timeout(60_000),
       body: JSON.stringify({
-        text: text.slice(0, 4500),
+        text,
         model_id: modelId,
         voice_settings: {
           stability: 0.45,
@@ -36,7 +53,8 @@ export async function POST(req: Request) {
 
     if (!response.ok) {
       const err = await response.text().catch(() => "");
-      return NextResponse.json({ error: `ElevenLabs error: ${response.status} ${err}` }, { status: 502 });
+      console.error("ElevenLabs TTS error:", response.status, err);
+      return NextResponse.json({ error: "Text-to-speech provider error" }, { status: 502 });
     }
 
     const audioBuffer = Buffer.from(await response.arrayBuffer());

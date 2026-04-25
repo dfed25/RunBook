@@ -32,13 +32,17 @@ function asWalkthroughBody(body: string): string {
   if (/Objective:|Steps:|Verification:|If blocked:/i.test(text)) return text;
   const lines = text.split("\n").map((line) => line.trim()).filter(Boolean);
   const first = lines[0] || text;
-  const remaining = lines.slice(1).join("\n");
+  const remainingLines = lines.slice(1);
+  const numberedRemaining = remainingLines.length
+    ? remainingLines.map((line, i) => `${i + 2}. ${line}`).join("\n")
+    : "2. Follow the task instructions in order.";
   return [
     "Objective:",
     first,
     "",
     "Steps:",
-    remaining ? `1. ${remaining.replace(/\n/g, "\n2. ")}` : "1. Follow the task instructions in order.",
+    `1. ${first}`,
+    numberedRemaining,
     "",
     "Verification:",
     "- Expected result appears and task can be marked complete.",
@@ -50,6 +54,14 @@ function normalizeLesson(lesson: Lesson, question: string, limitedSources: boole
   if (normalizedSlides.length === 0) {
     return fallbackLesson(question, limitedSources);
   }
+  const slidesNormalized = normalizedSlides.slice(0, 14).map((slide, index) => ({
+    title: slide.title || `Step ${index + 1}`,
+    body: asWalkthroughBody(String(slide.body || "No details available for this step.")),
+    speakerNotes: cleanLessonText(String(slide.speakerNotes || slide.body || "Review the references in this slide.")),
+    citations: Array.isArray(slide.citations) ? slide.citations : [],
+    estimatedDurationSec: Math.max(10, Math.min(120, slide.estimatedDurationSec || 28)),
+    visualHint: slide.visualHint || "abstract gradient background",
+  }));
   return {
     ...lesson,
     title: lesson.title || "Guided Walkthrough",
@@ -57,16 +69,9 @@ function normalizeLesson(lesson: Lesson, question: string, limitedSources: boole
     confidence: lesson.confidence === "high" ? "high" : "partial",
     limitedSources: lesson.limitedSources ?? limitedSources,
     question,
-    slides: normalizedSlides.slice(0, 14).map((slide, index) => ({
-      title: slide.title || `Step ${index + 1}`,
-      body: asWalkthroughBody(String(slide.body || "No details available for this step.")),
-      speakerNotes: cleanLessonText(String(slide.speakerNotes || slide.body || "Review the references in this slide.")),
-      citations: Array.isArray(slide.citations) ? slide.citations : [],
-      estimatedDurationSec: Math.max(10, Math.min(120, slide.estimatedDurationSec || 28)),
-      visualHint: slide.visualHint || "abstract gradient background",
-    })),
+    slides: slidesNormalized,
     sourcesUsed: Array.isArray(lesson.sourcesUsed) ? lesson.sourcesUsed : [],
-    narrationScript: lesson.narrationScript || normalizedSlides.map((s) => `${s.title}. ${s.body}`).join("\n"),
+    narrationScript: lesson.narrationScript || slidesNormalized.map((s) => `${s.title}. ${s.body}`).join("\n"),
     warning: lesson.warning,
   };
 }
@@ -278,14 +283,15 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "question is required" }, { status: 400 });
     }
 
-    if (hireId) {
-      const auth = await requireHireAccess(hireId);
-      if (!auth.ok) {
-        return NextResponse.json(
-          { error: auth.status === 401 ? "Authentication required" : "Forbidden" },
-          { status: auth.status }
-        );
-      }
+    if (!hireId) {
+      return NextResponse.json({ error: "hireId is required" }, { status: 400 });
+    }
+    const auth = await requireHireAccess(hireId);
+    if (!auth.ok) {
+      return NextResponse.json(
+        { error: auth.status === 401 ? "Authentication required" : "Forbidden" },
+        { status: auth.status }
+      );
     }
 
     const context = await buildLessonContext(question, docId, hireId);

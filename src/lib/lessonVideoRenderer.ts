@@ -78,7 +78,11 @@ function pickSlideVoiceText(lesson: Lesson, index: number) {
 
 async function commandExists(command: string): Promise<boolean> {
   try {
-    await execFileAsync("which", [command]);
+    if (command === "say") {
+      await execFileAsync("say", ["-v", "?"]);
+      return true;
+    }
+    await execFileAsync(command, ["--help"]);
     return true;
   } catch {
     return false;
@@ -133,6 +137,7 @@ async function renderSlideClip(
     const relativeTextPath = path.basename(textPath);
     const drawtext = [
       `drawtext=textfile=${relativeTextPath}`,
+      "expansion=none",
       "reload=0",
       "fontcolor=white",
       "fontsize=42",
@@ -221,22 +226,35 @@ async function synthesizeSlideSpeech(assetDir: string, index: number, text: stri
   const wavPath = path.join(assetDir, `speech-${index + 1}.wav`);
 
   if (elevenLabsKey) {
-    const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Accept: "audio/mpeg",
-        "xi-api-key": elevenLabsKey,
-      },
-      body: JSON.stringify({
-        text: trimmed.slice(0, 4500),
-        model_id: modelId,
-        voice_settings: {
-          stability: 0.45,
-          similarity_boost: 0.8,
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 60_000);
+    let response: Response;
+    try {
+      response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "audio/mpeg",
+          "xi-api-key": elevenLabsKey,
         },
-      }),
-    });
+        signal: controller.signal,
+        body: JSON.stringify({
+          text: trimmed.slice(0, 4500),
+          model_id: modelId,
+          voice_settings: {
+            stability: 0.45,
+            similarity_boost: 0.8,
+          },
+        }),
+      });
+    } catch (error) {
+      if (error instanceof Error && error.name === "AbortError") {
+        throw new Error("ElevenLabs TTS request timed out");
+      }
+      throw error;
+    } finally {
+      clearTimeout(timeout);
+    }
 
     if (!response.ok) {
       const err = await response.text().catch(() => "");
@@ -255,6 +273,7 @@ async function synthesizeSlideSpeech(assetDir: string, index: number, text: stri
       "1",
       wavPath,
     ]);
+    await fs.rm(mp3Path, { force: true }).catch(() => {});
     return wavPath;
   }
 
@@ -272,6 +291,7 @@ async function synthesizeSlideSpeech(assetDir: string, index: number, text: stri
     "1",
     wavPath,
   ]);
+  await fs.rm(aiffPath, { force: true }).catch(() => {});
   return wavPath;
 }
 
@@ -303,6 +323,38 @@ async function muxClipWithAudio(
   ]);
 }
 
+async function muxClipWithSilentAudio(videoClipPath: string, durationSec: number, outputClipPath: string) {
+  await execFileAsync("ffmpeg", [
+    "-y",
+    "-f",
+    "lavfi",
+    "-i",
+    "anullsrc=channel_layout=mono:sample_rate=22050",
+    "-i",
+    videoClipPath,
+    "-map",
+    "1:v:0",
+    "-map",
+    "0:a:0",
+    "-t",
+    String(durationSec),
+    "-c:v",
+    "copy",
+    "-c:a",
+    "aac",
+    outputClipPath,
+  ]);
+}
+
+async function cleanupSpeechArtifacts(assetDir: string) {
+  const entries = await fs.readdir(assetDir).catch(() => []);
+  await Promise.all(
+    entries
+      .filter((name) => /^speech-\d+\.(mp3|aiff)$/i.test(name))
+      .map((name) => fs.rm(path.join(assetDir, name), { force: true }).catch((error) => console.error(error)))
+  );
+}
+
 /**
  * Accuracy-safe video render:
  * - On-screen facts come from grounded lesson slides.
@@ -315,8 +367,11 @@ export async function renderLessonVideo(jobId: string, lesson: Lesson): Promise<
   const outputPath = renderOutputPath(jobId);
   await fs.mkdir(assetDir, { recursive: true });
 
-  const clips: string[] = [];
-  for (let i = 0; i < lesson.slides.length; i += 1) {
+  const clips: string[] = new Array(lesson.slides.length);
+  const maxConcurrency = Math.min(3, Math.max(1, lesson.slides.length));
+  let nextIndex = 0;
+  let renderSucceeded = false;
+  const renderOne = async (i: number) => {
     const slide = lesson.slides[i]!;
     const duration = slideDuration(slide);
     const color = bgColorForHint(slide.visualHint);
@@ -326,18 +381,34 @@ export async function renderLessonVideo(jobId: string, lesson: Lesson): Promise<
     const baseClipPath = await renderSlideClip(assetDir, i, color, duration, textPath, useDrawtext, slide.visualHint);
     const ttsText = `${slide.title}. ${slide.speakerNotes || slide.body}`;
     const audioPath = await synthesizeSlideSpeech(assetDir, i, ttsText);
+    const finalClipPath = path.join(assetDir, `clip-final-${i + 1}.mp4`);
     if (audioPath) {
-      const narratedClipPath = path.join(assetDir, `clip-narrated-${i + 1}.mp4`);
-      await muxClipWithAudio(baseClipPath, audioPath, duration, narratedClipPath);
-      clips.push(narratedClipPath);
+      await muxClipWithAudio(baseClipPath, audioPath, duration, finalClipPath);
     } else {
-      clips.push(baseClipPath);
+      await muxClipWithSilentAudio(baseClipPath, duration, finalClipPath);
+    }
+    clips[i] = finalClipPath;
+  };
+  try {
+    const workers = Array.from({ length: maxConcurrency }, async () => {
+      while (nextIndex < lesson.slides.length) {
+        const current = nextIndex;
+        nextIndex += 1;
+        await renderOne(current);
+      }
+    });
+    await Promise.all(workers);
+
+    if (clips.length === 0 || clips.some((clip) => !clip)) {
+      throw new Error("No slide clips were rendered.");
+    }
+    await concatSlideClips(assetDir, clips, outputPath);
+    await cleanupSpeechArtifacts(assetDir);
+    renderSucceeded = true;
+    return { outputPath };
+  } finally {
+    if (renderSucceeded) {
+      await fs.rm(assetDir, { recursive: true, force: true }).catch(() => {});
     }
   }
-
-  if (clips.length === 0) {
-    throw new Error("No slide clips were rendered.");
-  }
-  await concatSlideClips(assetDir, clips, outputPath);
-  return { outputPath };
 }

@@ -31,9 +31,9 @@ Return strictly a JSON object with this shape:
 {
   "title": string,
   "summary": string,
-  "confidence": "high" | "partial",
-  "limitedSources": boolean,
-  "sourcesUsed": [{ "title": string, "url"?: string }],
+  "confidence"?: "high" | "partial",
+  "limitedSources"?: boolean,
+  "sourcesUsed"?: [{ "title": string, "url"?: string }],
   "slides": [{
     "title": string,
     "body": string,

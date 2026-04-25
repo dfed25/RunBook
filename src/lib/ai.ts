@@ -71,10 +71,10 @@ async function generateFromGeminiOnly(
         break;
       } catch (error) {
         const isAbort = error instanceof Error && error.name === "AbortError";
+        const message = error instanceof Error ? error.message : String(error);
+        lastGeminiError = isAbort ? "Gemini request timed out" : message;
         const isLastAttempt = attempt === timeoutMsByAttempt.length - 1;
-        if (!isAbort || isLastAttempt) {
-          throw error;
-        }
+        if (!isAbort || isLastAttempt) break;
       } finally {
         clearTimeout(timeoutId);
       }
