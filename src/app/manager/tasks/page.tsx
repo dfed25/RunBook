@@ -3,6 +3,8 @@
 import Link from "next/link";
 import { FormEvent, useEffect, useState } from "react";
 import { Hire, HireKnowledgeSource, KNOWLEDGE_SOURCE_TYPES, KnowledgeSourceType, OnboardingTask } from "@/lib/types";
+import { AppButton } from "@/components/ui/AppButton";
+import { SectionCard } from "@/components/ui/SectionCard";
 
 type TaskFormState = { title: string; description: string; assigneeId: string; estimatedTime: string; sourceTitle: string };
 type HireFormState = { name: string; role: string; email: string };
@@ -198,13 +200,12 @@ export default function ManagerTasksPage() {
           {message ? <p className="text-sm text-cyan-300">{message}</p> : null}
         </header>
 
-        <section className="rounded-xl border border-slate-800 bg-slate-900 p-5">
-          <h2 className="text-lg font-semibold">Hire management</h2>
+        <SectionCard title="Hire management" subtitle="Create and maintain active hires for this demo workspace.">
           <form className="mt-4 grid gap-3 sm:grid-cols-4" onSubmit={createHire}>
             <input className="rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm" placeholder="Full name" value={hireForm.name} onChange={(e) => setHireForm((p) => ({ ...p, name: e.target.value }))} required />
             <input className="rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm" placeholder="Role" value={hireForm.role} onChange={(e) => setHireForm((p) => ({ ...p, role: e.target.value }))} />
             <input className="rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm" placeholder="Email" value={hireForm.email} onChange={(e) => setHireForm((p) => ({ ...p, email: e.target.value }))} />
-            <button className="rounded bg-cyan-400 px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-cyan-300" type="submit">Add hire</button>
+            <AppButton variant="primary" type="submit">Add hire</AppButton>
           </form>
           <div className="mt-3 flex flex-wrap gap-2">
             {hires.map((hire) => (
@@ -213,35 +214,34 @@ export default function ManagerTasksPage() {
               </button>
             ))}
           </div>
-          {selectedHireId ? <button type="button" onClick={() => void deleteHire(selectedHireId)} className="mt-3 rounded border border-red-500/50 px-3 py-1 text-xs text-red-200 hover:border-red-400">Remove selected hire</button> : null}
-        </section>
+          {selectedHireId ? <AppButton type="button" variant="danger" onClick={() => void deleteHire(selectedHireId)} className="mt-3 px-3 py-1 text-xs">Remove selected hire</AppButton> : null}
+        </SectionCard>
 
-        <section className="rounded-xl border border-slate-800 bg-slate-900 p-5">
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold">Per-hire knowledge sources</h2>
-            <button type="button" onClick={() => void syncKnowledge()} disabled={!selectedHireId || syncing} className="rounded border border-cyan-400/40 px-3 py-1 text-xs text-cyan-200 disabled:opacity-50">{syncing ? "Syncing..." : "Sync selected hire"}</button>
-          </div>
+        <SectionCard
+          title="Per-hire knowledge sources"
+          subtitle="Attach links and sync content into this hire's AI context."
+          actions={<AppButton type="button" variant="ghost" onClick={() => void syncKnowledge()} disabled={!selectedHireId || syncing} className="px-3 py-1 text-xs">{syncing ? "Syncing..." : "Sync selected hire"}</AppButton>}
+        >
           <form className="mt-4 grid gap-3 sm:grid-cols-4" onSubmit={addSource}>
             <select className="rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm" value={sourceForm.type} onChange={(e) => setSourceForm((p) => ({ ...p, type: e.target.value as KnowledgeSourceType }))}>
               {SOURCE_TYPES.map((type) => <option key={type} value={type}>{type}</option>)}
             </select>
             <input className="rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm" placeholder="Title" value={sourceForm.title} onChange={(e) => setSourceForm((p) => ({ ...p, title: e.target.value }))} required />
             <input className="rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm" placeholder="https://..." value={sourceForm.url} onChange={(e) => setSourceForm((p) => ({ ...p, url: e.target.value }))} required />
-            <button className="rounded bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-900 disabled:opacity-50" type="submit" disabled={!selectedHireId}>Add source</button>
+            <AppButton variant="secondary" type="submit" disabled={!selectedHireId}>Add source</AppButton>
           </form>
           <ul className="mt-4 space-y-2 text-sm">
             {sources.map((source) => (
               <li key={source.id} className="flex items-center justify-between rounded border border-slate-700 bg-slate-950 p-3">
                 <div><p className="font-medium">{source.title}</p><p className="text-xs text-slate-400">{source.type}</p><p className="text-xs text-slate-300">{source.url}</p></div>
-                <button type="button" onClick={() => void deleteSource(source.id)} className="rounded border border-red-500/50 px-2 py-1 text-xs text-red-200 hover:border-red-400">Remove</button>
+                <AppButton type="button" variant="danger" onClick={() => void deleteSource(source.id)} className="px-2 py-1 text-xs">Remove</AppButton>
               </li>
             ))}
             {selectedHireId && sources.length === 0 ? <li className="text-slate-400">No sources linked yet.</li> : null}
           </ul>
-        </section>
+        </SectionCard>
 
-        <section className="rounded-xl border border-slate-800 bg-slate-900 p-5">
-          <h2 className="text-lg font-semibold">Create task</h2>
+        <SectionCard title="Create task" subtitle="Assign onboarding tasks to hires with ETA and source context.">
           <form className="mt-4 space-y-3" onSubmit={submitTask}>
             <input className="w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm" placeholder="Task title" value={form.title} onChange={(e) => setForm((p) => ({ ...p, title: e.target.value }))} required />
             <textarea className="w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm" placeholder="Task description" value={form.description} onChange={(e) => setForm((p) => ({ ...p, description: e.target.value }))} required />
@@ -252,12 +252,11 @@ export default function ManagerTasksPage() {
               <input className="rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm" placeholder="Estimated time" value={form.estimatedTime} onChange={(e) => setForm((p) => ({ ...p, estimatedTime: e.target.value }))} />
               <input className="rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm" placeholder="Source title" value={form.sourceTitle} onChange={(e) => setForm((p) => ({ ...p, sourceTitle: e.target.value }))} />
             </div>
-            <button className="rounded bg-cyan-400 px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-cyan-300" type="submit">Create task</button>
+            <AppButton variant="primary" type="submit">Create task</AppButton>
           </form>
-        </section>
+        </SectionCard>
 
-        <section className="rounded-xl border border-slate-800 bg-slate-900 p-5">
-          <h2 className="text-lg font-semibold">Current tasks</h2>
+        <SectionCard title="Current tasks" subtitle="Reorder, remove, or duplicate tasks across hires.">
           {loading ? <p className="mt-3 text-sm text-slate-300">Loading tasks...</p> : tasks.length === 0 ? <p className="mt-3 text-sm text-slate-400">No tasks found.</p> : (
             <ul className="mt-4 space-y-2 text-sm">
               {tasks.map((task) => (
@@ -266,9 +265,9 @@ export default function ManagerTasksPage() {
                   <p className="mt-1 text-slate-300">{task.description}</p>
                   <p className="mt-1 text-xs text-slate-400">Assignee: {task.assignee} | Status: {task.status} | ETA: {task.estimatedTime}</p>
                   <div className="mt-3 flex flex-wrap gap-2">
-                    <button type="button" onClick={() => void moveTask(task.id, "up")} className="rounded border border-slate-600 px-2 py-1 text-xs hover:border-slate-400">Move up</button>
-                    <button type="button" onClick={() => void moveTask(task.id, "down")} className="rounded border border-slate-600 px-2 py-1 text-xs hover:border-slate-400">Move down</button>
-                    <button type="button" onClick={() => void removeTask(task.id)} className="rounded border border-red-500/50 px-2 py-1 text-xs text-red-200 hover:border-red-400">Remove</button>
+                    <AppButton type="button" variant="ghost" onClick={() => void moveTask(task.id, "up")} className="px-2 py-1 text-xs">Move up</AppButton>
+                    <AppButton type="button" variant="ghost" onClick={() => void moveTask(task.id, "down")} className="px-2 py-1 text-xs">Move down</AppButton>
+                    <AppButton type="button" variant="danger" onClick={() => void removeTask(task.id)} className="px-2 py-1 text-xs">Remove</AppButton>
                   </div>
                   <div className="mt-3 space-y-2 rounded border border-slate-800 bg-slate-900 p-2">
                     <p className="text-xs text-slate-300">Duplicate to hires:</p>
@@ -278,13 +277,13 @@ export default function ManagerTasksPage() {
                         return <button key={`${task.id}-${hire.id}`} type="button" onClick={() => toggleDuplicateTarget(task.id, hire.id)} className={`rounded-full border px-2 py-1 text-xs ${active ? "border-cyan-400 bg-cyan-400/20 text-cyan-200" : "border-slate-700 text-slate-300"}`}>{hire.name}</button>;
                       })}
                     </div>
-                    <button type="button" onClick={() => void duplicateTask(task.id)} className="rounded bg-cyan-400 px-2 py-1 text-xs font-semibold text-slate-900 hover:bg-cyan-300">Duplicate selected</button>
+                    <AppButton type="button" variant="primary" onClick={() => void duplicateTask(task.id)} className="px-2 py-1 text-xs">Duplicate selected</AppButton>
                   </div>
                 </li>
               ))}
             </ul>
           )}
-        </section>
+        </SectionCard>
       </div>
     </main>
   );

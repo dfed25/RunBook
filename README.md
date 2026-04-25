@@ -40,11 +40,11 @@ With the dev server running (`npm run dev` in another terminal), install browser
 1. Open `/manager/tasks`.
 2. Add a hire (name/role/email).
 3. Select the hire and attach knowledge links (Notion pages/databases, Google Docs/folders/files, Slack channels, URLs).
-4. Click **Sync selected hire** to ingest sources into the vector store (hybrid mode: links always work; richer provider ingestion runs when API credentials are configured).
+4. Click **Sync selected hire** to ingest source content into the vector store (URLs are fetched and parsed immediately; provider-backed enrichment runs when API credentials are configured).
 5. Create/duplicate onboarding tasks and assign by hire.
 6. Open `/dashboard`, select the same hire, then test:
    - task checklist is scoped to that hire
-   - chat answers are generated from hire-scoped context
+   - chat answers are generated from hire-scoped context with richer citation cards (including source URLs when present)
    - lesson generation can use hire-scoped retrieval when a query is provided
 
 ## API endpoints (manager flow)

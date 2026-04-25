@@ -29,24 +29,24 @@ export default function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col bg-slate-950 text-slate-100">
-        <header className="border-b border-slate-800 bg-slate-900/90 backdrop-blur">
+        <header className="sticky top-0 z-30 border-b border-slate-800/80 bg-slate-900/90 backdrop-blur-xl">
           <nav className="mx-auto flex max-w-6xl flex-wrap items-center gap-3 px-4 py-3 text-sm sm:px-6">
-            <Link href="/" className="mr-2 rounded px-2 py-1 font-semibold text-cyan-300 hover:bg-slate-800">
+            <Link href="/" className="mr-2 rounded-md px-2 py-1 font-semibold text-cyan-300 hover:bg-slate-800">
               Runbook
             </Link>
-            <Link href="/dashboard" className="rounded px-2 py-1 text-slate-200 hover:bg-slate-800">
+            <Link href="/dashboard" className="rounded-md px-2 py-1 text-slate-200 hover:bg-slate-800">
               New Hire Dashboard
             </Link>
-            <Link href="/manager" className="rounded px-2 py-1 text-slate-200 hover:bg-slate-800">
+            <Link href="/manager" className="rounded-md px-2 py-1 text-slate-200 hover:bg-slate-800">
               Manager Dashboard
             </Link>
-            <Link href="/manager/tasks" className="rounded px-2 py-1 text-slate-200 hover:bg-slate-800">
+            <Link href="/manager/tasks" className="rounded-md px-2 py-1 text-slate-200 hover:bg-slate-800">
               Task Setup
             </Link>
-            <Link href="/demo/github" className="rounded px-2 py-1 text-slate-200 hover:bg-slate-800">
+            <Link href="/demo/github" className="rounded-md px-2 py-1 text-slate-200 hover:bg-slate-800">
               Demo: GitHub
             </Link>
-            <Link href="/demo/expenses" className="rounded px-2 py-1 text-slate-200 hover:bg-slate-800">
+            <Link href="/demo/expenses" className="rounded-md px-2 py-1 text-slate-200 hover:bg-slate-800">
               Demo: Expenses
             </Link>
           </nav>

@@ -3,6 +3,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DEMO_PERSONAS, DEMO_QUESTIONS } from "@/lib/demoScenario";
 import { ChatSource, Hire, Lesson, LessonSlide, OnboardingTask } from "@/lib/types";
+import { AppButton } from "@/components/ui/AppButton";
+import { SectionCard } from "@/components/ui/SectionCard";
+import { StatusBadge } from "@/components/ui/StatusBadge";
 
 type ChatMessage = {
   id: string;
@@ -28,12 +31,6 @@ function statusLabel(status: OnboardingTask["status"]): string {
   if (status === "complete") return "Complete";
   if (status === "in_progress") return "In Progress";
   return "Todo";
-}
-
-function statusClasses(status: OnboardingTask["status"]): string {
-  if (status === "complete") return "bg-emerald-500/20 text-emerald-300 border border-emerald-400/30";
-  if (status === "in_progress") return "bg-amber-500/20 text-amber-300 border border-amber-400/30";
-  return "bg-slate-700 text-slate-200 border border-slate-600";
 }
 
 export default function DashboardPage() {
@@ -201,11 +198,10 @@ export default function DashboardPage() {
     <main className="min-h-screen bg-slate-950 p-6 text-slate-100 sm:p-10">
       <div className="mx-auto grid max-w-7xl gap-6 lg:grid-cols-[1.2fr_1fr]">
         <section className="space-y-6">
-          <article className="rounded-2xl border border-slate-800 bg-slate-900 p-6">
-            <h1 className="text-3xl font-bold">Welcome, {selectedHire?.name || DEMO_PERSONAS.newHire.name}</h1>
-            <p className="mt-2 text-sm text-slate-300">
-              Track onboarding tasks, ask Runbook for help, and review lessons with source-backed guidance.
-            </p>
+          <SectionCard
+            title={`Welcome, ${selectedHire?.name || DEMO_PERSONAS.newHire.name}`}
+            subtitle="Track onboarding tasks, ask Runbook for help, and review lessons with source-backed guidance."
+          >
             <div className="mt-5 space-y-2">
               <div className="flex items-center justify-between text-sm text-slate-300">
                 <span>Progress</span>
@@ -215,11 +211,11 @@ export default function DashboardPage() {
                 <div className="h-2 rounded bg-cyan-400 transition-all" style={{ width: `${progressPct}%` }} />
               </div>
             </div>
-          </article>
+          </SectionCard>
 
-          <article className="rounded-2xl border border-slate-800 bg-slate-900 p-6">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <h2 className="text-xl font-semibold">Task checklist</h2>
+          <SectionCard
+            title="Task checklist"
+            actions={
               <select
                 className="rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
                 value={selectedHireId}
@@ -231,7 +227,8 @@ export default function DashboardPage() {
                   </option>
                 ))}
               </select>
-            </div>
+            }
+          >
             {tasksError ? <p className="mt-3 text-sm text-amber-300">{tasksError}</p> : null}
             {tasksLoading ? (
               <p className="mt-4 text-sm text-slate-300">Loading tasks...</p>
@@ -251,16 +248,16 @@ export default function DashboardPage() {
                           Source: {task.sourceTitle} · ETA: {task.estimatedTime}
                         </p>
                       </div>
-                      <span className={`rounded-full px-2 py-1 text-xs font-semibold ${statusClasses(task.status)}`}>
+                      <StatusBadge tone={task.status === "complete" ? "success" : task.status === "in_progress" ? "warning" : "neutral"}>
                         {statusLabel(task.status)}
-                      </span>
+                      </StatusBadge>
                     </div>
                     <div className="mt-3 flex flex-wrap gap-2">
                       {(["todo", "in_progress", "complete"] as const).map((status) => (
-                        <button
+                        <AppButton
                           key={status}
                           type="button"
-                          className={`rounded-md border px-3 py-1 text-xs ${
+                          className={`px-3 py-1 text-xs ${
                             task.status === status
                               ? "border-cyan-400 bg-cyan-400/20 text-cyan-200"
                               : "border-slate-700 text-slate-300 hover:border-slate-500"
@@ -268,30 +265,32 @@ export default function DashboardPage() {
                           onClick={() => updateStatus(task.id, status)}
                         >
                           Mark {statusLabel(status)}
-                        </button>
+                        </AppButton>
                       ))}
                     </div>
                   </li>
                 ))}
               </ul>
             )}
-          </article>
+          </SectionCard>
         </section>
 
         <section className="space-y-6">
-          <article className="rounded-2xl border border-slate-800 bg-slate-900 p-6">
-            <h2 className="text-xl font-semibold">Runbook Chat</h2>
-            <p className="mt-2 text-sm text-slate-300">Ask onboarding questions and get source-backed answers.</p>
+          <SectionCard
+            title="Runbook Chat"
+            subtitle="Ask onboarding questions and get source-backed answers."
+          >
             <div className="mt-4 flex flex-wrap gap-2">
               {DEMO_QUESTIONS.map((q) => (
-                <button
+                <AppButton
                   key={q}
                   type="button"
                   onClick={() => void submitChat(q)}
-                  className="rounded-full border border-slate-700 px-3 py-1 text-xs text-slate-300 hover:border-slate-500"
+                  variant="ghost"
+                  className="rounded-full px-3 py-1 text-xs"
                 >
                   {q}
-                </button>
+                </AppButton>
               ))}
             </div>
             <div className="mt-4 max-h-72 space-y-3 overflow-y-auto rounded-lg border border-slate-800 bg-slate-950 p-3">
@@ -313,7 +312,18 @@ export default function DashboardPage() {
                     <div className="grid gap-2">
                       {message.sources.map((source, idx) => (
                         <article key={`${message.id}-source-${idx}`} className="rounded border border-slate-700 bg-slate-900 p-2 text-left">
-                          <p className="text-xs font-semibold text-cyan-200">{source.title}</p>
+                          {source.url ? (
+                            <a
+                              href={source.url}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="text-xs font-semibold text-cyan-200 underline-offset-2 hover:underline"
+                            >
+                              {source.title}
+                            </a>
+                          ) : (
+                            <p className="text-xs font-semibold text-cyan-200">{source.title}</p>
+                          )}
                           <p className="text-xs text-slate-300">{source.excerpt}</p>
                         </article>
                       ))}
@@ -338,21 +348,21 @@ export default function DashboardPage() {
                 value={chatInput}
                 onChange={(event) => setChatInput(event.target.value)}
               />
-              <button
+              <AppButton
                 type="submit"
                 disabled={chatBusy}
-                className="rounded-md bg-cyan-400 px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-cyan-300 disabled:opacity-60"
+                variant="primary"
+                className="px-4 py-2"
               >
                 Send
-              </button>
+              </AppButton>
             </form>
-          </article>
+          </SectionCard>
 
-          <article className="rounded-2xl border border-slate-800 bg-slate-900 p-6">
-            <h2 className="text-xl font-semibold">Lesson Viewer</h2>
-            <p className="mt-2 text-sm text-slate-300">
-              Generate a bite-sized lesson from a source document, then step through slides.
-            </p>
+          <SectionCard
+            title="Lesson Viewer"
+            subtitle="Generate a bite-sized lesson from a source document, then step through slides."
+          >
             <div className="mt-3 flex gap-2">
               <select
                 className="flex-1 rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
@@ -365,14 +375,15 @@ export default function DashboardPage() {
                   </option>
                 ))}
               </select>
-              <button
+              <AppButton
                 type="button"
                 onClick={() => void generateLesson()}
                 disabled={lessonLoading}
-                className="rounded-md bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-white disabled:opacity-60"
+                variant="secondary"
+                className="px-4 py-2"
               >
                 {lessonLoading ? "Loading..." : "Generate"}
-              </button>
+              </AppButton>
             </div>
             <div className="mt-4 rounded-lg border border-slate-700 bg-slate-950 p-4">
               <p className="text-xs uppercase tracking-wide text-slate-400">
@@ -382,30 +393,32 @@ export default function DashboardPage() {
               <p className="mt-2 text-sm text-slate-300">{currentSlide.body}</p>
             </div>
             <div className="mt-3 flex items-center justify-between">
-              <button
+              <AppButton
                 type="button"
-                className="rounded border border-slate-700 px-3 py-1 text-sm hover:border-slate-500 disabled:opacity-40"
+                variant="ghost"
+                className="px-3 py-1"
                 onClick={() => setLessonSlideIndex((idx) => Math.max(0, idx - 1))}
                 disabled={!lesson || lessonSlideIndex === 0}
               >
                 Back
-              </button>
+              </AppButton>
               <span className="text-xs text-slate-400">
                 {lesson ? `${lessonSlideIndex + 1} / ${lesson.slides.length}` : "0 / 0"}
               </span>
-              <button
+              <AppButton
                 type="button"
-                className="rounded border border-slate-700 px-3 py-1 text-sm hover:border-slate-500 disabled:opacity-40"
+                variant="ghost"
+                className="px-3 py-1"
                 onClick={() => setLessonSlideIndex((idx) => Math.min((lesson?.slides.length || 1) - 1, idx + 1))}
                 disabled={!lesson || lessonSlideIndex >= lesson.slides.length - 1}
               >
                 Next
-              </button>
+              </AppButton>
             </div>
             {lesson?.summary ? (
               <p className="mt-3 text-xs text-slate-400">Summary: {lesson.summary}</p>
             ) : null}
-          </article>
+          </SectionCard>
         </section>
       </div>
     </main>

@@ -54,6 +54,7 @@ export type KnowledgeSourceType = (typeof KNOWLEDGE_SOURCE_TYPES)[number];
   export type ChatSource = {
     title: string;
     excerpt: string;
+    url?: string;
   };
   
   export type ChatResponse = {

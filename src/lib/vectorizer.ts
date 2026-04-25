@@ -1,10 +1,11 @@
 import { fetchNotionPages } from "./ingestion/notion";
 import { fetchDriveDocuments } from "./ingestion/gdrive";
 import { fetchSlackChannelHistory } from "./ingestion/slack";
+import { fetchUrlDocument } from "./ingestion/url";
 import { supabaseAdmin } from "./supabase-admin";
 import { generateEmbedding } from "./ai";
 import { getHireSources } from "./dataStore";
-import type { KnowledgeSourceType } from "./types";
+import type { HireKnowledgeSource, KnowledgeSourceType } from "./types";
 
 export type SyncKnowledgeResult = {
   scope: {
@@ -39,12 +40,45 @@ type SyncDocument = {
   scopeToken: string;
 };
 
+function sourceScopeToken(hireId: string): string {
+  return `[hire:${hireId}]`;
+}
+
+function inferProvider(type: KnowledgeSourceType): "notion" | "google_drive" | "slack" | "manual" {
+  return providerForType(type);
+}
+
+function sourceExternalId(source: HireKnowledgeSource): string {
+  return `${source.hireId}:${source.id}`;
+}
+
+async function resolveSourceDocument(source: HireKnowledgeSource): Promise<SyncDocument | null> {
+  const scopeToken = sourceScopeToken(source.hireId);
+  const fallbackContent = `${scopeToken}
+Source title: ${source.title}
+Source URL: ${source.url}
+Source type: ${source.type}`;
+
+  const fetched = await fetchUrlDocument(source.url);
+  const content = fetched?.content || fallbackContent;
+  const title = fetched?.title || source.title || "Knowledge source";
+
+  return {
+    id: sourceExternalId(source),
+    title,
+    content: content.includes(scopeToken) ? content : `${scopeToken}\n${content}`,
+    provider: inferProvider(source.type),
+    url: source.url,
+    scope: source.hireId,
+    scopeToken,
+  };
+}
+
 export async function syncUserKnowledge(hireId?: string): Promise<SyncKnowledgeResult> {
   console.log("Starting Enterprise Integration Sync...");
 
   const slackChannel = process.env.SLACK_ONBOARDING_CHANNEL_ID;
   const hireSources = hireId ? await getHireSources(hireId) : [];
-  const scopeToken = hireId ? `[hire:${hireId}]` : "[hire:global]";
 
   const [notionPages, gDocs, slackMsgs] = hireId
     ? await Promise.all([Promise.resolve([]), Promise.resolve([]), Promise.resolve([])])
@@ -77,15 +111,9 @@ export async function syncUserKnowledge(hireId?: string): Promise<SyncKnowledgeR
       scopeToken: "[hire:global]"
     }))
   ];
-  const hireDocuments: SyncDocument[] = hireSources.map((source) => ({
-      id: source.id,
-      title: source.title,
-      content: `${scopeToken}\nKnowledge source URL: ${source.url}\nProvider type: ${source.type}`,
-      provider: providerForType(source.type),
-      url: source.url,
-      scope: source.hireId,
-      scopeToken
-    }));
+  const hireDocuments = (
+    await Promise.all(hireSources.map((source) => resolveSourceDocument(source)))
+  ).filter((doc): doc is SyncDocument => !!doc);
   const rawDocuments = hireId ? hireDocuments : globalDocuments;
 
   const result: SyncKnowledgeResult = {
@@ -120,7 +148,7 @@ export async function syncUserKnowledge(hireId?: string): Promise<SyncKnowledgeR
 
       const row = {
         provider: doc.provider,
-        external_id: doc.scope === "global" ? doc.id : `${doc.scope}:${doc.id}`,
+        external_id: doc.scope === "global" ? doc.id : doc.id,
         title: `${doc.scopeToken} ${doc.title}`,
         content: doc.content.includes(doc.scopeToken) ? doc.content : `${doc.scopeToken}\n${doc.content}`,
         url: doc.url,
