@@ -31,6 +31,8 @@ let chatVisible = false;
 let currentTask = null;
 let currentStepIndex = 0;
 let highlightedEl = null;
+let activeOverlayEl = null;
+let overlayRepositionHandler = null;
 let rootEl = null;
 
 function getDemoTaskForLocation() {
@@ -153,13 +155,60 @@ function clearHighlight() {
     highlightedEl.classList.remove("rb-highlight");
     highlightedEl = null;
   }
+  if (activeOverlayEl) {
+    activeOverlayEl.remove();
+    activeOverlayEl = null;
+  }
+  if (overlayRepositionHandler) {
+    window.removeEventListener("scroll", overlayRepositionHandler);
+    window.removeEventListener("resize", overlayRepositionHandler);
+    overlayRepositionHandler = null;
+  }
 }
 
-function highlightElement(el) {
+function renderHighlightOverlay(el, text, stepLabel) {
+  if (activeOverlayEl) {
+    activeOverlayEl.remove();
+    activeOverlayEl = null;
+  }
+
+  const overlay = document.createElement("div");
+  overlay.id = "rb-step-overlay";
+  overlay.innerHTML = `
+    <div class="rb-step-overlay-label">${stepLabel || "Runbook step"}</div>
+    <div class="rb-step-overlay-text">${text || "Follow the highlighted action."}</div>
+  `;
+  document.body.appendChild(overlay);
+  activeOverlayEl = overlay;
+
+  const rect = el.getBoundingClientRect();
+  const overlayRect = overlay.getBoundingClientRect();
+  const top = Math.max(10, Math.min(window.innerHeight - overlayRect.height - 10, rect.bottom + window.scrollY + 10));
+  const left = Math.max(10, Math.min(window.innerWidth - overlayRect.width - 10, rect.left + window.scrollX));
+  overlay.style.top = `${top}px`;
+  overlay.style.left = `${left}px`;
+
+  // Keep overlay in sync as the user scrolls.
+  const reposition = () => {
+    if (!activeOverlayEl || !highlightedEl) return;
+    const r = highlightedEl.getBoundingClientRect();
+    const or = activeOverlayEl.getBoundingClientRect();
+    const t = Math.max(10, Math.min(window.innerHeight - or.height - 10, r.bottom + window.scrollY + 10));
+    const l = Math.max(10, Math.min(window.innerWidth - or.width - 10, r.left + window.scrollX));
+    activeOverlayEl.style.top = `${t}px`;
+    activeOverlayEl.style.left = `${l}px`;
+  };
+  overlayRepositionHandler = reposition;
+  window.addEventListener("scroll", reposition, { passive: true });
+  window.addEventListener("resize", reposition);
+}
+
+function highlightElement(el, instructionText, stepLabel) {
   clearHighlight();
   highlightedEl = el;
   el.classList.add("rb-highlight");
   el.scrollIntoView({ behavior: "smooth", block: "center", inline: "nearest" });
+  renderHighlightOverlay(el, instructionText, stepLabel);
 }
 
 function looksClickable(el) {
@@ -359,8 +408,13 @@ async function findOnPage() {
     for (const selector of selectors) {
       const el = document.querySelector(selector);
       if (el) {
-        highlightElement(el);
-        setInstruction(step?.text || "Follow the highlighted GitHub profile step.");
+        const stepText = step?.text || "Follow the highlighted GitHub profile step.";
+        highlightElement(
+          el,
+          stepText,
+          `Step ${currentStepIndex + 1} of ${currentTask.steps?.length || 1}`,
+        );
+        setInstruction(stepText);
         return;
       }
     }
@@ -386,8 +440,13 @@ async function findOnPage() {
       return;
     }
 
-    highlightElement(el);
-    setInstruction(data.instruction || `Click "${data.elementText}".`);
+    const instruction = data.instruction || `Click "${data.elementText}".`;
+    highlightElement(
+      el,
+      instruction,
+      `Step ${currentStepIndex + 1} of ${currentTask.steps?.length || 1}`,
+    );
+    setInstruction(instruction);
   } catch (err) {
     console.error("Runbook find failed", err);
     setInstruction("Find on page failed. Try again.");
@@ -439,9 +498,57 @@ Current step: ${currentTask?.steps?.[currentStepIndex]?.text || "none"}
 
 User question: ${text}`;
 
+  const asksForLocation =
+    /\b(where|locate|find|show me|point to|which|help me find)\b/i.test(text) &&
+    /\b(button|link|tab|menu|setting|settings|profile|element|field|option|toggle|repo|repository|list)\b/i.test(
+      text,
+    );
+  const asksForHowTo =
+    /\b(how do i|how to|walk me through|guide me|what do i click|how can i)\b/i.test(
+      text,
+    );
+  const shouldTryHighlight = asksForLocation || asksForHowTo;
+
   try {
     const data = await apiRequest("/api/chat", { question: context });
-    addMessage("assistant", data?.answer || "No answer available right now.");
+    const answer = data?.answer || "No answer available right now.";
+    addMessage("assistant", answer);
+
+    // Combine chat + guided highlighting: after answering, attempt to locate
+    // the most relevant element using scraped page context.
+    if (shouldTryHighlight) {
+      try {
+        const locateData = await apiRequest("/api/widget", {
+          url: window.location.href,
+          pageText: getPageText(),
+          taskTitle: "Locate the page element for this chat request",
+          taskDescription: `User request: ${text}
+Assistant guidance: ${answer}`,
+          interactiveElements: collectClickableCandidates(),
+        });
+
+        if (locateData?.found && locateData?.elementText) {
+          const foundEl = findElementByText(locateData.elementText);
+          if (foundEl) {
+            const instruction =
+              locateData.instruction ||
+              `Try this element on the page: ${locateData.elementText}`;
+            highlightElement(foundEl, instruction, "Guided step");
+            setInstruction(instruction);
+            addMessage(
+              "assistant",
+              `I highlighted it on the page: "${locateData.elementText}".`,
+            );
+          } else if (locateData?.instruction) {
+            addMessage("assistant", locateData.instruction);
+          }
+        } else if (locateData?.instruction) {
+          addMessage("assistant", locateData.instruction);
+        }
+      } catch (locateErr) {
+        console.error("Chat follow-up locate failed", locateErr);
+      }
+    }
   } catch (err) {
     console.error("Chat failed", err);
     addMessage("assistant", "Chat is temporarily unavailable.");
@@ -495,6 +602,9 @@ function injectCSS() {
     #rb-send { width:36px; border:0; border-radius:8px; background:#4f46e5; color:#fff; cursor:pointer; }
     .rb-hidden { display:none !important; }
     .rb-highlight { box-shadow: 0 0 0 3px #6366f1 !important; animation: rb-pulse 1.5s ease-in-out infinite !important; border-radius: 4px !important; }
+    #rb-step-overlay { position: absolute; z-index: 1000000; width: 260px; background: #111827; color: #fff; border-radius: 10px; padding: 10px 12px; box-shadow: 0 8px 24px rgba(0,0,0,.35); border: 1px solid rgba(255,255,255,.08); }
+    .rb-step-overlay-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: #a5b4fc; margin-bottom: 4px; }
+    .rb-step-overlay-text { font-size: 12px; line-height: 1.4; color: #e5e7eb; }
     @keyframes rb-pulse { 0%,100% { box-shadow: 0 0 0 3px rgba(99,102,241,.9); } 50% { box-shadow: 0 0 0 7px rgba(99,102,241,.25); } }
   `;
   document.documentElement.appendChild(style);
