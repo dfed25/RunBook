@@ -54,3 +54,32 @@ export async function generateJsonFromGemini<T>(
   const jsonStr = msgText.replace(/```json/g, "").replace(/```/g, "").trim();
   return JSON.parse(jsonStr) as T;
 }
+
+export async function generateEmbedding(text: string): Promise<number[] | null> {
+  const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+  if (!GEMINI_API_KEY) return null;
+
+  try {
+    const response = await fetch(
+      "https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:embedContent",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-goog-api-key": GEMINI_API_KEY,
+        },
+        body: JSON.stringify({
+          model: "models/text-embedding-004",
+          content: { parts: [{ text }] }
+        })
+      }
+    );
+
+    if (!response.ok) return null;
+    const data = await response.json();
+    return data.embedding?.values || null;
+  } catch (err) {
+    console.error("Embedding generation failed:", err);
+    return null;
+  }
+}

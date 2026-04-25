@@ -46,7 +46,7 @@ export async function POST(req: Request) {
       }
     }
 
-    const retrieved = retrieveDocs(question);
+    const retrieved = await retrieveDocs(question);
     const validDocs = retrieved.filter(r => r.score > 0).map(r => r.doc);
     
     const sources: ChatSource[] = validDocs.map(d => ({ title: d.title, excerpt: d.content.substring(0, 150) + "..." }));

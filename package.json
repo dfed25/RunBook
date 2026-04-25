@@ -10,6 +10,11 @@
     "qa:flow": "node scripts/qa-flow.mjs"
   },
   "dependencies": {
+    "@notionhq/client": "^5.20.0",
+    "@slack/web-api": "^7.15.1",
+    "@supabase/ssr": "^0.10.2",
+    "@supabase/supabase-js": "^2.104.1",
+    "googleapis": "^171.4.0",
     "next": "16.2.4",
     "react": "19.2.4",
     "react-dom": "19.2.4"

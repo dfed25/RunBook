@@ -1,20 +1,35 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Runbook
 
-## Getting Started
+Runbook is an AI onboarding copilot that turns scattered company knowledge into step-by-step onboarding workflows.
 
-First, run the development server:
+## What it does
+- Answers new hire questions using company documents
+- Generates onboarding checklists
+- Tracks task progress
+- Shows manager visibility into onboarding
+- Turns docs into short onboarding lessons
+- Demonstrates a browser assistant that guides users across work tools
 
+## Supabase Integration Guide (For Teammates)
+
+1. **Install packages**
+Run this command to install the required dependencies (Already completed on branch):
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm install @supabase/supabase-js @supabase/ssr
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+2. **Add Env Variables**
+Make sure `.env.local` possesses the correct Supabase connection strings (get values from the team or Supabase dashboard):
+```txt
+NEXT_PUBLIC_SUPABASE_URL=<your-supabase-project-url>
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=<your-supabase-publishable-key>
+```
+
+3. **Supabase Client Helpers**
+The architecture heavily relies on pre-built client wrappers mapped under `src/utils/supabase/`. 
+- `src/utils/supabase/server.ts` handles SSR queries (e.g. inside `page.tsx` React Server Components).
+- `src/utils/supabase/client.ts` handles traditional CSR browser connections.
+- `src/utils/supabase/middleware.ts` forces secure session refreshes.
 
 ## Demo QA flow (Playwright)
 
@@ -22,19 +37,40 @@ With the dev server running (`npm run dev` in another terminal), install browser
 
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+**Example Usage in `page.tsx`:**
+```tsx
+import { createClient } from '@/utils/supabase/server'
+import { cookies } from 'next/headers'
 
-## Learn More
+export default async function Page() {
+  const cookieStore = await cookies()
+  const supabase = createClient(cookieStore)
 
-To learn more about Next.js, take a look at the following resources:
+  const { data: todos } = await supabase.from('todos').select()
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+  return (
+    <ul>
+      {todos?.map((todo) => (
+        <li key={todo.id}>{todo.name}</li>
+      ))}
+    </ul>
+  )
+}
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## 🚀 The To-Do List (What needs to be done next)
 
-## Deploy on Vercel
+**1. Data Source Setup (Database Admin)**
+- Navigate to the Supabase Studio SQL editor and execute the file at `supabase/migrations/00000000000000_init_vector_db.sql`. This spins up the PGVector `runbook_documents` table so our API can store embeddings.
+- Track down the API Keys for Google Drive, Slack, and Notion and inject them into your `.env.local` alongside your `GEMINI_API_KEY`.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+**2. The Sync Trigger (Frontend Team)**
+- The backend synchronization engine is fully written inside `src/lib/vectorizer.ts`. 
+- The frontend team needs to build a "Sync Knowledge" button in the Dashboard that securely invokes `syncUserKnowledge()` to trigger the mass enterprise data pull and vector embedding cycle!
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+**3. The UI Elements (Frontend Team)**
+- **Chat Panel**: Build a React UI to hit `POST /api/chat`. The backend will natively use Gemini embeddings to search the Supabase Postgres vector database and return markdown chat answers!
+- **Tasks & Checklists**: Build the visual checkmark boxes for onboarding tasks.
+- **Floating Browser Widget**: Build the Chrome-extension-style widget that floats on demo screens and intercepts workflows.
+
+**Note on "Demo Documents"**: Since we pivoted to live enterprise integrations, we purposefully **do not need fake hardcoded demo documents** locally in the codebase! HOWEVER, **you and your teammates MUST create "live" demonstration documents** inside the actual Notion and Google Drive workspaces, and post some real messages into your connected Slack channel so that when the API sync runs, it actually pulls real text down for your presentation!
