@@ -31,6 +31,12 @@ The architecture heavily relies on pre-built client wrappers mapped under `src/u
 - `src/utils/supabase/client.ts` handles traditional CSR browser connections.
 - `src/utils/supabase/middleware.ts` forces secure session refreshes.
 
+## Demo QA flow (Playwright)
+
+With the dev server running (`npm run dev` in another terminal), install browsers once (`npx playwright install chromium`), then run `npm run qa:flow`. The script writes `QA_BUG_LOG.md` and `screenshots/` in the project root (both are gitignored). Set `BASE_URL` if the app is not on `http://localhost:3000`. The process exits with a non-zero code when bugs are logged or the run crashes.
+
+You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+
 **Example Usage in `page.tsx`:**
 ```tsx
 import { createClient } from '@/utils/supabase/server'
