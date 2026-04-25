@@ -58,7 +58,11 @@ export async function POST(req: Request) {
     }
 
     const retrieved = await retrieveDocs(question, hireId);
-    const validDocs = retrieved.filter(r => r.score > 0).map(r => r.doc);
+    // NOTE: `match_documents` uses cosine *distance* semantics; similarity scores are not guaranteed to be > 0.
+    const validDocs = retrieved
+      .slice()
+      .sort((a, b) => b.score - a.score)
+      .map((r) => r.doc);
 
     const sources: ChatSource[] = validDocs.map((d) => ({
       title: d.title,
