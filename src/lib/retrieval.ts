@@ -1,7 +1,7 @@
 import { demoDocs } from "./demoDocs";
 import { SourceDoc } from "./types";
 
-export function retrieveDocs(question: string): SourceDoc[] {
+export function retrieveDocs(question: string): { doc: SourceDoc; score: number }[] {
   const q = question.toLowerCase();
 
   const scored = demoDocs.map((doc) => {
@@ -16,6 +16,5 @@ export function retrieveDocs(question: string): SourceDoc[] {
 
   return scored
     .sort((a, b) => b.score - a.score)
-    .slice(0, 2)
-    .map((item) => item.doc);
+    .slice(0, 2);
 }

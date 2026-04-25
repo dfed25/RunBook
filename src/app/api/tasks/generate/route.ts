@@ -2,46 +2,34 @@ import { NextResponse } from "next/server";
 import { initialTasks } from "@/lib/demoTasks";
 import { TASK_GENERATION_SYSTEM_PROMPT } from "@/lib/prompts";
 import { demoDocs } from "@/lib/demoDocs";
+import { generateJsonFromGemini } from "@/lib/ai";
 
 export async function POST() {
+  const context = demoDocs.map(d => `Document Title: ${d.title}\nContent:\n${d.content}`).join("\n\n");
+  const userPrompt = `Company Context:\n${context}\n\nGenerate the onboarding task array.`;
+
   try {
-    const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-    if (!GEMINI_API_KEY) {
-      // P3-7: Static fallback task list
+    if (!process.env.GEMINI_API_KEY) {
       return NextResponse.json(initialTasks);
     }
-
-    const context = demoDocs.map(d => `Document Title: ${d.title}\nContent:\n${d.content}`).join("\n\n");
     
-    // P3-6: Generate using Gemini
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        contents: [
-          { role: "user", parts: [{ text: `${TASK_GENERATION_SYSTEM_PROMPT}\n\nCompany Context:\n${context}\n\nGenerate the onboarding task array.` }] }
-        ]
-      })
-    });
-
-    if (!response.ok) {
-       console.error("Gemini error:", await response.text());
-       return NextResponse.json(initialTasks);
-    }
-
-    const data = await response.json();
-    const msgText = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || "";
-    
-    // Strict parsing attempt
     try {
-       const jsonStr = msgText.replace(/```json/g, "").replace(/```/g, "").trim();
-       const parsedTasks = JSON.parse(jsonStr);
-       return NextResponse.json(parsedTasks);
-    } catch(e) {
-       console.error("Failed to parse JSON tasks:", e, msgText);
-       return NextResponse.json(initialTasks);
+      const parsedTasks = await generateJsonFromGemini<any[]>(TASK_GENERATION_SYSTEM_PROMPT, userPrompt);
+      
+      const valid = Array.isArray(parsedTasks) && parsedTasks.every(t => 
+        t && typeof t.id === "string" && typeof t.title === "string" &&
+        ["todo", "in_progress", "complete"].includes(t.status)
+      );
+
+      if (!valid) {
+        console.error("Gemini returned invalid tasks shape");
+        return NextResponse.json(initialTasks);
+      }
+
+      return NextResponse.json(parsedTasks);
+    } catch (e) {
+      console.error("Failed to parse JSON tasks:", e);
+      return NextResponse.json(initialTasks);
     }
 
   } catch (error) {

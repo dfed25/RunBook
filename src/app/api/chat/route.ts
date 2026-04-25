@@ -2,8 +2,8 @@ import { NextResponse } from "next/server";
 import { retrieveDocs } from "@/lib/retrieval";
 import { CHAT_SYSTEM_PROMPT } from "@/lib/prompts";
 import { ChatResponse, ChatSource } from "@/lib/types";
+import { generateFromGemini } from "@/lib/ai";
 
-// Static fallbacks for the 5 core demo questions
 const FALLBACKS: Record<string, ChatResponse> = {
   "what should i do on my first day?": {
     answer: "On your first day, you should complete your HR profile, join the required Slack channels, meet your manager, and review the company handbook.",
@@ -27,61 +27,46 @@ const FALLBACKS: Record<string, ChatResponse> = {
   }
 };
 
+function escapeRegExp(string: string) {
+  return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 export async function POST(req: Request) {
   try {
     const body = await req.json();
     const question = body.question || "";
     const qLower = question.toLowerCase().trim().replace(/[?!.]$/, "");
 
-    // P3-5: Static fallback check
-    for (const [key, fallback] of Object.entries(FALLBACKS)) {
-      if (qLower.includes(key.replace(/[?!.]$/, ""))) {
-        return NextResponse.json(fallback);
+    const fallbackKeys = Object.keys(FALLBACKS).sort((a, b) => b.length - a.length);
+    for (const key of fallbackKeys) {
+      const normalizedKey = key.replace(/[?!.]$/, "");
+      const regex = new RegExp(`\\b${escapeRegExp(normalizedKey)}\\b`);
+      if (regex.test(qLower) || qLower === normalizedKey) {
+        return NextResponse.json(FALLBACKS[key]);
       }
     }
 
-    // P3-2 & P3-4: Retrieve docs
-    const docs = retrieveDocs(question);
-    const sources: ChatSource[] = docs.map(d => ({ title: d.title, excerpt: d.content.substring(0, 150) + "..." }));
+    const retrieved = retrieveDocs(question);
+    const validDocs = retrieved.filter(r => r.score > 0).map(r => r.doc);
     
-    const context = docs.map(d => `Document Title: ${d.title}\nContent:\n${d.content}`).join("\n\n");
+    const sources: ChatSource[] = validDocs.map(d => ({ title: d.title, excerpt: d.content.substring(0, 150) + "..." }));
+    const context = validDocs.map(d => `Document Title: ${d.title}\nContent:\n${d.content}`).join("\n\n");
 
-    const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
-    if (!GEMINI_API_KEY) {
-       // Return fallback if API key is not configured, to keep demo alive
+    if (!process.env.GEMINI_API_KEY) {
        return NextResponse.json({
          answer: "API Key not found, falling back. Could not process your exact request. Please refer to the initial tasks.",
-         sources
+         sources: sources.length > 0 ? sources : []
        });
     }
 
-    // Call Gemini
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`, {
-       method: "POST",
-       headers: {
-         "Content-Type": "application/json"
-       },
-       body: JSON.stringify({
-         contents: [
-           { role: "user", parts: [{ text: `${CHAT_SYSTEM_PROMPT}\n\nCompany Context:\n${context}\n\nUser Question: ${question}` }] }
-         ]
-       })
-    });
-
-    if (!response.ok) {
-       const err = await response.text();
-       console.error("Gemini error:", err);
-       return NextResponse.json({ answer: "Runbook AI is temporarily unavailable.", sources }, { status: 500 });
+    try {
+      const userPrompt = `Company Context:\n${context || "No context found."}\n\nUser Question: ${question}`;
+      const answer = await generateFromGemini(CHAT_SYSTEM_PROMPT, userPrompt);
+      return NextResponse.json({ answer, sources: sources.length > 0 ? sources : undefined });
+    } catch (e) {
+      console.error("Chat API Gemini Error:", e);
+      return NextResponse.json({ answer: "Runbook AI is temporarily unavailable.", sources }, { status: 500 });
     }
-
-    const data = await response.json();
-    const answer = data.candidates?.[0]?.content?.parts?.[0]?.text || "Sorry, an unexpected API structure was returned.";
-
-    return NextResponse.json({
-      answer,
-      sources
-    });
-
   } catch (error) {
     console.error(error);
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
