@@ -193,6 +193,20 @@ export default function ManagerTasksPage() {
     if (!res.ok) return setMessage(data.error || "Failed to add source.");
     setSources((prev) => [...prev, data.source]);
     setSourceForm((prev) => ({ ...prev, title: "", url: "" }));
+    setMessage("Source added. Syncing now...");
+    setSyncing(true);
+    const syncRes = await fetch("/api/sync/knowledge", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ hireId: selectedHireId }),
+    });
+    const syncData = await syncRes.json().catch(() => ({}));
+    setSyncing(false);
+    if (!syncRes.ok) {
+      setMessage(syncData.error || "Source added, but sync failed. Try syncing manually.");
+      return;
+    }
+    setMessage(`Source added and synced: ${syncData.result?.synced ?? 0}/${syncData.result?.scanned ?? 0} docs.`);
   }
 
   async function deleteSource(sourceId: string) {

@@ -35,13 +35,14 @@ function matchesHireScope(content: string, hireId?: string): boolean {
 export async function retrieveDocs(question: string, hireId?: string): Promise<RetrievedDoc[]> {
   try {
     const TOP_K = 3;
+    const OVERFETCH = hireId ? TOP_K * 12 : TOP_K * 3;
     const embedding = await generateEmbedding(question);
     if (!embedding) return [];
 
     const { data: documents, error } = await supabaseAdmin.rpc("match_documents", {
       query_embedding: `[${embedding.join(",")}]`,
-      match_threshold: 0.7,
-      match_count: hireId ? TOP_K * 10 : TOP_K
+      match_threshold: hireId ? 0.45 : 0.6,
+      match_count: OVERFETCH
     });
 
     if (error) {
