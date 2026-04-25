@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { demoDocs } from "@/lib/demoDocs";
 import { LESSON_GENERATION_SYSTEM_PROMPT } from "@/lib/prompts";
 import { generateJsonFromGemini } from "@/lib/ai";
+import { Lesson } from "@/lib/types";
 
 const STATIC_LESSON = {
   title: "Engineering Setup Basic Training",
@@ -33,7 +34,7 @@ export async function POST(req: Request) {
     const userPrompt = `Document Title: ${doc.title}\nContent:\n${doc.content}\n\nGenerate the micro-lesson.`;
     
     try {
-      const parsedLesson = await generateJsonFromGemini<any>(LESSON_GENERATION_SYSTEM_PROMPT, userPrompt);
+      const parsedLesson = await generateJsonFromGemini<Lesson>(LESSON_GENERATION_SYSTEM_PROMPT, userPrompt);
       return NextResponse.json(parsedLesson);
     } catch (e) {
       console.error("Lesson API Gemini Error:", e);

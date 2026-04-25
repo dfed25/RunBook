@@ -3,6 +3,7 @@ import { initialTasks } from "@/lib/demoTasks";
 import { TASK_GENERATION_SYSTEM_PROMPT } from "@/lib/prompts";
 import { demoDocs } from "@/lib/demoDocs";
 import { generateJsonFromGemini } from "@/lib/ai";
+import { OnboardingTask } from "@/lib/types";
 
 export async function POST() {
   const context = demoDocs.map(d => `Document Title: ${d.title}\nContent:\n${d.content}`).join("\n\n");
@@ -14,7 +15,7 @@ export async function POST() {
     }
     
     try {
-      const parsedTasks = await generateJsonFromGemini<any[]>(TASK_GENERATION_SYSTEM_PROMPT, userPrompt);
+      const parsedTasks = await generateJsonFromGemini<OnboardingTask[]>(TASK_GENERATION_SYSTEM_PROMPT, userPrompt);
       
       const valid = Array.isArray(parsedTasks) && parsedTasks.every(t => 
         t && typeof t.id === "string" && typeof t.title === "string" &&
