@@ -3,6 +3,8 @@ export type SourceDoc = {
     title: string;
     content: string;
     url?: string;
+    sourceType?: "seed" | "text" | "upload";
+    createdAt?: string;
   };
   
   export type OnboardingTask = {

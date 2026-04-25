@@ -41,8 +41,10 @@ export async function PATCH(req: Request, { params }: Params) {
     }
 
     if (action === "duplicate") {
-      const assignees = Array.isArray(body.assignees) ? body.assignees : [];
-      const validAssignees = assignees.filter((name) => TRAINEES.includes(name));
+      const assignees: unknown[] = Array.isArray(body.assignees) ? body.assignees : [];
+      const validAssignees = assignees
+        .filter((name): name is string => typeof name === "string")
+        .filter((name) => TRAINEES.includes(name as (typeof TRAINEES)[number]));
       const copies = await duplicateTask(taskId, validAssignees);
       if (copies === null) {
         return NextResponse.json({ error: "Task not found" }, { status: 404 });

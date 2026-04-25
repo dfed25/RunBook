@@ -3,15 +3,22 @@
 import Link from "next/link";
 import { FormEvent, useEffect, useState } from "react";
 import { OnboardingTask } from "@/lib/types";
-import { TRAINEES } from "@/lib/trainees";
+import { TRAINEES, type TraineeName } from "@/lib/trainees";
 
 const EMPLOYEE_OPTIONS = [...TRAINEES];
+type TaskFormState = {
+  title: string;
+  description: string;
+  assignee: TraineeName;
+  estimatedTime: string;
+  sourceTitle: string;
+};
 
 export default function ManagerTasksPage() {
   const [tasks, setTasks] = useState<OnboardingTask[]>([]);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
-  const [form, setForm] = useState({
+  const [form, setForm] = useState<TaskFormState>({
     title: "",
     description: "",
     assignee: EMPLOYEE_OPTIONS[0],
@@ -157,7 +164,12 @@ export default function ManagerTasksPage() {
               <select
                 className="rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
                 value={form.assignee}
-                onChange={(event) => setForm((prev) => ({ ...prev, assignee: event.target.value }))}
+                onChange={(event) => {
+                  const value = event.target.value;
+                  if (TRAINEES.includes(value as TraineeName)) {
+                    setForm((prev) => ({ ...prev, assignee: value as TraineeName }));
+                  }
+                }}
               >
                 {EMPLOYEE_OPTIONS.map((employee) => (
                   <option key={employee} value={employee}>
