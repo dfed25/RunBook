@@ -5,6 +5,28 @@
 import { NextRequest, NextResponse } from "next/server";
 import { demoDocs } from "@/lib/demoDocs";
 import { generateFromGemini } from "@/lib/ai";
+import { requireHireAccess } from "@/lib/apiAuth";
+
+const RATE_LIMIT_WINDOW_MS = 60_000;
+const RATE_LIMIT_MAX_REQUESTS = 20;
+const requestBuckets = new Map<string, number[]>();
+
+function extractClientIp(req: NextRequest) {
+  const forwarded = req.headers.get("x-forwarded-for");
+  if (forwarded) return forwarded.split(",")[0].trim();
+  const realIp = req.headers.get("x-real-ip");
+  return realIp?.trim() || "unknown";
+}
+
+function isRateLimited(key: string) {
+  const now = Date.now();
+  const cutoff = now - RATE_LIMIT_WINDOW_MS;
+  const existing = requestBuckets.get(key) || [];
+  const fresh = existing.filter((ts) => ts >= cutoff);
+  fresh.push(now);
+  requestBuckets.set(key, fresh);
+  return fresh.length > RATE_LIMIT_MAX_REQUESTS;
+}
 
 function fallbackTaskFromUrlOrText(url: string, pageText: string) {
   const haystack = `${url}\n${pageText}`.toLowerCase();
@@ -186,19 +208,11 @@ Rules:
 
 export async function POST(req: NextRequest) {
   try {
-    const { url, pageText, taskTitle, taskDescription, interactiveElements } =
+    const { url, pageText, taskTitle, taskDescription, interactiveElements, hireId } =
       await req.json();
 
     if (!url || !pageText) {
       return NextResponse.json({ found: false }, { status: 400 });
-    }
-
-    const widgetSecret = process.env.WIDGET_SHARED_SECRET?.trim();
-    if (widgetSecret) {
-      const providedSecret = req.headers.get("x-runbook-widget-secret")?.trim();
-      if (!providedSecret || providedSecret !== widgetSecret) {
-        return NextResponse.json({ found: false }, { status: 401 });
-      }
     }
 
     if (String(pageText).length > 30000 || String(taskDescription || "").length > 4000) {
@@ -240,6 +254,30 @@ export async function POST(req: NextRequest) {
           ],
         },
       });
+    }
+
+    // Guard Gemini-backed paths: require either authenticated hire scope or
+    // a validated shared secret for extension/server-to-server requests.
+    const widgetSecret = process.env.WIDGET_SHARED_SECRET?.trim();
+    const providedSecret = req.headers.get("x-runbook-widget-secret")?.trim();
+    let authed = false;
+    if (widgetSecret && providedSecret && providedSecret === widgetSecret) {
+      authed = true;
+    }
+    if (!authed && typeof hireId === "string" && hireId.trim()) {
+      const auth = await requireHireAccess(hireId.trim());
+      if (auth.ok) authed = true;
+    }
+    if (!authed) {
+      return NextResponse.json({ found: false }, { status: 401 });
+    }
+
+    const limiterKey = `widget:${extractClientIp(req)}:${typeof hireId === "string" ? hireId : "anon"}`;
+    if (isRateLimited(limiterKey)) {
+      return NextResponse.json(
+        { found: false, instruction: "Rate limit reached. Please retry shortly." },
+        { status: 429 },
+      );
     }
 
     if (taskTitle && taskDescription) {

@@ -33,6 +33,18 @@ function getAllowedOrigins() {
   });
 }
 
+function getWidgetSecret() {
+  return new Promise((resolve) => {
+    if (!chrome.storage?.local) {
+      resolve("");
+      return;
+    }
+    chrome.storage.local.get(["runbookWidgetSecret"], (result) => {
+      resolve(typeof result?.runbookWidgetSecret === "string" ? result.runbookWidgetSecret.trim() : "");
+    });
+  });
+}
+
 // Listen for messages from content script
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.type === "API_REQUEST") {
@@ -44,8 +56,8 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       return true;
     }
 
-    getAllowedOrigins()
-      .then((allowedOrigins) => {
+    Promise.all([getAllowedOrigins(), getWidgetSecret()])
+      .then(([allowedOrigins, widgetSecret]) => {
         if (!allowedOrigins.includes(target.origin)) {
           throw new Error(`Origin not allowed: ${target.origin}`);
         }
@@ -54,7 +66,10 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
         return fetch(target.toString(), {
           method: request.method || "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            ...(widgetSecret ? { "x-runbook-widget-secret": widgetSecret } : {}),
+          },
           body: request.body ? JSON.stringify(request.body) : undefined,
           signal: controller.signal,
         })
