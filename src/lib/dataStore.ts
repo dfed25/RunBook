@@ -99,6 +99,158 @@ function buildHireNameMap(hires: Hire[]): Map<string, Hire> {
   return new Map(hires.map((hire) => [hire.name.toLowerCase(), hire]));
 }
 
+function toBulletsFromSentence(text: string): string[] {
+  return text
+    .split(/[.;]\s+|\n+/)
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .slice(0, 4);
+}
+
+function presetTaskPlaybook(title: string, sourceTitle: string): string | null {
+  const t = title.toLowerCase();
+  if (t.includes("hr profile")) {
+    return [
+      "Objective:",
+      "Complete all HR and payroll onboarding records correctly.",
+      "",
+      "Steps:",
+      "1. Open the HR portal from your onboarding email.",
+      "2. Fill personal profile, tax details, and emergency contact fields.",
+      "3. Confirm direct deposit and review benefits enrollment status.",
+      "",
+      "Verification:",
+      "- Portal shows completion status as finished/100%.",
+      "- You receive a confirmation email from HR.",
+      "",
+      "If blocked:",
+      "- Share the exact portal error and screenshot with HR or your manager.",
+      "",
+      "Additional:",
+      `Source: ${sourceTitle || "First Week Onboarding Plan"}`,
+    ].join("\n");
+  }
+  if (t.includes("slack")) {
+    return [
+      "Objective:",
+      "Join required communication channels for onboarding and daily support.",
+      "",
+      "Steps:",
+      "1. Join #eng-onboarding, #dev-help, #eng-access, and #security.",
+      "2. Post a short intro in #eng-onboarding.",
+      "3. Pin key onboarding messages for quick reference.",
+      "",
+      "Verification:",
+      "- You can read/post in each required channel.",
+      "- Your intro message is visible in #eng-onboarding.",
+      "",
+      "If blocked:",
+      "- Ask workspace admins in #help-it for channel access and include the missing channel names.",
+      "",
+      "Additional:",
+      `Source: ${sourceTitle || "Engineering Setup Guide"}`,
+    ].join("\n");
+  }
+  if (t.includes("github")) {
+    return [
+      "Objective:",
+      "Get full GitHub org/repository access required for contribution.",
+      "",
+      "Steps:",
+      "1. Ask your manager for GitHub access approval.",
+      "2. Post your GitHub username in #eng-access with the access request.",
+      "3. Accept the org invite and verify repository visibility.",
+      "",
+      "Verification:",
+      "- You can open the required engineering repositories.",
+      "- `git clone` works without permission errors.",
+      "",
+      "If blocked:",
+      "- Share the exact invite/permission error in #eng-access.",
+      "- Mention repo name and your GitHub username.",
+      "",
+      "Additional:",
+      `Source: ${sourceTitle || "Engineering Setup Guide"}`,
+    ].join("\n");
+  }
+  if (t.includes("local dev") || t.includes("environment")) {
+    return [
+      "Objective:",
+      "Run the project locally and confirm your development environment is healthy.",
+      "",
+      "Steps:",
+      "1. Clone the starter repository and open it in your editor.",
+      "2. Install dependencies from the project root.",
+      "3. Start the dev server and open the local app URL.",
+      "4. Run lint/tests once and capture any failures.",
+      "",
+      "Verification:",
+      "- App loads locally without runtime crash.",
+      "- Lint/tests pass, or known failures are documented.",
+      "",
+      "If blocked:",
+      "- Post terminal output, Node version, and failing command in #dev-help.",
+      "",
+      "Additional:",
+      `Source: ${sourceTitle || "Engineering Setup Guide"}`,
+    ].join("\n");
+  }
+  if (t.includes("security")) {
+    return [
+      "Objective:",
+      "Complete required security onboarding before broader access.",
+      "",
+      "Steps:",
+      "1. Complete assigned security training modules.",
+      "2. Enable 2FA on required company systems.",
+      "3. Review secret handling and secure coding policy notes.",
+      "",
+      "Verification:",
+      "- Training completion status is recorded.",
+      "- 2FA is enabled for required tools.",
+      "",
+      "If blocked:",
+      "- Contact IT/Security with your account email and affected tool name.",
+      "",
+      "Additional:",
+      `Source: ${sourceTitle || "Security Policy"}`,
+    ].join("\n");
+  }
+  return null;
+}
+
+function ensureStructuredTaskDescription(title: string, description: string): string {
+  const raw = String(description || "").replace(/\r/g, "").trim();
+  const preset = presetTaskPlaybook(title, "");
+  if (preset) return preset;
+  if (!raw) {
+    return `Objective:\nComplete: ${title}.\n\nSteps:\n1. Follow your team runbook for this task.\n\nVerification:\n- Confirm expected result is visible.\n\nIf blocked:\n- Share error details with your manager or #dev-help.`;
+  }
+  if (/Objective:|Steps:|Verification:|If blocked:/i.test(raw)) {
+    return raw;
+  }
+
+  const bullets = toBulletsFromSentence(raw);
+  const numbered = bullets.length
+    ? bullets.map((line, i) => `${i + 1}. ${line}`).join("\n")
+    : "1. Follow the task description and team runbook.";
+
+  return [
+    "Objective:",
+    bullets[0] || raw,
+    "",
+    "Steps:",
+    numbered,
+    "",
+    "Verification:",
+    "- Expected output/result is visible.",
+    "- Task can be marked complete with confidence.",
+    "",
+    "If blocked:",
+    "- Capture exact error + step and ask manager or #dev-help.",
+  ].join("\n");
+}
+
 function normalizeTask(
   task: Partial<OnboardingTask> & { id?: string },
   hiresByName: Map<string, Hire>,
@@ -108,10 +260,20 @@ function normalizeTask(
   const matchedHire = hiresByName.get(assigneeName.toLowerCase());
   const assigneeId = String(task.assigneeId || matchedHire?.id || defaultHire.id).trim();
   const assignee = matchedHire?.name || assigneeName || defaultHire.name;
+  const normalizedTitle = String(task.title || "Untitled task").trim();
+  const preset = presetTaskPlaybook(normalizedTitle, String(task.sourceTitle || "").trim());
+  const existingDescription = String(task.description || "").trim();
+  const shouldReplaceGenericStructured =
+    /Expected output\/result is visible\./i.test(existingDescription) ||
+    /Follow the task description and team runbook\./i.test(existingDescription);
+
   return {
     id: String(task.id || makeId("task")),
-    title: String(task.title || "Untitled task").trim(),
-    description: String(task.description || "").trim(),
+    title: normalizedTitle,
+    description:
+      preset && (shouldReplaceGenericStructured || !/Objective:|Steps:|Verification:|If blocked:/i.test(existingDescription))
+        ? preset
+        : ensureStructuredTaskDescription(normalizedTitle, existingDescription),
     assigneeId,
     assignee,
     status:

@@ -27,12 +27,53 @@ function statusLabel(status: OnboardingTask["status"]): string {
   return "Todo";
 }
 
+type TaskDetailSections = {
+  objective: string;
+  steps: string[];
+  verification: string[];
+  blocked: string[];
+  additional: string;
+};
+
+function parseTaskDetail(description: string): TaskDetailSections {
+  const raw = String(description || "").replace(/\r/g, "");
+  const getSection = (name: string): string => {
+    const pattern = new RegExp(`${name}:\\n([\\s\\S]*?)(?:\\n\\n(?:Objective|Steps|Verification|If blocked|Additional):|$)`, "i");
+    return (raw.match(pattern)?.[1] || "").trim();
+  };
+  const objective = getSection("Objective");
+  const stepsRaw = getSection("Steps");
+  const verificationRaw = getSection("Verification");
+  const blockedRaw = getSection("If blocked");
+  const additional = getSection("Additional");
+  const toLines = (value: string): string[] =>
+    value
+      .split("\n")
+      .map((line) => line.replace(/^\s*(?:[-*]|\d+\.)\s*/, "").trim())
+      .filter(Boolean);
+  const steps = toLines(stepsRaw);
+  const verification = toLines(verificationRaw);
+  const blocked = toLines(blockedRaw);
+  if (!objective && steps.length === 0 && verification.length === 0 && blocked.length === 0) {
+    const fallbackLines = raw.split("\n").map((line) => line.trim()).filter(Boolean);
+    return {
+      objective: fallbackLines[0] || "Complete this task as described.",
+      steps: fallbackLines.slice(1),
+      verification: [],
+      blocked: [],
+      additional: "",
+    };
+  }
+  return { objective, steps, verification, blocked, additional };
+}
+
 export default function DashboardPage() {
   const [hires, setHires] = useState<Hire[]>([]);
   const [tasks, setTasks] = useState<OnboardingTask[]>([]);
   const [tasksLoading, setTasksLoading] = useState(true);
   const [tasksError, setTasksError] = useState<string | null>(null);
   const [selectedHireId, setSelectedHireId] = useState<string>("");
+  const [expandedTaskId, setExpandedTaskId] = useState<string | null>(null);
   const [chatInput, setChatInput] = useState("");
   const [chatBusy, setChatBusy] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -42,11 +83,16 @@ export default function DashboardPage() {
   const [lessonSlideIndex, setLessonSlideIndex] = useState(0);
   const [presenterMode, setPresenterMode] = useState(false);
   const [narrating, setNarrating] = useState(false);
+  const [narrationMode, setNarrationMode] = useState<"slide" | "full" | null>(null);
   const [renderBusy, setRenderBusy] = useState(false);
   const [renderJob, setRenderJob] = useState<LessonRenderJob | null>(null);
+  const [renderStartedAt, setRenderStartedAt] = useState<number | null>(null);
+  const [renderElapsedSec, setRenderElapsedSec] = useState(0);
   const [lessonUiError, setLessonUiError] = useState<string | null>(null);
   const pollTimerRef = useRef<number | null>(null);
   const messageCounterRef = useRef(0);
+  const narrationAudioRef = useRef<HTMLAudioElement | null>(null);
+  const narrationObjectUrlRef = useRef<string | null>(null);
 
   const nextMessageId = useCallback((prefix: string) => {
     messageCounterRef.current += 1;
@@ -187,7 +233,24 @@ export default function DashboardPage() {
   function stopNarration() {
     if (typeof window === "undefined") return;
     window.speechSynthesis.cancel();
+    if (narrationAudioRef.current) {
+      narrationAudioRef.current.pause();
+      narrationAudioRef.current.currentTime = 0;
+      narrationAudioRef.current = null;
+    }
+    if (narrationObjectUrlRef.current) {
+      URL.revokeObjectURL(narrationObjectUrlRef.current);
+      narrationObjectUrlRef.current = null;
+    }
     setNarrating(false);
+    setNarrationMode(null);
+  }
+
+  function changeSlide(nextIndex: number) {
+    if (narrating && narrationMode === "slide") {
+      stopNarration();
+    }
+    setLessonSlideIndex(nextIndex);
   }
 
   function speakCurrentSlide() {
@@ -196,13 +259,66 @@ export default function DashboardPage() {
     if (!slide) return;
     const text = [slide.title, slide.speakerNotes || slide.body].join(". ");
     if (!text.trim()) return;
+    void playNarrationAudio(text, "slide");
+  }
+
+  function speakFullWalkthrough() {
+    if (!lesson || typeof window === "undefined") return;
+    const text = (lesson.narrationScript || "").trim();
+    if (!text) return;
+    void playNarrationAudio(text, "full");
+  }
+
+  async function playNarrationAudio(text: string, mode: "slide" | "full") {
+    if (typeof window === "undefined") return;
     window.speechSynthesis.cancel();
-    const utter = new SpeechSynthesisUtterance(text);
-    utter.rate = 1;
-    utter.onend = () => setNarrating(false);
-    utter.onerror = () => setNarrating(false);
+    if (narrationAudioRef.current) {
+      narrationAudioRef.current.pause();
+      narrationAudioRef.current.currentTime = 0;
+      narrationAudioRef.current = null;
+    }
+    if (narrationObjectUrlRef.current) {
+      URL.revokeObjectURL(narrationObjectUrlRef.current);
+      narrationObjectUrlRef.current = null;
+    }
     setNarrating(true);
-    window.speechSynthesis.speak(utter);
+    setNarrationMode(mode);
+    try {
+      const res = await fetch("/api/tts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text }),
+      });
+      if (!res.ok) {
+        throw new Error("Server TTS unavailable");
+      }
+      const blob = await res.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      narrationObjectUrlRef.current = objectUrl;
+      const audio = new Audio(objectUrl);
+      narrationAudioRef.current = audio;
+      audio.onended = () => {
+        setNarrating(false);
+        setNarrationMode(null);
+      };
+      audio.onerror = () => {
+        setNarrating(false);
+        setNarrationMode(null);
+      };
+      await audio.play();
+    } catch {
+      const utter = new SpeechSynthesisUtterance(text);
+      utter.rate = 1;
+      utter.onend = () => {
+        setNarrating(false);
+        setNarrationMode(null);
+      };
+      utter.onerror = () => {
+        setNarrating(false);
+        setNarrationMode(null);
+      };
+      window.speechSynthesis.speak(utter);
+    }
   }
 
   async function pollRenderJob(jobId: string) {
@@ -217,6 +333,7 @@ export default function DashboardPage() {
       setRenderJob(data);
       if (data.status === "completed" || data.status === "failed") {
         setRenderBusy(false);
+        setRenderStartedAt(null);
         if (pollTimerRef.current) {
           window.clearInterval(pollTimerRef.current);
           pollTimerRef.current = null;
@@ -233,6 +350,8 @@ export default function DashboardPage() {
     if (!lesson) return;
     setLessonUiError(null);
     setRenderBusy(true);
+    setRenderStartedAt(Date.now());
+    setRenderElapsedSec(0);
     try {
       const res = await fetch("/api/lesson/render", {
         method: "POST",
@@ -257,6 +376,7 @@ export default function DashboardPage() {
           setLessonUiError(message);
         }
         setRenderBusy(false);
+        setRenderStartedAt(null);
         return;
       }
       setRenderJob(data);
@@ -264,11 +384,13 @@ export default function DashboardPage() {
         await pollRenderJob(data.id);
       } else {
         setRenderBusy(false);
+        setRenderStartedAt(null);
       }
     } catch (error) {
       console.error(error);
       setLessonUiError("Video export failed unexpectedly. Please retry.");
       setRenderBusy(false);
+      setRenderStartedAt(null);
     }
   }
 
@@ -276,6 +398,10 @@ export default function DashboardPage() {
     () => tasks.filter((task) => task.assigneeId === selectedHireId),
     [tasks, selectedHireId],
   );
+  const activeExpandedTaskId =
+    expandedTaskId && visibleTasks.some((task) => task.id === expandedTaskId)
+      ? expandedTaskId
+      : (visibleTasks[0]?.id ?? null);
 
   const completed = useMemo(
     () => visibleTasks.filter((task) => task.status === "complete").length,
@@ -284,6 +410,17 @@ export default function DashboardPage() {
 
   const progressPct = visibleTasks.length ? Math.round((completed / visibleTasks.length) * 100) : 0;
   const currentSlide = lesson?.slides?.[lessonSlideIndex] ?? EMPTY_LESSON_SLIDE;
+  const estimatedRenderSec = useMemo(() => {
+    if (!lesson?.slides?.length) return 0;
+    const slideSec = lesson.slides.reduce((sum, slide) => {
+      const sec = Math.max(8, Math.min(45, Math.round(slide.estimatedDurationSec || 22)));
+      return sum + sec;
+    }, 0);
+    return Math.round(slideSec * 0.8);
+  }, [lesson]);
+  const renderProgressPct = estimatedRenderSec
+    ? Math.min(95, Math.round((renderElapsedSec / estimatedRenderSec) * 100))
+    : 0;
   const selectedHire = hires.find((hire) => hire.id === selectedHireId);
   const visualThemeClass = useMemo(() => {
     const hint = (currentSlide.visualHint || "").toLowerCase();
@@ -301,8 +438,23 @@ export default function DashboardPage() {
       if (typeof window !== "undefined") {
         window.speechSynthesis.cancel();
       }
+      if (narrationAudioRef.current) {
+        narrationAudioRef.current.pause();
+        narrationAudioRef.current.currentTime = 0;
+      }
+      if (narrationObjectUrlRef.current) {
+        URL.revokeObjectURL(narrationObjectUrlRef.current);
+      }
     };
   }, []);
+
+  useEffect(() => {
+    if (!renderBusy || !renderStartedAt) return;
+    const timer = window.setInterval(() => {
+      setRenderElapsedSec(Math.max(0, Math.round((Date.now() - renderStartedAt) / 1000)));
+    }, 500);
+    return () => window.clearInterval(timer);
+  }, [renderBusy, renderStartedAt]);
 
   return (
     <main className="min-h-screen bg-slate-950 p-6 text-slate-100 sm:p-10">
@@ -348,38 +500,93 @@ export default function DashboardPage() {
               </p>
             ) : (
               <ul className="mt-4 space-y-3">
-                {visibleTasks.map((task) => (
-                  <li key={task.id} className="rounded-xl border border-slate-700 bg-slate-950 p-4">
-                    <div className="flex flex-wrap items-start justify-between gap-3">
-                      <div className="space-y-1">
-                        <p className="font-semibold">{task.title}</p>
-                        <p className="text-sm text-slate-300">{task.description}</p>
-                        <p className="text-xs text-slate-400">
-                          Source: {task.sourceTitle} · ETA: {task.estimatedTime}
-                        </p>
+                {visibleTasks.map((task) => {
+                  const detail = parseTaskDetail(task.description);
+                  const isExpanded = activeExpandedTaskId === task.id;
+                  return (
+                    <li key={task.id} className="rounded-xl border border-slate-700 bg-slate-950 p-4">
+                      <button
+                        type="button"
+                        className="w-full text-left"
+                        onClick={() => setExpandedTaskId((current) => (current === task.id ? null : task.id))}
+                      >
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                          <div className="space-y-1">
+                            <p className="font-semibold">{task.title}</p>
+                            <p className="text-sm text-slate-300">
+                              {detail.objective || "Open this task to view the full execution playbook."}
+                            </p>
+                            {detail.steps.length > 0 ? (
+                              <p className="text-xs text-cyan-200">Next: {detail.steps[0]}</p>
+                            ) : null}
+                            <p className="text-xs text-slate-400">
+                              Source: {task.sourceTitle} · ETA: {task.estimatedTime} · {isExpanded ? "Hide details" : "Show details"}
+                            </p>
+                          </div>
+                          <StatusBadge tone={task.status === "complete" ? "success" : task.status === "in_progress" ? "warning" : "neutral"}>
+                            {statusLabel(task.status)}
+                          </StatusBadge>
+                        </div>
+                      </button>
+                      {isExpanded ? (
+                        <div className="mt-3 rounded-lg border border-slate-800 bg-slate-900/40 p-3 text-sm">
+                          {detail.steps.length ? (
+                            <div className="mb-3">
+                              <p className="text-[11px] uppercase tracking-wide text-slate-400">Steps</p>
+                              <ol className="mt-1 list-decimal space-y-1 pl-5 text-slate-200">
+                                {detail.steps.map((step, idx) => (
+                                  <li key={`${task.id}-step-${idx}`}>{step}</li>
+                                ))}
+                              </ol>
+                            </div>
+                          ) : null}
+                          {detail.verification.length ? (
+                            <div className="mb-3">
+                              <p className="text-[11px] uppercase tracking-wide text-slate-400">Verification</p>
+                              <ul className="mt-1 list-disc space-y-1 pl-5 text-slate-200">
+                                {detail.verification.map((item, idx) => (
+                                  <li key={`${task.id}-verify-${idx}`}>{item}</li>
+                                ))}
+                              </ul>
+                            </div>
+                          ) : null}
+                          {detail.blocked.length ? (
+                            <div className="mb-3">
+                              <p className="text-[11px] uppercase tracking-wide text-slate-400">If blocked</p>
+                              <ul className="mt-1 list-disc space-y-1 pl-5 text-slate-200">
+                                {detail.blocked.map((item, idx) => (
+                                  <li key={`${task.id}-blocked-${idx}`}>{item}</li>
+                                ))}
+                              </ul>
+                            </div>
+                          ) : null}
+                          {detail.additional ? (
+                            <div>
+                              <p className="text-[11px] uppercase tracking-wide text-slate-400">Additional context</p>
+                              <p className="mt-1 whitespace-pre-wrap text-slate-200">{detail.additional}</p>
+                            </div>
+                          ) : null}
+                        </div>
+                      ) : null}
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {(["todo", "in_progress", "complete"] as const).map((status) => (
+                          <AppButton
+                            key={status}
+                            type="button"
+                            className={`px-3 py-1 text-xs ${
+                              task.status === status
+                                ? "border-cyan-400 bg-cyan-400/20 text-cyan-200"
+                                : "border-slate-700 text-slate-300 hover:border-slate-500"
+                            }`}
+                            onClick={() => updateStatus(task.id, status)}
+                          >
+                            Mark {statusLabel(status)}
+                          </AppButton>
+                        ))}
                       </div>
-                      <StatusBadge tone={task.status === "complete" ? "success" : task.status === "in_progress" ? "warning" : "neutral"}>
-                        {statusLabel(task.status)}
-                      </StatusBadge>
-                    </div>
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      {(["todo", "in_progress", "complete"] as const).map((status) => (
-                        <AppButton
-                          key={status}
-                          type="button"
-                          className={`px-3 py-1 text-xs ${
-                            task.status === status
-                              ? "border-cyan-400 bg-cyan-400/20 text-cyan-200"
-                              : "border-slate-700 text-slate-300 hover:border-slate-500"
-                          }`}
-                          onClick={() => updateStatus(task.id, status)}
-                        >
-                          Mark {statusLabel(status)}
-                        </AppButton>
-                      ))}
-                    </div>
-                  </li>
-                ))}
+                    </li>
+                  );
+                })}
               </ul>
             )}
           </SectionCard>
@@ -528,7 +735,7 @@ export default function DashboardPage() {
                 type="button"
                 variant="ghost"
                 className="px-3 py-1"
-                onClick={() => setLessonSlideIndex((idx) => Math.max(0, idx - 1))}
+                onClick={() => changeSlide(Math.max(0, lessonSlideIndex - 1))}
                 disabled={!lesson || lessonSlideIndex === 0}
               >
                 Back
@@ -540,7 +747,7 @@ export default function DashboardPage() {
                 type="button"
                 variant="ghost"
                 className="px-3 py-1"
-                onClick={() => setLessonSlideIndex((idx) => Math.min((lesson?.slides.length || 1) - 1, idx + 1))}
+                onClick={() => changeSlide(Math.min((lesson?.slides.length || 1) - 1, lessonSlideIndex + 1))}
                 disabled={!lesson || lessonSlideIndex >= lesson.slides.length - 1}
               >
                 Next
@@ -563,7 +770,16 @@ export default function DashboardPage() {
                 onClick={() => (narrating ? stopNarration() : speakCurrentSlide())}
                 disabled={!lesson}
               >
-                {narrating ? "Stop narration" : "Read slide aloud"}
+                {narrating && narrationMode === "slide" ? "Stop slide narration" : "Read slide aloud"}
+              </AppButton>
+              <AppButton
+                type="button"
+                variant="ghost"
+                className="px-3 py-1"
+                onClick={() => (narrating && narrationMode === "full" ? stopNarration() : speakFullWalkthrough())}
+                disabled={!lesson}
+              >
+                {narrating && narrationMode === "full" ? "Stop full walkthrough" : "Read full walkthrough"}
               </AppButton>
               <AppButton
                 type="button"
@@ -581,6 +797,11 @@ export default function DashboardPage() {
                 <div className="mt-1 text-xs text-slate-300">
                   <ChatMessageBody role="assistant" text={lesson.summary} />
                 </div>
+              </div>
+            ) : null}
+            {lesson?.warning ? (
+              <div className="mt-3 rounded border border-amber-500/50 bg-amber-950/25 p-3 text-xs text-amber-200">
+                {lesson.warning}
               </div>
             ) : null}
             {lessonUiError ? (
@@ -609,6 +830,19 @@ export default function DashboardPage() {
             {renderJob ? (
               <div className="mt-3 rounded border border-slate-700 bg-slate-950/70 p-3 text-xs text-slate-300">
                 <p>Render status: <span className="font-semibold text-cyan-200">{renderJob.status}</span></p>
+                {renderBusy ? (
+                  <div className="mt-2 space-y-1">
+                    <p className="text-slate-400">
+                      Rendering in progress... {renderElapsedSec}s elapsed{estimatedRenderSec ? ` (est. ${estimatedRenderSec}s)` : ""}.
+                    </p>
+                    <div className="h-1.5 w-full rounded bg-slate-800">
+                      <div
+                        className="h-1.5 rounded bg-cyan-400 transition-all duration-500"
+                        style={{ width: `${Math.max(8, renderProgressPct)}%` }}
+                      />
+                    </div>
+                  </div>
+                ) : null}
                 {renderJob.outputUrl ? (
                   <a href={renderJob.outputUrl} className="mt-1 inline-block underline underline-offset-2 hover:text-cyan-200" target="_blank" rel="noopener noreferrer">
                     Download generated video

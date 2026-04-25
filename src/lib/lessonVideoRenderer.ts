@@ -7,10 +7,12 @@ import { renderAssetDir, renderOutputPath } from "./lessonRenderStore";
 
 const execFileAsync = promisify(execFile);
 let drawtextSupport: boolean | null = null;
+const VIDEO_FPS = "24";
+const X264_PRESET = "veryfast";
 
 function slideDuration(slide: Lesson["slides"][number]) {
   const base = slide.estimatedDurationSec || 22;
-  return Math.max(8, Math.min(70, Math.round(base)));
+  return Math.max(8, Math.min(45, Math.round(base)));
 }
 
 function bgColorForHint(hint?: string): string {
@@ -24,16 +26,63 @@ function bgColorForHint(hint?: string): string {
 
 function fallbackVisualFilterForHint(hint?: string): string {
   const value = (hint || "").toLowerCase();
-  if (value.includes("timeline")) return "hue=h=45:s=0.35,eq=contrast=1.05:brightness=-0.02";
-  if (value.includes("checklist")) return "hue=h=95:s=0.32,eq=contrast=1.03:brightness=-0.03";
-  if (value.includes("support")) return "hue=h=260:s=0.38,eq=contrast=1.06:brightness=-0.01";
-  return "hue=h=200:s=0.28,eq=contrast=1.02:brightness=-0.02";
+  const base = "eq=contrast=1.04:brightness=-0.03:saturation=0.9";
+  if (value.includes("timeline")) {
+    return [
+      "hue=h=38:s=0.42",
+      base,
+      "drawgrid=w=160:h=120:t=1:c=white@0.08",
+      "drawbox=x=80:y=120:w=1120:h=84:color=0x38bdf8@0.20:t=fill",
+      "drawbox=x=80:y=280:w=920:h=84:color=0x22d3ee@0.18:t=fill",
+      "drawbox=x=80:y=440:w=720:h=84:color=0x67e8f9@0.16:t=fill",
+    ].join(",");
+  }
+  if (value.includes("checklist")) {
+    return [
+      "hue=h=95:s=0.32",
+      base,
+      "drawbox=x=120:y=90:w=1040:h=540:color=0x052e16@0.55:t=fill",
+      "drawbox=x=170:y=150:w=28:h=28:color=0x4ade80@0.75:t=fill",
+      "drawbox=x=220:y=158:w=650:h=12:color=0x86efac@0.45:t=fill",
+      "drawbox=x=170:y=250:w=28:h=28:color=0x22c55e@0.75:t=fill",
+      "drawbox=x=220:y=258:w=590:h=12:color=0xbbf7d0@0.42:t=fill",
+      "drawbox=x=170:y=350:w=28:h=28:color=0x16a34a@0.75:t=fill",
+      "drawbox=x=220:y=358:w=700:h=12:color=0xdcfce7@0.40:t=fill",
+    ].join(",");
+  }
+  if (value.includes("support")) {
+    return [
+      "hue=h=260:s=0.38",
+      base,
+      "drawbox=x=110:y=100:w=1060:h=520:color=0x4c1d95@0.45:t=fill",
+      "drawbox=x=160:y=160:w=960:h=110:color=0x7c3aed@0.25:t=fill",
+      "drawbox=x=160:y=320:w=960:h=250:color=0x8b5cf6@0.22:t=fill",
+      "drawgrid=w=120:h=120:t=1:c=white@0.07",
+    ].join(",");
+  }
+  return [
+    "hue=h=200:s=0.30",
+    base,
+    "drawbox=x=100:y=80:w=1080:h=560:color=0x0f172a@0.50:t=fill",
+    "drawbox=x=130:y=120:w=1020:h=90:color=0x334155@0.35:t=fill",
+    "drawbox=x=130:y=250:w=480:h=360:color=0x1e293b@0.35:t=fill",
+    "drawbox=x=670:y=250:w=480:h=360:color=0x1e3a8a@0.30:t=fill",
+  ].join(",");
 }
 
 function pickSlideVoiceText(lesson: Lesson, index: number) {
   const slide = lesson.slides[index];
   if (!slide) return "";
   return `${slide.title}. ${slide.speakerNotes || slide.body}`.trim();
+}
+
+async function commandExists(command: string): Promise<boolean> {
+  try {
+    await execFileAsync("which", [command]);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 async function ensureFfmpegInstalled() {
@@ -105,10 +154,12 @@ async function renderSlideClip(
       drawtext,
       "-c:v",
       "libx264",
+      "-preset",
+      X264_PRESET,
       "-pix_fmt",
       "yuv420p",
       "-r",
-      "30",
+      VIDEO_FPS,
       "-an",
       output,
     ], { cwd: assetDir });
@@ -128,10 +179,12 @@ async function renderSlideClip(
     fallbackFilter,
     "-c:v",
     "libx264",
+    "-preset",
+    X264_PRESET,
     "-pix_fmt",
     "yuv420p",
     "-r",
-    "30",
+    VIDEO_FPS,
     "-an",
     output,
   ], { cwd: assetDir });
@@ -157,6 +210,99 @@ async function concatSlideClips(assetDir: string, clips: string[], outputFile: s
   ], { cwd: assetDir });
 }
 
+async function synthesizeSlideSpeech(assetDir: string, index: number, text: string): Promise<string | null> {
+  const trimmed = text.trim();
+  if (!trimmed) return null;
+
+  const elevenLabsKey = process.env.ELEVENLABS_API_KEY?.trim();
+  const voiceId = process.env.ELEVENLABS_VOICE_ID?.trim() || "EXAVITQu4vr4xnSDxMaL";
+  const modelId = process.env.ELEVENLABS_MODEL_ID?.trim() || "eleven_multilingual_v2";
+  const mp3Path = path.join(assetDir, `speech-${index + 1}.mp3`);
+  const wavPath = path.join(assetDir, `speech-${index + 1}.wav`);
+
+  if (elevenLabsKey) {
+    const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "audio/mpeg",
+        "xi-api-key": elevenLabsKey,
+      },
+      body: JSON.stringify({
+        text: trimmed.slice(0, 4500),
+        model_id: modelId,
+        voice_settings: {
+          stability: 0.45,
+          similarity_boost: 0.8,
+        },
+      }),
+    });
+
+    if (!response.ok) {
+      const err = await response.text().catch(() => "");
+      throw new Error(`ElevenLabs TTS failed: ${response.status} ${err}`);
+    }
+
+    const audioBuffer = Buffer.from(await response.arrayBuffer());
+    await fs.writeFile(mp3Path, audioBuffer);
+    await execFileAsync("ffmpeg", [
+      "-y",
+      "-i",
+      mp3Path,
+      "-ar",
+      "22050",
+      "-ac",
+      "1",
+      wavPath,
+    ]);
+    return wavPath;
+  }
+
+  if (!(await commandExists("say"))) return null;
+  const aiffPath = path.join(assetDir, `speech-${index + 1}.aiff`);
+  // Fallback to local macOS speech when ElevenLabs key is not configured.
+  await execFileAsync("say", ["-o", aiffPath, trimmed]);
+  await execFileAsync("ffmpeg", [
+    "-y",
+    "-i",
+    aiffPath,
+    "-ar",
+    "22050",
+    "-ac",
+    "1",
+    wavPath,
+  ]);
+  return wavPath;
+}
+
+async function muxClipWithAudio(
+  videoClipPath: string,
+  audioPath: string,
+  durationSec: number,
+  outputClipPath: string
+) {
+  await execFileAsync("ffmpeg", [
+    "-y",
+    "-i",
+    videoClipPath,
+    "-i",
+    audioPath,
+    "-filter_complex",
+    `[1:a]apad=pad_dur=${durationSec}[a]`,
+    "-map",
+    "0:v:0",
+    "-map",
+    "[a]",
+    "-t",
+    String(durationSec),
+    "-c:v",
+    "copy",
+    "-c:a",
+    "aac",
+    outputClipPath,
+  ]);
+}
+
 /**
  * Accuracy-safe video render:
  * - On-screen facts come from grounded lesson slides.
@@ -177,8 +323,16 @@ export async function renderLessonVideo(jobId: string, lesson: Lesson): Promise<
     const noteText = pickSlideVoiceText(lesson, i);
     const slideText = `${slide.body}${noteText ? `\n\nNarration: ${noteText}` : ""}`;
     const textPath = await writeSlideTextFile(assetDir, i, slide.title, slideText);
-    const clipPath = await renderSlideClip(assetDir, i, color, duration, textPath, useDrawtext, slide.visualHint);
-    clips.push(clipPath);
+    const baseClipPath = await renderSlideClip(assetDir, i, color, duration, textPath, useDrawtext, slide.visualHint);
+    const ttsText = `${slide.title}. ${slide.speakerNotes || slide.body}`;
+    const audioPath = await synthesizeSlideSpeech(assetDir, i, ttsText);
+    if (audioPath) {
+      const narratedClipPath = path.join(assetDir, `clip-narrated-${i + 1}.mp4`);
+      await muxClipWithAudio(baseClipPath, audioPath, duration, narratedClipPath);
+      clips.push(narratedClipPath);
+    } else {
+      clips.push(baseClipPath);
+    }
   }
 
   if (clips.length === 0) {

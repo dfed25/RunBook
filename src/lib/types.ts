@@ -76,6 +76,7 @@ export type KnowledgeSourceType = (typeof KNOWLEDGE_SOURCE_TYPES)[number];
     summary: string;
     slides: LessonSlide[];
     narrationScript: string;
+  warning?: string;
   sourcesUsed?: Array<{ title: string; url?: string }>;
   confidence?: "high" | "partial";
   limitedSources?: boolean;

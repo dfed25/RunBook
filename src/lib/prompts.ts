@@ -55,5 +55,19 @@ Slide requirements:
 - "visualHint" must be non-factual decorative guidance only (e.g., "abstract gradient background", "timeline icon").
 - Include one dedicated troubleshooting slide and one dedicated "what to ask if blocked" slide when confidence is partial.
 - If two different questions are asked over the same sources, the lesson structure and actions should differ based on user intent.
+- For action slides, format body with this exact structure when possible:
+  Objective:
+  <one concise outcome sentence>
+
+  Steps:
+  1. ...
+  2. ...
+
+  Verification:
+  - ...
+  - ...
+
+  If blocked:
+  - ...
 
 Do not wrap output in markdown code fences.`;

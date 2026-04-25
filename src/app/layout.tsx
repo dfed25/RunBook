@@ -28,7 +28,7 @@ export default function RootLayout({
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col bg-slate-950 text-slate-100">
+      <body suppressHydrationWarning className="min-h-full flex flex-col bg-slate-950 text-slate-100">
         <header className="sticky top-0 z-30 border-b border-slate-800/80 bg-slate-900/90 backdrop-blur-xl">
           <nav className="mx-auto flex max-w-6xl flex-wrap items-center gap-3 px-4 py-3 text-sm sm:px-6">
             <Link href="/" className="mr-2 rounded-md px-2 py-1 font-semibold text-cyan-300 hover:bg-slate-800">

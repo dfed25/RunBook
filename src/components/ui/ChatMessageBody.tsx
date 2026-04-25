@@ -27,12 +27,15 @@ function stripBulletPrefix(line: string): string {
  * Renders assistant chat with readable structure (markdown-lite from the model).
  * User messages stay plain.
  */
-export function ChatMessageBody({ role, text }: { role: "user" | "assistant"; text: string }) {
+export function ChatMessageBody({ role, text }: { role: "user" | "assistant"; text: unknown }) {
+  const normalizedText =
+    typeof text === "string" ? text : text == null ? "" : Array.isArray(text) ? text.join("\n") : String(text);
+
   if (role === "user") {
-    return <span className="whitespace-pre-wrap break-words">{text}</span>;
+    return <span className="whitespace-pre-wrap break-words">{normalizedText}</span>;
   }
 
-  const blocks = text.trim().split(/\n\n+/).filter((b) => b.trim());
+  const blocks = normalizedText.trim().split(/\n\n+/).filter((b) => b.trim());
   if (blocks.length === 0) {
     return <span className="text-slate-500">—</span>;
   }

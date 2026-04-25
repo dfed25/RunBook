@@ -17,6 +17,34 @@ function stripScopeTokens(content: string): string {
     .trim();
 }
 
+function cleanLessonText(value: string): string {
+  return String(value || "")
+    .replace(/\r/g, "\n")
+    .replace(/^MIME:.*$/gim, "")
+    .replace(/^\s*am\s*$/gim, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+function asWalkthroughBody(body: string): string {
+  const text = cleanLessonText(body);
+  if (!text) return "Objective:\nComplete this step.\n\nSteps:\n1. Follow the referenced source guidance.\n\nVerification:\n- Confirm expected outcome.";
+  if (/Objective:|Steps:|Verification:|If blocked:/i.test(text)) return text;
+  const lines = text.split("\n").map((line) => line.trim()).filter(Boolean);
+  const first = lines[0] || text;
+  const remaining = lines.slice(1).join("\n");
+  return [
+    "Objective:",
+    first,
+    "",
+    "Steps:",
+    remaining ? `1. ${remaining.replace(/\n/g, "\n2. ")}` : "1. Follow the task instructions in order.",
+    "",
+    "Verification:",
+    "- Expected result appears and task can be marked complete.",
+  ].join("\n");
+}
+
 function normalizeLesson(lesson: Lesson, question: string, limitedSources: boolean): Lesson {
   const normalizedSlides = Array.isArray(lesson.slides) ? lesson.slides : [];
   if (normalizedSlides.length === 0) {
@@ -31,14 +59,15 @@ function normalizeLesson(lesson: Lesson, question: string, limitedSources: boole
     question,
     slides: normalizedSlides.slice(0, 14).map((slide, index) => ({
       title: slide.title || `Step ${index + 1}`,
-      body: slide.body || "No details available for this step.",
-      speakerNotes: slide.speakerNotes || slide.body || "Review the references in this slide.",
+      body: asWalkthroughBody(String(slide.body || "No details available for this step.")),
+      speakerNotes: cleanLessonText(String(slide.speakerNotes || slide.body || "Review the references in this slide.")),
       citations: Array.isArray(slide.citations) ? slide.citations : [],
       estimatedDurationSec: Math.max(10, Math.min(120, slide.estimatedDurationSec || 28)),
       visualHint: slide.visualHint || "abstract gradient background",
     })),
     sourcesUsed: Array.isArray(lesson.sourcesUsed) ? lesson.sourcesUsed : [],
     narrationScript: lesson.narrationScript || normalizedSlides.map((s) => `${s.title}. ${s.body}`).join("\n"),
+    warning: lesson.warning,
   };
 }
 
@@ -78,6 +107,9 @@ function fallbackLesson(
         .map((doc, i) => `${i + 1}. ${doc.title}${doc.url ? ` (${doc.url})` : ""}`)
         .join("\n")
     : "No retrieved docs were available for this question.";
+  const sanitizedDocSnippet = cleanLessonText(docA?.content || "No additional doc snippets available.")
+    .slice(0, 320)
+    .trim();
 
   return {
     title: "Question-Grounded Walkthrough",
@@ -90,7 +122,7 @@ function fallbackLesson(
     slides: [
       {
         title: "Question focus",
-        body: `Goal: ${question}\n\nUse this runbook to complete relevant tasks, verify outcomes, and escalate blockers quickly.`,
+        body: `Objective:\nAnswer: ${question}\n\nSteps:\n1. Execute the prioritized tasks in order.\n2. Validate each outcome before moving to the next step.\n3. Escalate blockers with concrete evidence.\n\nVerification:\n- You can clearly explain what to do next and why.`,
         speakerNotes: "Restate the goal and align the walkthrough to what the user asked.",
         citations: sourceTitles.slice(0, 2),
         estimatedDurationSec: 15,
@@ -98,7 +130,7 @@ function fallbackLesson(
       },
       {
         title: "Task execution plan",
-        body: taskBlock,
+        body: `Objective:\nComplete the highest-impact onboarding tasks first.\n\nSteps:\n${taskBlock}\n\nVerification:\n- Each completed task has evidence (screenshot, output, or system status).`,
         speakerNotes: "Follow tasks in order, starting with the highest-priority open item.",
         citations: sourceTitles.slice(0, 3),
         estimatedDurationSec: 28,
@@ -106,7 +138,7 @@ function fallbackLesson(
       },
       {
         title: "Use docs for exact steps",
-        body: `Primary references:\n${referenceBlock}\n\nUse these sources to validate commands, channels, and policy constraints while executing tasks.`,
+        body: `Objective:\nUse canonical docs to avoid guessing.\n\nSteps:\n1. Check these primary references:\n${referenceBlock}\n2. Copy exact commands/channels/policy names from source.\n3. Update your task notes with source-backed decisions.\n\nVerification:\n- Every major action maps to at least one cited source.`,
         speakerNotes: "Cross-check each step against source docs before marking tasks complete.",
         citations: sourceTitles.slice(0, 4),
         estimatedDurationSec: 24,
@@ -115,7 +147,7 @@ function fallbackLesson(
       {
         title: "Verification checkpoints",
         body:
-          "After each task, confirm:\n- expected output/result is visible\n- task status is updated\n- blockers are captured with context",
+          "Objective:\nPrevent silent setup mistakes.\n\nSteps:\n1. Confirm expected output/result is visible.\n2. Update task status immediately.\n3. Capture blocker details with exact error text.\n\nVerification:\n- You can show proof for each completed step.",
         speakerNotes: "Verification prevents hidden mistakes and keeps progress measurable.",
         citations: sourceTitles.slice(0, 2),
         estimatedDurationSec: 20,
@@ -124,8 +156,7 @@ function fallbackLesson(
       {
         title: "Troubleshooting and escalation",
         body:
-          `If blocked:\n- capture the exact failing step and error text\n- attach the related task + source reference\n- escalate to your manager or owning channel with reproducible context\n\n` +
-          `Known context sample:\n${(docA?.content || "No additional doc snippets available.").slice(0, 260)}...`,
+          `Objective:\nEscalate fast when blocked and keep momentum.\n\nSteps:\n1. Capture exact failing step + full error text.\n2. Attach related task + source reference.\n3. Post in the owning channel/manager thread with reproducible context.\n\nIf blocked:\n- Include environment, command run, and observed vs expected behavior.\n\nKnown context sample:\n${sanitizedDocSnippet}...`,
         speakerNotes: "Escalating unknowns early prevents errors and keeps onboarding safe.",
         citations: sourceTitles.slice(0, 4),
         estimatedDurationSec: 22,
@@ -285,7 +316,18 @@ export async function POST(req: Request) {
       return NextResponse.json(normalizeLesson(parsedLesson, question, context.limitedSources));
     } catch (e) {
       console.error("Lesson API Gemini Error:", e);
-      return NextResponse.json(fallbackLesson(question, context.limitedSources, context));
+      const fallback = fallbackLesson(question, context.limitedSources, context);
+      const message = e instanceof Error ? e.message : String(e);
+      if (/insufficient_quota|openai/i.test(message)) {
+        fallback.warning =
+          "Both AI providers are currently unavailable (OpenAI quota exhausted and Gemini unavailable/quota-limited). Showing a task/doc grounded fallback walkthrough.";
+      } else if (/API key not valid|API key expired|RESOURCE_EXHAUSTED|quota/i.test(message)) {
+        fallback.warning =
+          "Gemini is unavailable (invalid key or quota), and no usable fallback provider responded. Showing a task/doc grounded fallback walkthrough.";
+      } else {
+        fallback.warning = "AI generation failed, showing a fallback walkthrough from tasks/docs.";
+      }
+      return NextResponse.json(fallback);
     }
 
   } catch (error) {
