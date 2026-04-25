@@ -9,6 +9,7 @@
 !.yarn/plugins
 !.yarn/releases
 !.yarn/versions
+!.env.local
 
 # testing
 /coverage
@@ -44,3 +45,4 @@ next-env.d.ts
 # Generated QA artifacts (scripts/qa-flow.mjs)
 QA_BUG_LOG.md
 screenshots/
+.runbook-data/

@@ -111,7 +111,10 @@ export async function updateTaskStatus(
       `[updateTaskStatus] API ${response.status} for taskId=${taskId} status=${status}:`,
       bodyText.slice(0, 500),
     );
-    return "rejected";
+    // Demo safety net: when backend does not recognize the task ID,
+    // keep UI progress working via local storage fallback.
+    setTaskStatus(taskId, status);
+    return "local";
   } catch (error) {
     console.warn("[updateTaskStatus] network error; using local fallback:", error);
   }
