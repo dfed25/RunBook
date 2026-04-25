@@ -1,10 +1,48 @@
+import { DemoFormShell, DemoPageLayout } from "@/components/demo/DemoFormShell";
+import { RunbookWidget } from "@/components/demo/RunbookWidget";
+
 export default function DemoGithubPage() {
   return (
-    <main className="p-6">
-      <h1 className="text-2xl font-semibold">GitHub Demo</h1>
-      <p className="mt-2 text-sm text-gray-600">
-        This page exists to keep the demo route valid during builds.
-      </p>
-    </main>
+    <DemoPageLayout>
+      <DemoFormShell
+        eyebrow="Northstar AI IT Helpdesk"
+        title="GitHub Access Request"
+        subtitle="Submit this form to request repository and organization access."
+        badge={{
+          text: "Pending Manager Approval",
+          className: "bg-amber-100 text-amber-800",
+        }}
+        gridFields={[
+          { label: "Full Name", value: "Alex Chen" },
+          { label: "Work Email", value: "alex.chen@northstar.ai" },
+          { label: "Team", value: "Platform Engineering" },
+          { label: "Manager", value: "Maya Patel" },
+        ]}
+        detailFields={[
+          { label: "GitHub Username", value: "alexchen-dev" },
+          {
+            label: "Repositories Needed",
+            value: "northstar/web-app\nnorthstar/onboarding-docs",
+            multiline: true,
+          },
+          {
+            label: "Access Justification",
+            value:
+              "I need access to complete setup steps and contribute to onboarding-related issues in my first week.",
+            multiline: true,
+          },
+        ]}
+        callout={{
+          title: "Review notes",
+          items: [
+            "Security training completed on Apr 22.",
+            "Manager approval received.",
+            "Expected fulfillment: within 1 business day.",
+          ],
+          containerClassName: "border border-blue-200 bg-blue-50 text-blue-900",
+        }}
+      />
+      <RunbookWidget key="github" pageKey="github" />
+    </DemoPageLayout>
   );
 }

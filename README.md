@@ -16,6 +16,10 @@ bun dev
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
+## Demo QA flow (Playwright)
+
+With the dev server running (`npm run dev` in another terminal), install browsers once (`npx playwright install chromium`), then run `npm run qa:flow`. The script writes `QA_BUG_LOG.md` and `screenshots/` in the project root (both are gitignored). Set `BASE_URL` if the app is not on `http://localhost:3000`. The process exits with a non-zero code when bugs are logged or the run crashes.
+
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
