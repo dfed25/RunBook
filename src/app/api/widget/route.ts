@@ -54,6 +54,30 @@ function fallbackTaskFromUrlOrText(url: string, pageText: string) {
   return { found: false };
 }
 
+function parseJsonObject(raw: string) {
+  const cleaned = String(raw || "").replace(/```json|```/g, "").trim();
+  try {
+    return JSON.parse(cleaned);
+  } catch {
+    const start = cleaned.indexOf("{");
+    const end = cleaned.lastIndexOf("}");
+    if (start >= 0 && end > start) {
+      try {
+        return JSON.parse(cleaned.slice(start, end + 1));
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  }
+}
+
+function cleanInstructionText(input: unknown, fallback: string) {
+  const text = typeof input === "string" ? input.trim() : "";
+  if (!text) return fallback;
+  return text.slice(0, 240);
+}
+
 const SYSTEM_PROMPT = `You are Runbook, an AI onboarding copilot.
 A new employee has a Chrome extension running on their browser.
 You receive the URL and visible text of the page they are on.
@@ -89,7 +113,8 @@ Rules:
 
 export async function POST(req: NextRequest) {
   try {
-    const { url, pageText, taskTitle, taskDescription } = await req.json();
+    const { url, pageText, taskTitle, taskDescription, interactiveElements } =
+      await req.json();
 
     if (!url || !pageText) {
       return NextResponse.json({ found: false }, { status: 400 });
@@ -137,6 +162,9 @@ export async function POST(req: NextRequest) {
 Here is the text content of the page they are on:
 ${String(pageText).slice(0, 5000)}
 
+Likely clickable elements shown on the page:
+${Array.isArray(interactiveElements) ? interactiveElements.slice(0, 120).join(" | ") : "N/A"}
+
 Return ONLY valid JSON with this exact shape:
 {
   "found": true,
@@ -174,17 +202,19 @@ If you cannot confidently find a specific target, return:
       const data = await response.json();
       const text = data.candidates?.[0]?.content?.parts?.[0]?.text ?? '{"found":false,"elementText":"","instruction":"Try scanning this page again."}';
 
-      let parsed: { found: boolean; elementText?: string; instruction?: string };
-      try {
-        parsed = JSON.parse(text.replace(/```json|```/g, "").trim());
-      } catch {
-        parsed = { found: false, elementText: "", instruction: "Try scanning this page again." };
-      }
+      const parsed =
+        (parseJsonObject(text) as
+          | { found?: boolean; elementText?: string; instruction?: string }
+          | null) ??
+        { found: false, elementText: "", instruction: "Try scanning this page again." };
 
       return NextResponse.json({
         found: !!parsed.found,
-        elementText: parsed.elementText || "",
-        instruction: parsed.instruction || "Try scanning this page again.",
+        elementText: typeof parsed.elementText === "string" ? parsed.elementText.slice(0, 200) : "",
+        instruction: cleanInstructionText(
+          parsed.instruction,
+          "Try scanning this page again.",
+        ),
       });
     }
 
@@ -219,10 +249,8 @@ Is any onboarding task relevant here? If yes, return the task and steps.`;
     const data = await response.json();
     const text = data.candidates?.[0]?.content?.parts?.[0]?.text ?? '{"found":false}';
 
-    let parsed;
-    try {
-      parsed = JSON.parse(text.replace(/```json|```/g, "").trim());
-    } catch {
+    let parsed = parseJsonObject(text);
+    if (!parsed) {
       parsed = fallbackTaskFromUrlOrText(String(url), String(pageText));
     }
 

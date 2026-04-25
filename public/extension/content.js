@@ -2,7 +2,8 @@
 console.log("Runbook content script initialized on", window.location.href);
 
 const RUNBOOK_API = "http://localhost:3000";
-const PAGE_TEXT_LIMIT = 7000;
+const PAGE_TEXT_LIMIT = 12000;
+const MAX_CANDIDATES = 120;
 
 const DEMO_TASKS = {
   "/demo/github": {
@@ -48,8 +49,63 @@ function normalize(text) {
   return (text || "").replace(/\s+/g, " ").trim().toLowerCase();
 }
 
+function isLikelyVisible(el) {
+  if (!(el instanceof Element)) return false;
+  const style = window.getComputedStyle(el);
+  if (style.display === "none" || style.visibility === "hidden") return false;
+  if (el.getAttribute("aria-hidden") === "true") return false;
+  return true;
+}
+
+function candidateTextForElement(el) {
+  const text = normalize(
+    el.innerText ||
+      el.textContent ||
+      el.value ||
+      el.getAttribute("aria-label") ||
+      el.getAttribute("title") ||
+      "",
+  );
+  return text.slice(0, 180);
+}
+
+function collectClickableCandidates() {
+  const seen = new Set();
+  const out = [];
+  const nodes = document.querySelectorAll(
+    "button, a, [role='button'], input[type='submit'], input[type='button'], summary, [aria-label]",
+  );
+  for (const el of nodes) {
+    if (!isLikelyVisible(el)) continue;
+    const text = candidateTextForElement(el);
+    if (!text || seen.has(text)) continue;
+    seen.add(text);
+    out.push(text);
+    if (out.length >= MAX_CANDIDATES) break;
+  }
+  return out;
+}
+
 function getPageText() {
-  return (document.body?.innerText || "").replace(/\s+/g, " ").trim().slice(0, PAGE_TEXT_LIMIT);
+  const parts = [];
+  const title = normalize(document.title || "");
+  const h1 = normalize(document.querySelector("h1")?.textContent || "");
+  const metaDescription = normalize(
+    document.querySelector("meta[name='description']")?.getAttribute("content") || "",
+  );
+  if (title) parts.push(`page title: ${title}`);
+  if (h1) parts.push(`main heading: ${h1}`);
+  if (metaDescription) parts.push(`description: ${metaDescription}`);
+
+  const mainText = normalize(document.body?.innerText || "");
+  if (mainText) parts.push(mainText);
+
+  const clickableHints = collectClickableCandidates();
+  if (clickableHints.length) {
+    parts.push(`clickable elements: ${clickableHints.join(" | ")}`);
+  }
+
+  return parts.join("\n").slice(0, PAGE_TEXT_LIMIT);
 }
 
 function addMessage(role, text) {
@@ -120,12 +176,32 @@ function looksClickable(el) {
 function findElementByText(target) {
   const wanted = normalize(target);
   if (!wanted) return null;
-
-  const clickable = Array.from(document.querySelectorAll("button, a, [role='button'], input[type='submit'], input[type='button'], label, summary"));
+  const clickable = Array.from(
+    document.querySelectorAll(
+      "button, a, [role='button'], input[type='submit'], input[type='button'], label, summary, [aria-label]",
+    ),
+  );
+  let best = null;
+  let bestScore = 0;
   for (const el of clickable) {
-    const text = normalize(el.innerText || el.value || el.getAttribute("aria-label") || "");
-    if (text && (text === wanted || text.includes(wanted) || wanted.includes(text))) return el;
+    if (!isLikelyVisible(el)) continue;
+    const text = candidateTextForElement(el);
+    if (!text) continue;
+    let score = 0;
+    if (text === wanted) score = 100;
+    else if (text.includes(wanted)) score = 85;
+    else if (wanted.includes(text)) score = 70;
+    else {
+      const wantedTokens = wanted.split(" ").filter(Boolean);
+      const overlap = wantedTokens.filter((token) => text.includes(token)).length;
+      score = Math.round((overlap / Math.max(wantedTokens.length, 1)) * 60);
+    }
+    if (score > bestScore) {
+      best = el;
+      bestScore = score;
+    }
   }
+  if (best && bestScore >= 45) return best;
 
   const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
   let node = walker.nextNode();
@@ -215,6 +291,7 @@ async function scanPage() {
     const data = await apiRequest("/api/widget", {
       url: window.location.href,
       pageText: getPageText(),
+      interactiveElements: collectClickableCandidates(),
     });
     if (data?.task?.steps?.length) {
       currentTask = data.task;
@@ -262,6 +339,7 @@ async function findOnPage() {
       pageText: getPageText(),
       taskTitle: currentTask.taskTitle || "",
       taskDescription: step?.text || currentTask.taskDescription || "",
+      interactiveElements: collectClickableCandidates(),
     });
 
     if (!data?.found || !data?.elementText) {

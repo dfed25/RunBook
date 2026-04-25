@@ -11,7 +11,19 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       headers: { "Content-Type": "application/json" },
       body: request.body ? JSON.stringify(request.body) : undefined,
     })
-      .then((res) => res.json())
+      .then(async (res) => {
+        const raw = await res.text();
+        let data = {};
+        try {
+          data = raw ? JSON.parse(raw) : {};
+        } catch {
+          data = { raw };
+        }
+        if (!res.ok) {
+          throw new Error(`HTTP ${res.status}: ${JSON.stringify(data).slice(0, 200)}`);
+        }
+        return data;
+      })
       .then((data) => {
         sendResponse({ ok: true, data });
       })
