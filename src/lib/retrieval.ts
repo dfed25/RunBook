@@ -1,6 +1,23 @@
 import { supabaseAdmin } from "./supabase-admin";
 import { generateEmbedding } from "./ai";
 
+/**
+ * Minimum similarity threshold for vector search results.
+ * Tuned for Gemini embedding model; adjust when switching embedding models or corpus changes.
+ * Can be overridden via VECTOR_MATCH_THRESHOLD env var.
+ */
+const DEFAULT_MATCH_THRESHOLD = 0.4;
+const MATCH_THRESHOLD = (() => {
+  const envThreshold = process.env.VECTOR_MATCH_THRESHOLD;
+  if (envThreshold !== undefined) {
+    const parsed = parseFloat(envThreshold);
+    if (!isNaN(parsed) && parsed >= 0 && parsed <= 1) {
+      return parsed;
+    }
+  }
+  return DEFAULT_MATCH_THRESHOLD;
+})();
+
 interface RetrievedDoc {
   doc: {
     id: string;
@@ -40,7 +57,7 @@ export async function retrieveDocs(question: string, hireId?: string): Promise<R
 
     const { data: documents, error } = await supabaseAdmin.rpc("match_documents", {
       query_embedding: `[${embedding.join(",")}]`,
-      match_threshold: 0.4,
+      match_threshold: MATCH_THRESHOLD,
       match_count: hireId ? TOP_K * 10 : TOP_K
     });
 

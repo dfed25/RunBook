@@ -5,6 +5,12 @@ import { generateJsonFromGemini } from "@/lib/ai";
 import { Lesson } from "@/lib/types";
 import { retrieveDocs } from "@/lib/retrieval";
 
+/**
+ * Minimum similarity score threshold for selecting a document as a lesson source.
+ * Prevents weak matches from being used as lesson content.
+ */
+const MIN_LESSON_SCORE = 0.3;
+
 const STATIC_LESSON = {
   title: "Engineering Setup Basic Training",
   summary: "Welcome! This quick lesson walks you through getting your engineering environment ready.",
@@ -22,7 +28,11 @@ async function resolveLessonDoc(docId: string, query: unknown, hireId?: string) 
   const staticDoc = demoDocs.find((d) => d.id === docId);
   if (staticDoc) return staticDoc;
   if (!query) return undefined;
-  return (await retrieveDocs(String(query), hireId))[0]?.doc;
+  
+  // Retrieve documents and filter by minimum score to ensure quality
+  const retrieved = await retrieveDocs(String(query), hireId);
+  const qualified = retrieved.find((r) => r.score >= MIN_LESSON_SCORE);
+  return qualified?.doc;
 }
 
 export async function POST(req: Request) {
