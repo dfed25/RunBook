@@ -1,0 +1,83 @@
+[
+  {
+    "id": "hr-profile",
+    "title": "Complete HR profile",
+    "description": "Finish employee profile and tax information.",
+    "status": "complete",
+    "sourceTitle": "First Week Onboarding Plan",
+    "estimatedTime": "20 min",
+    "assignee": "Alex Rivera"
+  },
+  {
+    "id": "github-access",
+    "title": "Request GitHub access",
+    "description": "Ask your manager for approval and post in #eng-access.",
+    "status": "todo",
+    "sourceTitle": "Engineering Setup Guide",
+    "estimatedTime": "15 min",
+    "assignee": "Alex Rivera"
+  },
+  {
+    "id": "slack-channels",
+    "title": "Join Slack channels",
+    "description": "Join #eng-onboarding, #dev-help, #eng-access, and #security.",
+    "status": "complete",
+    "sourceTitle": "Engineering Setup Guide",
+    "estimatedTime": "10 min",
+    "assignee": "Alex Rivera"
+  },
+  {
+    "id": "local-dev",
+    "title": "Set up local dev environment",
+    "description": "Clone starter repo, install dependencies, and run the app locally.",
+    "status": "todo",
+    "sourceTitle": "Engineering Setup Guide",
+    "estimatedTime": "45 min",
+    "assignee": "Alex Rivera"
+  },
+  {
+    "id": "security-training",
+    "title": "Complete security training",
+    "description": "Review security policy and enable 2FA.",
+    "status": "todo",
+    "sourceTitle": "Security Policy",
+    "estimatedTime": "30 min",
+    "assignee": "Alex Rivera"
+  },
+  {
+    "id": "task-1777095300509-8ji8du",
+    "title": "test",
+    "description": "dfdfdfd",
+    "status": "todo",
+    "sourceTitle": "User Added",
+    "estimatedTime": "20min",
+    "assignee": "Alex Rivera"
+  },
+  {
+    "id": "task-1777098749743-wz4102",
+    "title": "Complete HR profile",
+    "description": "Finish employee profile and tax information.",
+    "status": "todo",
+    "sourceTitle": "First Week Onboarding Plan",
+    "estimatedTime": "20 min",
+    "assignee": "Jordan Lee"
+  },
+  {
+    "id": "task-1777098940494-fkmejn",
+    "title": "test",
+    "description": "dfdfdfd",
+    "status": "todo",
+    "sourceTitle": "User Added",
+    "estimatedTime": "20min",
+    "assignee": "Priya Sharma"
+  },
+  {
+    "id": "task-1777098945623-mgtysv",
+    "title": "test",
+    "description": "dfdfdfd",
+    "status": "todo",
+    "sourceTitle": "User Added",
+    "estimatedTime": "20min",
+    "assignee": "Jordan Lee"
+  }
+]

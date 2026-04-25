@@ -9,6 +9,7 @@ export type SourceDoc = {
     id: string;
     title: string;
     description: string;
+    assignee: string;
     status: "todo" | "in_progress" | "complete";
     sourceTitle: string;
     estimatedTime: string;
