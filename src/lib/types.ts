@@ -23,3 +23,15 @@ export type SourceDoc = {
     answer: string;
     sources: ChatSource[];
   };
+
+  export type LessonSlide = {
+    title: string;
+    body: string;
+  };
+  
+  export type Lesson = {
+    title: string;
+    summary: string;
+    slides: LessonSlide[];
+    narrationScript: string;
+  };

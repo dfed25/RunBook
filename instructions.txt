@@ -1,0 +1,2610 @@
+Runbook: AI Onboarding Copilot
+1. The One-Sentence Idea
+Runbook is an AI onboarding copilot that turns scattered company knowledge into step-by-step
+workflows new employees can actually complete.
+Most AI workplace tools help people find information. Runbook helps new hires do the work.
+Instead of a new employee asking:
+“Where do I find the expense policy?”
+Runbook answers:
+“Here is the policy, here is the form, here are the steps, and I’ll track whether you finished it.”
+That difference matters. We are not building another AI search bar. We are building an onboarding
+execution system.
+2. The Problem
+Every company has the same problem: important knowledge is scattered everywhere.
+It lives in:
+Notion pages
+Google Drive folders
+Slack messages
+onboarding docs
+HR documents
+random PDFs
+email threads
+people’s heads
+When a new hire joins, they usually waste days or weeks asking questions like:
+“Where is the design system?”
+“How do I request access to GitHub?”
+“Who do I ask about expenses?”
+“What am I supposed to do on day one?”
+“Where is the product roadmap?”
+“How do we ship a feature here?”
+•
+•
+•
+•
+•
+•
+•
+•
+•
+•
+•
+•
+•
+•
+1
+This creates three big problems:
+1. New hires are slow to become productive
+Companies pay employees before they are fully useful. Bad onboarding burns time and money.
+2. Existing employees get interrupted constantly
+Senior employees, managers, and teammates answer the same questions over and over.
+3. Company knowledge disappears
+When employees leave, their knowledge often leaves with them.
+3. Why Existing Tools Are Not Enough
+There are already tools like Notion AI, Glean, Guru, Confluence, Microsoft Copilot, and Slack AI.
+But most of them are still search-first.
+They answer questions like:
+“Where is the policy?”
+But they usually do not turn that answer into a structured onboarding process.
+The key difference:
+Existing tools help people find information. Runbook helps people complete onboarding tasks.
+That is our wedge.
+We should not pitch Runbook as:
+“AI that answers questions about company docs.”
+That sounds too similar to existing products.
+We should pitch it as:
+“An AI onboarding copilot that turns company knowledge into executable workflows so new
+hires become productive faster.”
+2
+4. Our Differentiation
+Differentiator 1: Action-first, not search-first
+Most tools stop at an answer.
+Runbook continues into action.
+Example:
+User asks:
+“How do I submit an expense?”
+A normal AI search tool says:
+“Here is the expense reimbursement policy.”
+Runbook says:
+“Here are the steps: 1. Open the reimbursement form. 2. Attach your receipt. 3. Select your
+department. 4. Submit before Friday. I’ll mark this task complete after you finish.”
+This makes Runbook feel like a copilot, not just a chatbot.
+Differentiator 2: Built specifically for onboarding
+Glean and Copilot are horizontal tools. They try to help everyone with everything.
+Runbook focuses on one high-value workflow: onboarding.
+That gives us a clearer user, clearer ROI, and a better demo.
+Differentiator 3: Progress tracking
+Managers do not just want employees to ask questions. They want to know:
+Has the new hire completed setup?
+What are they stuck on?
+What docs are confusing?
+Which tasks keep creating questions?
+Runbook can show a manager dashboard with onboarding progress.
+•
+•
+•
+•
+3
+Differentiator 4: Turns messy docs into workflows
+Companies often have documentation, but it is messy. Runbook can ingest scattered documents and
+generate onboarding paths automatically.
+Example:
+From docs about GitHub, Slack, payroll, security, and product, Runbook creates:
+Day 1 checklist
+Engineering setup checklist
+HR compliance checklist
+First project checklist
+Differentiator 5: Browser assistant layer
+This is the Grammarly-style idea.
+Runbook should not only live as a website. It should eventually follow the employee across work tools.
+For example, when a new hire is on GitHub, Slack, Notion, Google Drive, Linear, Jira, or an internal tool,
+Runbook can appear as a small floating assistant.
+It can say:
+“You are on the GitHub access page. Do you want help completing the engineering setup
+task?”
+This makes Runbook feel embedded into work, not trapped inside a dashboard.
+5. How Runbook Would Work
+Runbook has four main parts:
+Company knowledge ingestion
+AI answer and workflow generation
+New hire onboarding dashboard
+Browser extension / web assistant layer
+•
+•
+•
+•
+1.
+2.
+3.
+4.
+4
+6. Part One: Company Knowledge Ingestion
+The company connects sources like:
+Notion
+Google Drive
+Slack
+PDFs
+internal onboarding docs
+company handbook
+For a hackathon MVP, we do not need every real integration. We can start with:
+uploaded PDFs / text files
+manually pasted company docs
+maybe Google Drive or Notion if time allows
+The ingestion pipeline works like this:
+User uploads or connects documents.
+Backend extracts the text.
+Text is split into chunks.
+Each chunk is embedded using an embedding model.
+Embeddings are stored in a vector database.
+When a user asks a question, we retrieve the most relevant chunks.
+The LLM answers using only those chunks and cites sources.
+This is called RAG: retrieval-augmented generation.
+For the demo, we can create a fake company workspace with documents like:
+Employee Handbook
+Engineering Setup Guide
+Expense Policy
+Security Policy
+Product Overview
+Slack Etiquette
+First Week Checklist
+This gives us complete control over the demo.
+7. Part Two: AI Answer + Workflow Generation
+Runbook should answer questions, but the real product is workflow generation.
+There are two types of AI responses:
+•
+•
+•
+•
+•
+•
+•
+•
+•
+1.
+2.
+3.
+4.
+5.
+6.
+7.
+•
+•
+•
+•
+•
+•
+•
+5
+Type 1: Question answering
+Example:
+“How do I get access to GitHub?”
+Runbook answers:
+“To get GitHub access, fill out the engineering access request form and tag your manager in
+#eng-access. Source: Engineering Setup Guide.”
+Type 2: Workflow mode
+Example:
+“I’m a new engineer. What should I do today?”
+Runbook generates:
+Set up Slack
+Request GitHub access
+Clone the starter repo
+Read the security policy
+Schedule intro with manager
+Complete payroll setup
+Each task should include:
+title
+description
+source document
+link
+status
+estimated time
+owner/contact person
+This is what makes the product feel different from a regular chatbot.
+8. Part Three: New Hire Dashboard
+The main web app should have two views:
+New Hire View
+This is what the employee sees.
+•
+•
+•
+•
+•
+•
+•
+•
+•
+•
+•
+•
+•
+6
+Features:
+chat with Runbook
+onboarding checklist
+today’s tasks
+progress bar
+source-linked answers
+“I’m stuck” button
+Example homepage:
+Welcome, Alex. You are 42% onboarded.
+Today’s recommended tasks: 1. Request GitHub access 2. Read engineering setup guide 3.
+Complete security training
+Manager View
+This is what the manager or HR person sees.
+Features:
+list of new hires
+onboarding progress
+most common questions
+stuck tasks
+missing documentation alerts
+Example manager insight:
+4 new hires asked about GitHub access this week. Your Engineering Setup Guide may be
+unclear.
+That insight is powerful because Runbook does not just help employees. It improves company
+documentation over time.
+9. Part Four: Grammarly-Style Browser Assistant
+This is the more ambitious version and could be a huge differentiator.
+The idea:
+Runbook becomes a browser extension that appears on other work websites.
+Just like Grammarly follows you across text boxes, Runbook follows you across onboarding workflows.
+•
+•
+•
+•
+•
+•
+•
+•
+•
+•
+•
+7
+How it would work
+The browser extension detects what site the user is on.
+Examples:
+If the user is on GitHub, Runbook shows engineering setup help.
+If the user is on Google Drive, Runbook suggests relevant company docs.
+If the user is in Slack, Runbook suggests the right channel or person.
+If the user is on an expense form, Runbook walks them through the policy.
+What it looks like
+A small floating button appears in the corner of the page.
+When clicked, it opens a side panel:
+“Need help with this page?”
+Then it can show:
+relevant task
+next step
+source doc
+ask Runbook chat
+mark task complete
+Example demo
+The new hire opens a fake GitHub access page.
+Runbook pops up:
+“This looks related to your Engineering Setup task. To complete this, request access from your
+manager and join #eng-access. Want me to open the exact instructions?”
+Then the user clicks “Mark complete,” and the dashboard updates.
+This would be very impressive in a demo because it makes Runbook feel like it works across the internet.
+10. Hackathon MVP Scope
+We need to be careful. The full idea is big, but the hackathon build should be focused.
+•
+•
+•
+•
+•
+•
+•
+•
+•
+8
+Must-build MVP
+Web app landing page
+Login / fake user profile
+Upload or seed company docs
+Chat with AI using company docs
+Generated onboarding checklist
+Task completion tracking
+Source citations
+Manager dashboard
+Stretch goal
+Browser extension / floating widget
+The browser extension does not need to work on every website. For the demo, it can work on 1–2 fake or
+real pages.
+Example:
+fake GitHub access page
+fake expense reimbursement page
+fake company Notion page
+This is enough to show the vision.
+11. Technical Architecture
+Frontend
+Use:
+Next.js / React
+Tailwind CSS
+shadcn/ui if we want clean components
+Main pages:
+Landing page
+New hire dashboard
+Chat page
+Manager dashboard
+Admin/doc upload page
+1.
+2.
+3.
+4.
+5.
+6.
+7.
+8.
+1.
+•
+•
+•
+•
+•
+•
+•
+•
+•
+•
+•
+9
+Backend
+Use:
+Node.js / Next.js API routes, or Python FastAPI
+Supabase / Firebase / Convex / PostgreSQL for database
+Vector DB: Supabase vector, Pinecone, Chroma, or simple in-memory vector store for MVP
+AI Layer
+Use:
+LLM API for answering questions and generating workflows
+embedding model for document search
+Pipeline:
+Upload document
+Extract text
+Chunk text
+Embed chunks
+Store chunks and embeddings
+User asks question
+Retrieve relevant chunks
+Generate answer with citations
+Optionally generate task list
+Database Tables
+users
+id
+name
+role: new_hire, manager, admin
+department
+documents
+id
+title
+source
+uploaded_by
+created_at
+document_chunks
+id
+document_id
+content
+•
+•
+•
+•
+•
+1.
+2.
+3.
+4.
+5.
+6.
+7.
+8.
+9.
+•
+•
+•
+•
+•
+•
+•
+•
+•
+•
+•
+•
+10
+embedding
+page/link/source
+onboarding_tasks
+id
+user_id
+title
+description
+source_document_id
+status: todo, in_progress, complete
+due_date
+questions
+id
+user_id
+question
+answer
+sources
+created_at
+12. Browser Extension Architecture
+The browser extension can be built with:
+Chrome extension Manifest V3
+content script
+background script
+side panel or floating iframe
+Basic extension flow
+User installs extension.
+Content script runs on allowed websites.
+Extension detects URL and page text.
+Extension sends context to Runbook backend.
+Backend returns relevant task/help.
+Floating widget displays guidance.
+For hackathon purposes, the extension can be simple:
+floating button
+opens sidebar
+sends current URL + page title to backend
+backend returns a suggested onboarding task
+•
+•
+•
+•
+•
+•
+•
+•
+•
+•
+•
+•
+•
+•
+•
+•
+•
+•
+•
+1.
+2.
+3.
+4.
+5.
+6.
+•
+•
+•
+•
+11
+Example request:
+{
+"url": "https://github.com/company/repo",
+"title": "GitHub Repository",
+"visibleText": "Request access to repository...",
+"userId": "demo-user"
+}
+Example response:
+{
+"task": "Complete GitHub setup",
+"nextStep": "Request access from your manager and join #eng-access.",
+"source": "Engineering Setup Guide",
+"canMarkComplete": true
+}
+13. Demo Plan
+The demo should tell a story.
+Demo story
+Alex is a new engineer at a startup.
+Before Runbook:
+Alex does not know where anything is.
+Alex keeps asking teammates basic questions.
+Manager has no idea what Alex has completed.
+With Runbook:
+Manager uploads company docs.
+Runbook creates an onboarding checklist.
+Alex asks: “What should I do on my first day?”
+Runbook gives a structured plan.
+Alex asks: “How do I get GitHub access?”
+Runbook answers with sources and a direct next step.
+Alex opens the fake GitHub access page.
+Browser assistant appears and guides Alex.
+Alex marks the task complete.
+•
+•
+•
+1.
+2.
+3.
+4.
+5.
+6.
+7.
+8.
+9.
+12
+Manager dashboard updates instantly.
+That demo shows:
+knowledge retrieval
+workflow generation
+action guidance
+progress tracking
+manager visibility
+browser-based future vision
+14. Pitch Structure
+Opening
+Every company has the same hidden tax: onboarding. New hires waste weeks asking where
+things are, how processes work, and who to talk to. That slows employees down and
+interrupts everyone else.
+Problem
+Company knowledge is scattered across Notion, Slack, Google Drive, email, PDFs, and
+people’s heads. Existing tools help you search that knowledge, but they do not actually turn it
+into completed onboarding work.
+Solution
+Runbook is an AI onboarding copilot that turns company knowledge into step-by-step
+executable workflows. It answers questions with sources, creates personalized onboarding
+checklists, guides employees across the websites they already use, and tracks progress for
+managers.
+Differentiation
+We are not another AI search bar. Tools like Notion AI and Glean help employees find
+information. Runbook helps new hires complete onboarding tasks. We move from knowledge
+retrieval to workflow execution.
+Demo
+Let me show you Alex, a new engineer joining a company. Runbook creates Alex’s first-week
+plan, answers questions using company docs, guides Alex through GitHub setup in the
+browser, and updates the manager dashboard when tasks are completed.
+10.
+•
+•
+•
+•
+•
+•
+13
+Business model
+We charge per employee per month. The value is clear: reduce time-to-productivity, reduce
+manager interruptions, and preserve company knowledge.
+Vision
+Long term, Runbook becomes the action layer on top of company knowledge. It starts with
+onboarding, but expands into every internal workflow: compliance, IT setup, sales
+enablement, support playbooks, and employee training.
+15. Simple Pitch Script
+Every company wastes weeks onboarding new hires because knowledge is scattered across
+Notion, Slack, Google Drive, and people’s heads.
+Existing tools help employees search for answers, but they are passive. They tell you where
+the policy is. They do not help you actually complete the process.
+Runbook is an AI onboarding copilot that turns company knowledge into step-by-step
+workflows. A new hire can ask, “What should I do today?” and Runbook gives them a
+personalized checklist, answers questions with sources, guides them across tools like GitHub
+or Google Drive, and tracks their progress for managers.
+Our wedge is onboarding, but the bigger vision is becoming the action layer for company
+knowledge. Instead of just finding information, Runbook helps employees get work done.
+16. What We Should Build First
+Priority 1: The impressive core demo
+seeded company docs
+AI chat with sources
+onboarding checklist generation
+task completion tracking
+Priority 2: Manager dashboard
+progress by employee
+repeated questions
+stuck tasks
+Priority 3: Browser extension
+floating widget
+•
+•
+•
+•
+•
+•
+•
+•
+14
+works on one or two demo pages
+suggests relevant task
+lets user mark task complete
+Do not waste time on
+real enterprise auth
+too many integrations
+perfect document parsing
+complicated permissions
+real Slack/Notion OAuth unless we are ahead of schedule
+For a hackathon, fake integrations are acceptable if the product vision is clear and the demo feels real.
+17. Why This Could Win
+Runbook is strong because it has:
+A painful problem
+Bad onboarding is universal.
+A clear buyer
+HR, operations, founders, engineering managers.
+A clear ROI
+New hires become productive faster. Existing employees get interrupted less.
+A strong demo
+The product visibly turns docs into action.
+A big vision
+Onboarding is the entry point. The bigger company is an AI workflow layer for every internal process.
+18. Final Positioning
+The most important line:
+Existing tools help employees find information. Runbook helps employees complete work.
+•
+•
+•
+•
+•
+•
+•
+•
+15
+That is the entire differentiation.
+If we build and pitch around that, Runbook feels much bigger than a chatbot. It feels like a company.
+19. 36-Hour Hackathon Execution Plan
+This section is the practical build plan for a four-person team.
+The goal is not to build the full future version of Runbook. The goal is to build a polished, convincing MVP
+that proves the product vision.
+The Hackathon Goal
+By the end of 36 hours, we need a working demo that shows:
+A company uploads or has seeded onboarding documents.
+Runbook turns those documents into an onboarding checklist.
+A new hire can ask questions and get answers with sources.
+A new hire can complete tasks.
+A manager can see onboarding progress.
+Optional but powerful: a browser extension/floating widget appears on another website and helps
+complete a task.
+If we can show those six things smoothly, we have a very strong project.
+20. Core MVP Features
+Must Have
+These are non-negotiable.
+Landing page
+What Runbook is
+Problem/solution
+CTA to enter demo
+Seeded demo company workspace
+Fake company docs already loaded
+1.
+2.
+3.
+4.
+5.
+6.
+1.
+2.
+3.
+4.
+5.
+6.
+16
+Example docs: Engineering Setup, Expense Policy, Security Policy, First Week Guide
+New hire dashboard
+Welcome message
+Progress bar
+Checklist of onboarding tasks
+Task status: todo, in progress, complete
+AI chat with sources
+User asks onboarding questions
+AI answers using company docs
+Shows source title/link below answer
+Task generation
+Generate or show first-week checklist from company docs
+Each task should have title, description, source, estimated time
+Manager dashboard
+Shows new hire progress
+Shows completed/stuck tasks
+Shows most asked questions or documentation gaps
+Strong Stretch Goal
+Browser assistant / extension-style demo
+Floating Runbook widget on a demo page
+Detects page context
+Suggests a relevant onboarding task
+Can mark task complete
+Cut If Behind
+Do not waste time on these unless everything else is done:
+Real Slack OAuth
+7.
+8.
+9.
+10.
+11.
+12.
+13.
+14.
+15.
+16.
+17.
+18.
+19.
+20.
+21.
+22.
+23.
+1.
+2.
+3.
+4.
+5.
+•
+17
+Real Notion OAuth
+Real Google Drive integration
+Perfect auth
+Advanced permissions
+Complex vector database setup
+Real company deployment
+Many browser extension websites
+For the hackathon, seeded demo data is completely acceptable as long as the product vision is clear.
+21. Recommended Tech Stack
+Use the stack that lets us ship fastest.
+Recommended Stack
+Frontend: Next.js + React + Tailwind
+UI: shadcn/ui or simple Tailwind components
+Backend: Next.js API routes
+Database: Supabase, Firebase, Convex, or even local JSON/mock data for MVP
+AI: OpenAI, Anthropic, Gemini, or whatever API is easiest to access
+Vector search: easiest option available
+Supabase vector if someone knows it
+Pinecone if already familiar
+Chroma if using Python
+Simple keyword search fallback if vector setup becomes painful
+Important Note
+Do not let vector database complexity kill the project.
+If true embeddings take too long, use a simpler search approach:
+Store documents as text chunks.
+Use keyword matching or basic similarity.
+Send the most relevant chunks into the LLM.
+Make the answer cite the chunk titles.
+The judges care more about the working product and pitch than whether the retrieval system is technically
+perfect.
+22. Team Roles
+Assume four people.
+•
+•
+•
+•
+•
+•
+•
+•
+•
+•
+•
+•
+•
+•
+•
+•
+•
+1.
+2.
+3.
+4.
+18
+Person 1: Product Lead + Pitch + Demo Flow
+Main responsibility: make sure we are building the right thing and can explain it clearly.
+Tasks:
+Own final demo story.
+Write the pitch.
+Create fake company docs.
+Create demo user story: Alex the new engineer.
+Keep the team from overbuilding.
+Test the app like a judge would.
+Prepare screenshots/video backup.
+Make final slides if needed.
+This person should constantly ask:
+“Will this help us win the demo?”
+Person 2: Frontend Lead
+Main responsibility: make the app look polished and easy to use.
+Tasks:
+Build landing page.
+Build new hire dashboard.
+Build chat UI.
+Build checklist UI.
+Build manager dashboard.
+Make the demo flow smooth.
+Add loading states and empty states.
+Make everything look clean.
+This person should focus on visual polish because judges judge quickly.
+Person 3: Backend / AI Lead
+Main responsibility: make the AI actually work.
+Tasks:
+Build document ingestion or seeded doc system.
+Build API endpoint for chat.
+Build retrieval system.
+Build task generation endpoint.
+Store tasks/questions/progress.
+•
+•
+•
+•
+•
+•
+•
+•
+•
+•
+•
+•
+•
+•
+•
+•
+•
+•
+•
+•
+•
+19
+Make answers cite sources.
+Add error handling so demo does not crash.
+This person owns the “magic.”
+Person 4: Browser Assistant + Integration + QA
+Main responsibility: build the impressive Grammarly-style layer and test everything.
+Tasks:
+Build browser extension or simulated browser widget.
+Create fake external pages for demo.
+Connect widget to task completion.
+Test the app end-to-end repeatedly.
+Find bugs.
+Write backup demo script.
+Help frontend/backend wherever blocked.
+If the browser extension is too hard, this person builds a simulated extension inside a demo page. That is
+okay for a hackathon.
+23. 36-Hour Timeline
+This assumes we will not code perfectly for 36 hours straight. The plan includes breaks, food, testing, and
+pitch prep.
+Phase 1: First 2 Hours — Lock Scope and Setup
+Hour 0–1: Final Decision and Product Alignment
+Everyone agrees on the exact MVP.
+Decisions to make immediately:
+Product name: Runbook
+User story: Alex, a new engineer joining a startup
+Demo company: fictional startup, e.g. “Northstar AI”
+Must-have docs:
+First Week Guide
+Engineering Setup Guide
+Expense Policy
+Security Policy
+Product Overview
+•
+•
+•
+•
+•
+•
+•
+•
+•
+•
+•
+•
+•
+•
+•
+•
+•
+•
+20
+Must-have demo questions:
+“What should I do on my first day?”
+“How do I get GitHub access?”
+“How do I submit an expense?”
+“What security rules do I need to follow?”
+Output by end of Hour 1:
+Shared GitHub repo created
+Shared task board created
+Final scope written down
+Everyone knows their role
+Hour 1–2: Project Setup
+Person 2:
+Create Next.js app.
+Add Tailwind.
+Add basic layout.
+Push starter app.
+Person 3:
+Set up backend API route structure.
+Add AI API key locally.
+Create first test endpoint: /api/chat .
+Person 1:
+Write fake company docs in Markdown.
+Write first draft of pitch.
+Write demo flow.
+Person 4:
+Decide browser extension approach.
+Create fake external demo pages if needed.
+Start QA checklist.
+Checkpoint:
+Everyone can run the app locally.
+Repo has clear README setup instructions.
+•
+•
+•
+•
+•
+•
+•
+•
+•
+•
+•
+•
+•
+•
+•
+•
+•
+•
+•
+•
+•
+•
+•
+•
+21
+Phase 2: Hours 2–8 — Build the Core Product
+Skeleton
+Person 2: Frontend Skeleton
+Build pages:
+/ landing page
+/dashboard new hire dashboard
+/chat or chat component inside dashboard
+/manager manager dashboard
+/admin docs/admin page if needed
+Do not make it perfect yet. Make it navigable.
+New hire dashboard should show:
+Welcome, Alex
+Progress bar
+Task list
+Chat panel
+Manager dashboard should show:
+Alex: 40% onboarded
+completed tasks
+stuck tasks
+common questions
+Person 3: Backend AI Skeleton
+Create seeded docs in backend:
+const docs = [
+{
+title: "Engineering Setup Guide",
+content: "To get GitHub access..."
+},
+{
+title: "Expense Policy",
+content: "Expenses must be submitted..."
+}
+]
+1.
+2.
+3.
+4.
+5.
+•
+•
+•
+•
+•
+•
+•
+•
+22
+Build:
+/api/chat
+/api/tasks/generate
+/api/tasks/update
+Basic chat flow:
+User sends question.
+Backend finds relevant docs.
+Backend sends docs + question to LLM.
+LLM returns answer and sources.
+Important prompt rule:
+Answer only using the provided company docs. If the answer is not in the docs, say what is
+missing and suggest who to ask.
+Person 1: Demo Content
+Create high-quality fake docs.
+Docs should include specific details so the demo feels real:
+Engineering Setup Guide:
+Join #eng-onboarding
+Request GitHub access from manager
+Clone starter repo
+Run npm install
+Ask DevOps for Vercel access
+Expense Policy:
+Submit expenses within 14 days
+Use Ramp reimbursement form
+Receipts required over $25
+Manager approval needed over $100
+Security Policy:
+Enable 2FA
+Do not paste secrets into Slack
+Use company password manager
+Report suspicious emails in #security
+•
+•
+•
+1.
+2.
+3.
+4.
+•
+•
+•
+•
+•
+•
+•
+•
+•
+•
+•
+•
+•
+23
+First Week Guide:
+Day 1: HR setup, Slack, intro meeting
+Day 2: engineering environment
+Day 3: first small PR
+Day 4: product deep dive
+Day 5: retro with manager
+Person 4: Browser Demo Skeleton
+Option A: Real Chrome extension
+Build:
+manifest.json
+content script
+floating button
+side panel
+call backend with page context
+Option B: Simulated extension
+Build:
+a fake GitHub access page inside the app
+floating Runbook widget on the page
+widget suggests task
+mark complete button updates dashboard
+Recommendation:
+Start with Option B. If ahead, convert it into a real extension.
+Checkpoint at Hour 8:
+App has pages.
+Chat endpoint returns AI answers.
+Task list exists.
+Fake docs exist.
+Browser/widget demo has started.
+•
+•
+•
+•
+•
+•
+•
+•
+•
+•
+•
+•
+•
+•
+•
+•
+•
+•
+•
+24
+Phase 3: Hours 8–14 — Make the Product Actually
+Work
+Person 2: Connect Frontend to Backend
+Tasks:
+Chat UI sends messages to /api/chat .
+Display AI response.
+Display source cards below response.
+Task checklist can update task status.
+Progress bar updates.
+Important UI details:
+Make source citations very visible.
+Use clean cards.
+Add loading state: “Runbook is searching company knowledge...”
+Add task status badges.
+Person 3: Improve AI Quality
+Improve retrieval:
+chunk docs by section
+match question to best chunks
+return source title
+Improve prompts:
+For chat:
+You are Runbook, an onboarding copilot for new employees.
+Use only the provided company knowledge.
+Answer clearly and practically.
+If the user asks how to do something, provide step-by-step instructions.
+Always include source titles.
+If information is missing, say what is missing.
+For task generation:
+•
+•
+•
+•
+•
+•
+•
+•
+•
+•
+•
+•
+25
+Given these company docs, generate a first-week onboarding checklist for a new
+engineer.
+Return JSON with title, description, estimatedTime, sourceTitle, and status.
+Make sure JSON parsing works. If the LLM returns bad JSON, add fallback static tasks.
+Person 1: Pitch + Judge Questions
+Write answers to likely judge questions:
+“How is this different from Glean or Notion AI?”
+Glean and Notion AI help employees search for information. Runbook turns that information
+into completed onboarding workflows. We are not trying to be a general enterprise search
+tool; we are focused on reducing time-to-productivity for new hires.
+“Who pays for this?”
+HR teams, founders, operations teams, and engineering managers. Pricing can be per
+employee per month.
+“Why start with onboarding?”
+Onboarding is painful, universal, measurable, and high urgency. It is also the perfect wedge
+into broader internal workflow automation.
+“What is the bigger vision?”
+Runbook becomes the action layer over company knowledge. Today it helps new hires
+onboard. Tomorrow it powers every internal workflow.
+Person 4: End-to-End Testing
+Start testing early.
+Test paths:
+Landing page → dashboard
+Ask “How do I get GitHub access?”
+Check answer and source
+Complete GitHub task
+Manager dashboard updates
+Open demo external page
+Widget appears
+Widget marks task complete
+1.
+2.
+3.
+4.
+5.
+6.
+7.
+8.
+26
+Write down bugs immediately.
+Checkpoint at Hour 14:
+New hire demo flow mostly works.
+Chat gives useful answers.
+Sources show.
+Checklist updates.
+Manager dashboard has real-looking data.
+Phase 4: Hours 14–20 — Polish and Browser
+Assistant
+This is where the project starts feeling impressive.
+Person 2: UI Polish
+Focus on:
+landing page hero section
+dashboard polish
+manager dashboard polish
+clear navigation
+nice empty/loading states
+mobile responsiveness only if easy
+Do not redesign everything. Polish what exists.
+Landing page should say:
+Turn company knowledge into completed onboarding workflows.
+Supporting text:
+Runbook helps new hires get productive faster by answering questions, generating checklists,
+guiding them across tools, and tracking onboarding progress.
+Person 3: Reliability
+Add safeguards:
+If AI API fails, return fallback answer.
+If JSON parsing fails, return fallback tasks.
+•
+•
+•
+•
+•
+•
+•
+•
+•
+•
+•
+•
+•
+27
+If source missing, show seeded source.
+Log errors clearly.
+Demo must not depend on perfect AI behavior.
+Create pre-tested demo questions that work every time.
+Person 1: Demo Script
+Write exact demo script.
+Example:
+“This is Alex, a new engineer.”
+“Runbook created his first-week onboarding plan from company docs.”
+“Alex asks how to get GitHub access.”
+“Runbook answers with steps and cites the Engineering Setup Guide.”
+“Now Alex opens the GitHub setup page.”
+“Runbook follows him there like Grammarly and guides him through the task.”
+“When Alex completes it, the manager dashboard updates.”
+“This is the difference: not just search, execution.”
+Person 4: Browser Widget
+Best demo version:
+Create /demo/github-access page.
+Add floating Runbook assistant button.
+When clicked, it says:
+This page matches your “Complete GitHub Setup” task. Next step: request access from your
+manager and join #eng-onboarding.
+Buttons:
+Ask Runbook
+Mark Complete
+View Source
+When Mark Complete is clicked:
+task updates in dashboard
+progress bar changes
+manager dashboard changes
+•
+•
+1.
+2.
+3.
+4.
+5.
+6.
+7.
+8.
+•
+•
+•
+•
+•
+•
+•
+•
+•
+28
+Checkpoint at Hour 20:
+Demo feels coherent.
+UI is clean.
+Browser widget works in some form.
+Pitch script exists.
+Phase 5: Hours 20–26 — Real Testing, Bug Fixing,
+and Backup Plan
+This phase is where many hackathon teams fail. They keep adding features instead of making the demo
+reliable.
+Everyone: Stop Adding Big Features
+At this point, only add features if they directly improve the demo.
+Testing Checklist
+Run the full demo at least 10 times.
+Test:
+fresh page load
+slow AI response
+wrong question
+completing task
+refreshing page
+manager dashboard update
+widget interaction
+broken API key fallback
+Person 1: Prepare Backup Demo
+Make:
+screenshots of each important screen
+short screen recording if possible
+backup pitch without live AI
+If the internet fails, we still need to present.
+•
+•
+•
+•
+•
+•
+•
+•
+•
+•
+•
+•
+•
+•
+•
+29
+Person 2: Fix UI Bugs
+spacing
+broken buttons
+loading states
+source cards
+mobile/desktop view
+Person 3: Fix Backend Bugs
+API errors
+CORS if extension uses backend
+malformed AI output
+bad retrieval
+slow response
+Person 4: QA + Demo Reliability
+Create a final demo checklist:
+Open landing page
+Click launch demo
+Show dashboard
+Ask first question
+Show answer
+Show sources
+Complete task
+Show widget
+Show manager dashboard
+End with pitch line
+Checkpoint at Hour 26:
+Product should be demo-ready.
+No new major features unless everything is stable.
+Phase 6: Hours 26–30 — Pitch, Slides, and Story
+Build a Simple Slide Deck
+5 slides maximum.
+•
+•
+•
+•
+•
+•
+•
+•
+•
+•
+1.
+2.
+3.
+4.
+5.
+6.
+7.
+8.
+9.
+10.
+•
+•
+30
+Slide 1: Problem
+New hires waste weeks because company knowledge is scattered.
+Slide 2: Solution
+Runbook turns company knowledge into executable onboarding workflows.
+Slide 3: Demo
+Show product.
+Slide 4: Market / Business
+Every growing company onboards employees. Charge per employee per month.
+Slide 5: Vision
+Onboarding is the wedge. Runbook becomes the action layer for internal company
+workflows.
+Pitch Timing
+If you have 3 minutes:
+30 seconds problem
+30 seconds solution
+90 seconds demo
+30 seconds business/vision
+If you have 5 minutes:
+45 seconds problem
+45 seconds solution/differentiation
+2.5 minutes demo
+1 minute business/vision
+Main Pitch Line
+Repeat this multiple times:
+Existing tools help employees find information. Runbook helps employees complete work.
+•
+•
+•
+•
+•
+•
+•
+•
+31
+Phase 7: Hours 30–34 — Final Polish and Rehearsal
+Everyone Rehearses
+Run the pitch out loud.
+Do not just read silently.
+Practice:
+who talks
+who drives the demo
+what happens if AI is slow
+what happens if page breaks
+what to skip if time runs out
+Final Product Polish
+Add small details that make it feel real:
+company name/logo
+user avatar
+source chips
+progress percentage
+realistic task titles
+manager insights
+“Most asked questions” card
+“Documentation gap detected” card
+These small details make it feel like a startup.
+Phase 8: Hours 34–36 — Submission and Demo
+Lock
+Final tasks:
+Deploy app.
+Test deployed app.
+Submit links.
+Save backup screenshots.
+Save backup video.
+Make sure API keys work in production.
+Freeze code.
+•
+•
+•
+•
+•
+•
+•
+•
+•
+•
+•
+•
+•
+•
+•
+•
+•
+•
+•
+•
+32
+Do not make risky changes in the last hour.
+Last-hour rule:
+Only fix critical bugs. Do not add features.
+24. How to Use AI Tools During the Hackathon
+Use AI constantly, but in the right way.
+For Coding
+Use ChatGPT, Claude, Cursor, GitHub Copilot, or similar tools to:
+generate components
+debug errors
+write API routes
+write prompts
+create fake demo data
+write tests
+explain stack traces
+But never blindly paste large chunks without understanding them.
+Best AI Prompts for Coding
+Debug prompt
+Here is the error, here is the file, and here is what I expected to happen. Find
+the bug and give me the smallest safe fix.
+Component prompt
+Build a clean React/Tailwind component for a new hire onboarding checklist. It
+should support todo, in-progress, and complete states, and call onTaskUpdate
+when a task is clicked.
+API prompt
+Write a Next.js API route that receives a user question, retrieves relevant
+document chunks from an array, sends them to an LLM, and returns an answer with
+source titles.
+•
+•
+•
+•
+•
+•
+•
+33
+Refactor prompt
+Clean this code without changing behavior. Keep it simple and hackathon-safe.
+Test prompt
+Given this component/API route, list the top 10 things that could break during a
+live demo and how to guard against them.
+For Pitch
+Use AI to:
+tighten the pitch
+write judge Q&A answers
+make the wording sharper
+create slide copy
+generate tagline options
+Prompt:
+Act like a startup accelerator judge. Critique this pitch for clarity,
+differentiation, and fundability. Give blunt feedback and rewrite it stronger.
+For Product Strategy
+Use AI to compare Runbook against competitors.
+Prompt:
+Act like a VC partner. What would make Runbook feel like a fundable company
+instead of a hackathon project? What objections would you ask and how should we
+answer them?
+25. How to Check That Everything Works
+Unit-Level Checks
+Person 3 should test:
+/api/chat returns an answer
+•
+•
+•
+•
+•
+•
+34
+answer includes sources
+unknown question gives safe fallback
+task generation returns valid JSON
+task update changes status
+UI Checks
+Person 2 should test:
+buttons work
+loading states appear
+dashboard does not crash
+source cards render
+task progress updates
+End-to-End Demo Checks
+Person 4 should run:
+Start from landing page.
+Open dashboard.
+Ask GitHub question.
+Confirm useful AI answer.
+Complete GitHub task.
+Open browser widget page.
+Mark task complete from widget.
+Open manager dashboard.
+Confirm progress changed.
+Judge Confusion Check
+Person 1 should ask someone outside the team:
+“After watching this, what does our product do?”
+If they cannot explain it in one sentence, the pitch is not clear enough.
+26. Demo Data We Should Use
+Demo User
+Name: Alex Chen Role: New Software Engineer Company: Northstar AI Manager: Maya Patel
+Demo Tasks
+Complete HR profile
+•
+•
+•
+•
+•
+•
+•
+•
+•
+1.
+2.
+3.
+4.
+5.
+6.
+7.
+8.
+9.
+1.
+35
+Join Slack channels
+Request GitHub access
+Set up local development environment
+Read security policy
+Submit first test PR
+Schedule manager 1:1
+Demo Questions
+Use these because they should produce strong answers:
+“What should I do on my first day?”
+“How do I get GitHub access?”
+“How do I submit an expense?”
+“What security rules do I need to follow?”
+“Who do I ask if I am stuck setting up the repo?”
+Demo Sources
+First Week Guide
+Engineering Setup Guide
+Expense Policy
+Security Policy
+Company Handbook
+27. Final Division of Labor Summary
+Person 1: Product/Pitch
+fake docs
+pitch script
+slides
+demo story
+judge Q&A
+customer/business model
+Person 2: Frontend
+landing page
+new hire dashboard
+chat UI
+checklist UI
+manager dashboard
+polish
+2.
+3.
+4.
+5.
+6.
+7.
+1.
+2.
+3.
+4.
+5.
+•
+•
+•
+•
+•
+•
+•
+•
+•
+•
+•
+•
+•
+•
+•
+•
+•
+36
+Person 3: Backend/AI
+APIs
+document retrieval
+AI prompts
+task generation
+data storage
+reliability/fallbacks
+Person 4: Browser/QA
+widget/extension
+fake external pages
+end-to-end testing
+bug reports
+backup demo
+deployment help
+28. What Success Looks Like
+A successful final demo should make judges think:
+“I understand the problem.”
+“I have seen this problem myself.”
+“The product works.”
+“This is different from just AI search.”
+“This could become a real company.”
+If they think those five things, we have a real chance.
+29. Final Warning
+The biggest risk is overbuilding.
+Do not try to build the full enterprise platform.
+Build the movie trailer version:
+beautiful
+clear
+•
+•
+•
+•
+•
+•
+•
+•
+•
+•
+•
+•
+•
+•
+37
+impressive
+reliable
+easy to understand
+The goal is not to prove every integration works.
+The goal is to prove the future is obvious.
+30. Start-Here Team Guide
+This is the practical guide the team should read before writing code.
+The goal is to avoid confusion. Everyone should know:
+what we are building
+what we are not building
+who owns what
+what order to work in
+what counts as done
+what to do if something breaks
+31. Product Definition
+Product Name
+Runbook
+One-Liner
+Runbook turns scattered company knowledge into step-by-step onboarding workflows so
+new hires can get productive faster.
+Longer Explanation
+Runbook connects to company docs, wiki pages, and onboarding resources. It answers new hire questions
+with sources, generates onboarding checklists, tracks progress, and can turn long documents into short
+onboarding lessons.
+Main Differentiation
+Existing tools help employees find information. Runbook helps employees complete work.
+That line should guide everything we build.
+•
+•
+•
+•
+•
+•
+•
+•
+•
+38
+32. Final MVP We Must Demo
+The guaranteed demo should show these five things:
+A new hire dashboard for Alex.
+An onboarding checklist generated from company docs.
+A chat assistant that answers questions using company docs and cites sources.
+Task progress tracking.
+A manager dashboard showing Alex’s progress.
+If we finish those, the project is strong.
+Stretch Features
+Only after the core demo works:
+Runbook Lessons: turn docs into short slide-based lessons.
+Browser assistant: a Grammarly-style floating widget on a demo page.
+Text-to-speech narration for lessons.
+Real document upload.
+Real Chrome extension.
+33. Recommended Hackathon Stack
+Use the fastest stack the team knows.
+Best Simple Stack
+Next.js for frontend and backend API routes
+React for components
+Tailwind CSS for styling
+OpenAI/Anthropic/Gemini for LLM calls
+Local JSON / in-memory data for MVP
+Optional: Supabase/Firebase/Convex if someone is comfortable
+Why this stack
+It keeps everything in one app:
+pages
+components
+API routes
+demo data
+AI calls
+1.
+2.
+3.
+4.
+5.
+1.
+2.
+3.
+4.
+5.
+•
+•
+•
+•
+•
+•
+•
+•
+•
+•
+•
+39
+Less setup means more time for polish.
+34. Step-by-Step Setup
+Step 1: Create the repo
+One person creates a GitHub repo:
+git init
+or create it through GitHub and clone it.
+Step 2: Create Next.js app
+npx create-next-app@latest runbook
+Recommended answers:
+TypeScript: yes
+ESLint: yes
+Tailwind: yes
+src/ directory: yes
+App Router: yes
+import alias: yes
+Then:
+cd runbook
+npm run dev
+Step 3: Push starter app
+git add .
+git commit -m "Initial Next.js app"
+git branch -M main
+git remote add origin <repo-url>
+git push -u origin main
+•
+•
+•
+•
+•
+•
+40
+Step 4: Everyone clones
+git clone <repo-url>
+cd runbook
+npm install
+npm run dev
+Step 5: Create branches
+Each person should work on a branch:
+git checkout -b person-name-feature
+Examples:
+git checkout -b frontend-dashboard
+git checkout -b backend-ai
+git checkout -b lessons-feature
+git checkout -b browser-widget
+Step 6: Environment variables
+Create .env.local :
+OPENAI_API_KEY=your_key_here
+or whatever provider is being used.
+Never commit .env.local .
+35. Suggested File Structure
+runbook/
+ src/
+ app/
+ page.tsx
+ dashboard/
+ page.tsx
+ manager/
+ page.tsx
+41
+ admin/
+ page.tsx
+ demo/
+ github/
+ page.tsx
+ expenses/
+ page.tsx
+ api/
+ chat/
+ route.ts
+ tasks/
+ generate/
+ route.ts
+ update/
+ route.ts
+ lesson/
+ route.ts
+ components/
+ Layout.tsx
+ LandingPage.tsx
+ ChatPanel.tsx
+ TaskList.tsx
+ ProgressCard.tsx
+ SourceCard.tsx
+ ManagerDashboard.tsx
+ LessonViewer.tsx
+ RunbookWidget.tsx
+ lib/
+ demoDocs.ts
+ demoTasks.ts
+ retrieval.ts
+ prompts.ts
+ types.ts
+ ai.ts
+This structure keeps things clean.
+36. Shared Types
+Create src/lib/types.ts .
+export type SourceDoc = {
+id: string;
+title: string;
+content: string;
+42
+url?: string;
+};
+export type OnboardingTask = {
+id: string;
+title: string;
+description: string;
+status: "todo" | "in_progress" | "complete";
+sourceTitle: string;
+estimatedTime: string;
+};
+export type ChatSource = {
+title: string;
+excerpt: string;
+};
+export type ChatResponse = {
+answer: string;
+sources: ChatSource[];
+};
+export type LessonSlide = {
+title: string;
+body: string;
+};
+export type Lesson = {
+title: string;
+summary: string;
+slides: LessonSlide[];
+narrationScript: string;
+};
+37. Demo Docs
+Create src/lib/demoDocs.ts .
+These docs are the most important demo ingredient. Good docs make the AI look good.
+import { SourceDoc } from "./types";
+export const demoDocs: SourceDoc[] = [
+{
+43
+id: "engineering-setup",
+title: "Engineering Setup Guide",
+url: "/docs/engineering-setup",
+content: `
+Engineering Setup Guide
+New engineers should begin by joining the #eng-onboarding and #dev-help Slack
+channels.
+To get GitHub access, ask your manager to approve your account and then post a
+request in #eng-access.
+After GitHub access is approved, clone the starter repository, run npm install,
+and then run npm run dev.
+If you get stuck setting up the repo, ask in #dev-help and tag the onboarding
+buddy assigned to you.
+Your first engineering task is to make a small documentation change and open
+your first pull request.
+ `
+},
+{
+id: "first-week",
+title: "First Week Onboarding Plan",
+url: "/docs/first-week",
+content: `
+First Week Onboarding Plan
+Day 1: Complete HR profile, join Slack, meet your manager, and review the
+company handbook.
+Day 2: Set up your engineering environment and request GitHub access.
+Day 3: Read the product overview and shadow one customer call recording.
+Day 4: Make your first small pull request and review the security policy.
+Day 5: Meet with your manager for a first-week retro and set goals for week two.
+ `
+},
+{
+id: "expense-policy",
+title: "Expense Policy",
+url: "/docs/expense-policy",
+content: `
+Expense Policy
+Employees must submit expenses within 14 days of the purchase date.
+Receipts are required for any expense over $25.
+Expenses over $100 require manager approval before reimbursement.
+Use the Ramp reimbursement form to submit expenses.
+For questions, contact the People Operations team in #people-ops.
+ `
+},
+{
+44
+id: "security-policy",
+title: "Security Policy",
+url: "/docs/security-policy",
+content: `
+Security Policy
+All employees must enable two-factor authentication on company accounts.
+Do not paste passwords, API keys, tokens, or secrets into Slack, email, GitHub,
+or documents.
+Use the company password manager for all work credentials.
+Report suspicious emails or security issues in #security immediately.
+New engineers must complete security training before merging production code.
+ `
+},
+{
+id: "product-overview",
+title: "Product Overview",
+url: "/docs/product-overview",
+content: `
+Product Overview
+Northstar AI builds workflow automation tools for small businesses.
+The product helps teams turn repetitive internal processes into guided
+workflows.
+The main customer is an operations leader at a growing company.
+The current product focus is onboarding, internal support, and process
+documentation.
+ `
+}
+];
+38. Demo Tasks
+Create src/lib/demoTasks.ts .
+import { OnboardingTask } from "./types";
+export const initialTasks: OnboardingTask[] = [
+{
+id: "hr-profile",
+title: "Complete HR profile",
+description: "Finish your employee profile and tax information.",
+status: "complete",
+sourceTitle: "First Week Onboarding Plan",
+45
+estimatedTime: "20 min"
+},
+{
+id: "slack-channels",
+title: "Join required Slack channels",
+description: "Join #eng-onboarding, #dev-help, #eng-access, and #security.",
+status: "complete",
+sourceTitle: "Engineering Setup Guide",
+estimatedTime: "10 min"
+},
+{
+id: "github-access",
+title: "Request GitHub access",
+description: "Ask your manager for approval and post in #eng-access.",
+status: "todo",
+sourceTitle: "Engineering Setup Guide",
+estimatedTime: "15 min"
+},
+{
+id: "local-dev",
+title: "Set up local development environment",
+description: "Clone the starter repo, install dependencies, and run the app
+locally.",
+status: "todo",
+sourceTitle: "Engineering Setup Guide",
+estimatedTime: "45 min"
+},
+{
+id: "security-training",
+title: "Complete security training",
+description: "Review the security policy and enable two-factor
+authentication.",
+status: "todo",
+sourceTitle: "Security Policy",
+estimatedTime: "30 min"
+}
+];
+39. Linear-Style Tickets
+Create these as Linear, GitHub Issues, Notion tasks, or a shared checklist.
+Each ticket should have:
+• owner
+46
+priority
+status
+acceptance criteria
+Person 1 Tickets: Product + Lessons + Demo
+P1-1: Write Demo Company Docs
+Priority: P0
+Description: Create realistic fake company docs for the AI to use.
+Steps:
+Write Engineering Setup Guide.
+Write First Week Onboarding Plan.
+Write Expense Policy.
+Write Security Policy.
+Write Product Overview.
+Add docs to demoDocs.ts .
+Acceptance Criteria:
+At least 5 docs exist.
+Each doc has enough detail to answer demo questions.
+Demo questions have clear answers in the docs.
+P1-2: Create Demo Story
+Priority: P0
+Description: Define the story we show judges.
+Steps:
+Create fake new hire: Alex Chen.
+Create fake manager: Maya Patel.
+Define Alex’s problem.
+Define the exact demo flow.
+Write the opening pitch.
+Acceptance Criteria:
+Team can explain demo in under 60 seconds.
+Demo has a clear beginning, middle, and end.
+•
+•
+•
+1.
+2.
+3.
+4.
+5.
+6.
+•
+•
+•
+1.
+2.
+3.
+4.
+5.
+•
+•
+47
+P1-3: Build LessonViewer Component
+Priority: P1
+Description: Create UI for Runbook Lessons.
+Steps:
+Create LessonViewer.tsx .
+Show lesson title and summary.
+Show one slide at a time.
+Add next/back buttons.
+Show slide counter.
+Show narration script.
+Acceptance Criteria:
+Static lesson renders correctly.
+User can move between slides.
+Component looks presentable.
+P1-4: Add Static Fallback Lesson
+Priority: P1
+Description: Create a fallback lesson so the demo works even if AI fails.
+Steps:
+Create fallback Engineering Setup lesson.
+Add 5 slides.
+Add narration script.
+Connect it to LessonViewer.
+Acceptance Criteria:
+Lesson works without AI.
+Demo can show Runbook Lessons even offline.
+P1-5: Write Pitch Script
+Priority: P0 near final phase
+Description: Write a 3-minute and 5-minute pitch.
+1.
+2.
+3.
+4.
+5.
+6.
+•
+•
+•
+1.
+2.
+3.
+4.
+•
+•
+48
+Acceptance Criteria:
+Pitch explains problem, solution, differentiation, demo, business model, and vision.
+Pitch includes line: “Existing tools help employees find information. Runbook helps employees
+complete work.”
+Person 2 Tickets: Frontend Core
+P2-1: Set Up App Layout
+Priority: P0
+Steps:
+Create shared layout.
+Add navigation/sidebar.
+Add basic styling.
+Add routes for landing, dashboard, manager, admin/demo.
+Acceptance Criteria:
+App runs.
+Users can navigate between main pages.
+P2-2: Build Landing Page
+Priority: P1
+Content:
+Headline:
+Turn company knowledge into completed onboarding workflows.
+Subheadline:
+Runbook helps new hires get productive faster with AI answers, guided checklists, and
+manager visibility.
+Acceptance Criteria:
+Landing page clearly explains product.
+CTA goes to dashboard.
+•
+•
+1.
+2.
+3.
+4.
+•
+•
+•
+•
+49
+P2-3: Build New Hire Dashboard
+Priority: P0
+Components:
+Welcome card
+Progress bar
+Task checklist
+Chat panel area
+Lesson section placeholder
+Acceptance Criteria:
+Dashboard shows Alex.
+Tasks render.
+Progress bar is visible.
+P2-4: Build Chat UI
+Priority: P0
+Steps:
+Add message list.
+Add input box.
+Add send button.
+Show loading state.
+Show AI response.
+Show source cards.
+Acceptance Criteria:
+User can ask a question.
+Answer appears.
+Sources appear.
+P2-5: Build Manager Dashboard
+Priority: P1
+Components:
+New hire progress card
+Completed/stuck tasks
+Common questions
+Documentation gap insight
+•
+•
+•
+•
+•
+•
+•
+•
+1.
+2.
+3.
+4.
+5.
+6.
+•
+•
+•
+•
+•
+•
+•
+50
+Acceptance Criteria:
+Manager page makes business value obvious.
+Person 3 Tickets: Backend + AI
+P3-1: Create Chat API
+Priority: P0
+Route: /api/chat
+Request:
+{
+"question": "How do I get GitHub access?"
+}
+Response:
+{
+"answer": "To get GitHub access...",
+"sources": [
+{
+"title": "Engineering Setup Guide",
+"excerpt": "To get GitHub access..."
+}
+]
+}
+Acceptance Criteria:
+API returns answer.
+API returns at least one source.
+API has fallback if LLM fails.
+P3-2: Create Retrieval Helper
+Priority: P0
+File: src/lib/retrieval.ts
+•
+•
+•
+•
+51
+Description: Find relevant docs for a question.
+Simple version:
+lowercase question
+count keyword overlap with each doc
+return top 2 docs
+Acceptance Criteria:
+GitHub questions return Engineering Setup Guide.
+Expense questions return Expense Policy.
+Security questions return Security Policy.
+P3-3: Create AI Prompt Helpers
+Priority: P0
+File: src/lib/prompts.ts
+Chat prompt:
+You are Runbook, an onboarding copilot for new employees.
+Use only the provided company documents.
+Answer clearly and practically.
+If the user asks how to do something, give numbered steps.
+Always cite the source document titles.
+If the information is missing, say what is missing and who the user should ask.
+Acceptance Criteria:
+Answers are practical.
+Answers do not hallucinate wildly.
+Sources are included.
+P3-4: Create Task Generation API
+Priority: P1
+Route: /api/tasks/generate
+Description: Generate first-week onboarding tasks from docs.
+•
+•
+•
+•
+•
+•
+•
+•
+•
+52
+Acceptance Criteria:
+Returns JSON task list.
+Has fallback static task list.
+P3-5: Create Lesson API
+Priority: P2 Stretch
+Route: /api/lesson
+Description: Generate a micro-lesson from one source doc.
+Acceptance Criteria:
+Returns title, summary, slides, narration script.
+Has fallback lesson.
+Person 4 Tickets: Browser Widget + QA
+P4-1: Create Demo External Pages
+Priority: P1
+Pages:
+/demo/github
+/demo/expenses
+Acceptance Criteria:
+Pages look like external work tools.
+GitHub page relates to GitHub setup task.
+Expense page relates to reimbursement task.
+P4-2: Build Runbook Floating Widget
+Priority: P1
+Component: RunbookWidget.tsx
+Behavior:
+Floating button bottom-right.
+•
+•
+•
+•
+•
+•
+•
+•
+•
+•
+53
+Opens side panel.
+Shows relevant task.
+Shows next step.
+Has “Mark Complete” button.
+Acceptance Criteria:
+Widget appears on demo page.
+Widget can mark a task complete or simulate completion.
+P4-3: End-to-End QA Checklist
+Priority: P0
+Checklist:
+Landing page opens.
+Dashboard opens.
+Tasks render.
+Chat question works.
+Source appears.
+Task can complete.
+Manager dashboard shows progress.
+Lesson viewer works.
+Demo widget works.
+App still works after refresh or fallback mode.
+Acceptance Criteria:
+Full demo works 5 times in a row.
+P4-4: Backup Screenshots and Video
+Priority: P0 near final phase
+Description: Prepare backup materials in case live demo fails.
+Acceptance Criteria:
+Screenshots saved.
+Optional short screen recording saved.
+Team can present even if API fails.
+•
+•
+•
+•
+•
+•
+1.
+2.
+3.
+4.
+5.
+6.
+7.
+8.
+9.
+10.
+•
+•
+•
+•
+54
+40. Build Order by Priority
+This is the order the team should follow.
+Level 1: Must Work
+App setup
+Demo docs
+Dashboard
+Task checklist
+Chat API
+Chat UI
+Source citations
+Task completion
+Manager dashboard
+Level 2: Should Work
+Task generation
+Better AI prompts
+Cleaner UI
+Lesson viewer with fallback lesson
+Demo script
+Level 3: Wow Features
+AI-generated lessons
+Browser widget on demo page
+Text-to-speech
+Real doc upload
+Real Chrome extension
+Final Rule
+If Level 1 is not done, do not work on Level 3.
+41. Exact Demo Questions
+Use these in the live demo because the docs support them.
+Question 1
+What should I do on my first day?
+1.
+2.
+3.
+4.
+5.
+6.
+7.
+8.
+9.
+1.
+2.
+3.
+4.
+5.
+1.
+2.
+3.
+4.
+5.
+55
+Expected source:
+First Week Onboarding Plan
+Question 2
+How do I get GitHub access?
+Expected source:
+Engineering Setup Guide
+Question 3
+How do I submit an expense?
+Expected source:
+Expense Policy
+Question 4
+What security rules do I need to follow?
+Expected source:
+Security Policy
+Question 5
+Who do I ask if I am stuck setting up the repo?
+Expected source:
+Engineering Setup Guide
+42. AI Prompts to Use While Building
+Prompt for fake docs
+Write a realistic internal company onboarding document for a new software
+engineer at a startup. Include specific steps, Slack channels, tools, and who to
+ask for help. Keep it concise but detailed enough for a chatbot to answer
+questions from it.
+•
+•
+•
+•
+•
+56
+Prompt for React component
+Build a clean TypeScript React component using Tailwind CSS for an onboarding
+task list. Each task has title, description, estimated time, source title, and
+status. Include buttons to mark a task complete.
+Prompt for debugging
+Here is my error, the code, and what I expected. Give me the smallest safe fix
+and explain why it works.
+Prompt for API route
+Write a Next.js App Router API route in TypeScript that accepts a POST request
+with a question, finds relevant documents from an array, calls an LLM with the
+question and context, and returns an answer with sources.
+Prompt for judging critique
+Act like a hackathon judge and startup investor. Critique this product and
+pitch. What is unclear? What would make it feel more fundable? What objections
+would you ask?
+Prompt for final pitch polish
+Rewrite this hackathon pitch to be clear, confident, and under 3 minutes.
+Emphasize the difference between AI search and workflow execution.
+43. Fallback Strategy
+Every important feature should have a fallback.
+Chat fallback
+If AI fails, return a prewritten answer for demo questions.
+Task generation fallback
+If task generation fails, use initialTasks .
+57
+Lesson generation fallback
+If lesson API fails, show the static Engineering Setup lesson.
+Browser widget fallback
+If real browser extension fails, use /demo/github with embedded floating widget.
+Deployment fallback
+If deployment fails, run locally and have screenshots/video ready.
+44. What Not To Build
+Do not build these unless everything else is finished:
+real Slack integration
+real Google Drive integration
+real Notion OAuth
+complicated login system
+admin permissions
+billing
+complex database schema
+true video generation
+animated avatar
+multiple companies/tenants
+perfect embeddings/vector database
+These are good future features, but dangerous hackathon distractions.
+45. Submission Checklist
+Before submitting:
+[ ] App runs locally
+[ ] App runs deployed
+[ ] API keys work in deployed environment
+[ ] Landing page works
+[ ] Dashboard works
+[ ] Chat works
+[ ] Sources show
+[ ] Tasks update
+[ ] Manager dashboard works
+[ ] Lesson viewer works or is hidden
+•
+•
+•
+•
+•
+•
+•
+•
+•
+•
+•
+•
+•
+•
+•
+•
+•
+•
+•
+•
+•
+58
+[ ] Browser widget works or is hidden
+[ ] Pitch is rehearsed
+[ ] Screenshots saved
+[ ] Backup video saved if possible
+[ ] GitHub repo is clean
+[ ] README explains project
+46. README Template
+Add this to README.md .
+# Runbook
+Runbook is an AI onboarding copilot that turns scattered company knowledge into
+step-by-step onboarding workflows.
+## What it does
+- Answers new hire questions using company documents
+- Generates onboarding checklists
+- Tracks task progress
+- Shows manager visibility into onboarding
+- Turns docs into short onboarding lessons
+- Demonstrates a browser assistant that guides users across work tools
+## Why it matters
+New hires waste weeks finding information across docs, Slack, wikis, and
+coworkers. Existing tools help employees search for information. Runbook helps
+employees complete work.
+## Tech stack
+- Next.js
+- React
+- Tailwind CSS
+- LLM API
+- Demo document retrieval
+## Demo flow
+1. Alex joins as a new engineer.
+2. Runbook shows Alex's onboarding checklist.
+3. Alex asks how to get GitHub access.
+4. Runbook answers with sources from company docs.
+•
+•
+•
+•
+•
+•
+59
+5. Alex completes the task.
+6. Manager dashboard updates.
+7. Runbook lesson/browser widget shows the future of guided onboarding.
+47. 3-Minute Pitch Script
+Use this as the base.
+Every company has the same hidden tax: onboarding. New hires spend days or weeks asking
+where things are, how processes work, and who to talk to. That slows them down and
+interrupts everyone around them.
+The problem is that company knowledge is scattered across wiki pages, docs, Slack, PDFs,
+and people’s heads. Existing AI tools help employees search that knowledge, but they are still
+passive. They tell you where the answer is. They do not help you complete the work.
+Runbook is an AI onboarding copilot that turns company knowledge into step-by-step
+workflows. A new hire can ask, “What should I do today?” and Runbook gives them a
+personalized checklist. They can ask, “How do I get GitHub access?” and Runbook answers
+with the exact steps and source documents. Managers can see progress and identify where
+new hires are getting stuck.
+We also show where this goes next: Runbook can turn long docs into short onboarding
+lessons and can follow employees across work tools like a browser assistant, guiding them
+exactly when they need help.
+Our wedge is onboarding because the pain is universal, measurable, and urgent. But the
+bigger vision is becoming the action layer over company knowledge. Existing tools help
+employees find information. Runbook helps employees complete work.
+48. Judge Q&A Cheat Sheet
+How is this different from Glean or Notion AI?
+Glean and Notion AI are mainly knowledge search tools. Runbook is focused on onboarding
+execution. We turn docs into tasks, guide new hires through workflows, track completion, and
+show managers where people are stuck.
+Why start with onboarding?
+Onboarding is painful, universal, measurable, and high-value. Every growing company has
+this problem, and reducing time-to-productivity has clear ROI.
+60
+Who pays?
+HR, operations, founders, and engineering managers. The simplest model is per employee
+per month.
+What is the bigger vision?
+Onboarding is the wedge. The bigger product is an action layer for internal company
+workflows: IT setup, compliance, sales enablement, support playbooks, and training.
+What if docs are outdated?
+Runbook can surface documentation gaps by tracking repeated questions, missing answers,
+and conflicting sources. Instead of hiding messy docs, it helps companies improve them.
+Why would companies trust it?
+Answers cite sources, and the product can be configured to only answer from approved
+company knowledge. For risky actions, it guides users instead of making unauthorized
+changes.
+49. Final Team Rule
+Everyone should ask this before building anything:
+Does this make the demo clearer, more reliable, or more impressive?
+If the answer is no, do not build it.
+A clean, reliable demo beats a huge broken feature list.
+61
