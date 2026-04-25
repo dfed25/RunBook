@@ -45,7 +45,18 @@ With the dev server running (`npm run dev` in another terminal), install browser
 6. Open `/dashboard`, select the same hire, then test:
    - task checklist is scoped to that hire
    - chat answers are generated from hire-scoped context with richer citation cards (including source URLs when present)
-   - lesson generation can use hire-scoped retrieval when a query is provided
+   - lesson generation can use hire-scoped retrieval when a question is provided
+   - lesson presenter mode can read slides aloud and queue an MP4 render
+
+## Lesson video rendering (optional MP4)
+
+- MP4 export uses `ffmpeg` from your system PATH.
+- Install on macOS: `brew install ffmpeg`
+- The app queues render jobs via:
+  - `POST /api/lesson/render` (queue a render for a generated lesson payload)
+  - `GET /api/lesson/render/:jobId` (poll status)
+  - `GET /api/lesson/render/:jobId/video` (download generated MP4 when complete)
+- Render artifacts are stored locally under `.runbook-data/lesson-renders/` (gitignored runtime data).
 
 ## API endpoints (manager flow)
 

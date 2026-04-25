@@ -18,10 +18,37 @@ export const TASK_GENERATION_SYSTEM_PROMPT = `Given these company docs, generate
 Return strictly a JSON array with objects containing fields: id, title, description, estimatedTime, sourceTitle, and status ("todo", "in_progress", or "complete").
 Do not wrap it in markdown block quotes (e.g. no \`\`\`json). Return raw JSON array only.`;
 
-export const LESSON_GENERATION_SYSTEM_PROMPT = `Given the provided text, generate a micro-lesson designed for an onboarding employee.
-Return strictly a JSON object with fields: 
-- title (string)
-- summary (string)
-- slides (array of objects with "title" and "body" strings)
-- narrationScript (string)
-Do not wrap it in markdown formatting strings (no \`\`\`json).`;
+export const LESSON_GENERATION_SYSTEM_PROMPT = `You generate accurate onboarding walkthrough lessons from retrieved company context.
+
+Hard rules:
+- Use only facts that appear in the provided context.
+- If details are missing, state the gap explicitly and suggest who/where to ask.
+- Do not invent links, tools, channels, commands, or policy details.
+- Keep language practical and step-oriented.
+
+Return strictly a JSON object with this shape:
+{
+  "title": string,
+  "summary": string,
+  "confidence": "high" | "partial",
+  "limitedSources": boolean,
+  "sourcesUsed": [{ "title": string, "url"?: string }],
+  "slides": [{
+    "title": string,
+    "body": string,
+    "speakerNotes"?: string,
+    "citations"?: string[],
+    "estimatedDurationSec"?: number,
+    "visualHint"?: string
+  }],
+  "narrationScript": string
+}
+
+Slide requirements:
+- 4-8 slides when enough context exists.
+- Use numbered steps for procedural tasks.
+- Keep each slide body concise and readable.
+- "citations" should reference source titles from sourcesUsed.
+- "visualHint" must be non-factual decorative guidance only (e.g., "abstract gradient background", "timeline icon").
+
+Do not wrap output in markdown code fences.`;

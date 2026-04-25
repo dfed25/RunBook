@@ -65,6 +65,10 @@ export type KnowledgeSourceType = (typeof KNOWLEDGE_SOURCE_TYPES)[number];
   export type LessonSlide = {
     title: string;
     body: string;
+  speakerNotes?: string;
+  citations?: string[];
+  estimatedDurationSec?: number;
+  visualHint?: string;
   };
   
   export type Lesson = {
@@ -72,4 +76,20 @@ export type KnowledgeSourceType = (typeof KNOWLEDGE_SOURCE_TYPES)[number];
     summary: string;
     slides: LessonSlide[];
     narrationScript: string;
+  sourcesUsed?: Array<{ title: string; url?: string }>;
+  confidence?: "high" | "partial";
+  limitedSources?: boolean;
+  question?: string;
   };
+
+export type LessonRenderStatus = "queued" | "running" | "completed" | "failed";
+
+export type LessonRenderJob = {
+  id: string;
+  status: LessonRenderStatus;
+  createdAt: string;
+  updatedAt: string;
+  lesson: Lesson;
+  outputUrl?: string;
+  error?: string;
+};

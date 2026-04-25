@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DEMO_PERSONAS, DEMO_QUESTIONS } from "@/lib/demoScenario";
-import { ChatSource, Hire, Lesson, LessonSlide, OnboardingTask } from "@/lib/types";
+import { ChatSource, Hire, Lesson, LessonRenderJob, LessonSlide, OnboardingTask } from "@/lib/types";
 import { AppButton } from "@/components/ui/AppButton";
 import { ChatMessageBody } from "@/components/ui/ChatMessageBody";
 import { SectionCard } from "@/components/ui/SectionCard";
@@ -26,6 +26,7 @@ const LESSON_DOC_OPTIONS = [
 const EMPTY_LESSON_SLIDE: LessonSlide = {
   title: "No lesson loaded",
   body: "Choose a source doc and generate a lesson to get started.",
+  speakerNotes: "No narration available for this slide.",
 };
 
 function statusLabel(status: OnboardingTask["status"]): string {
@@ -44,9 +45,15 @@ export default function DashboardPage() {
   const [chatBusy, setChatBusy] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [lessonDocId, setLessonDocId] = useState("engineering-setup");
+  const [lessonQuestion, setLessonQuestion] = useState("How do I set up and start contributing in my first week?");
   const [lessonLoading, setLessonLoading] = useState(false);
   const [lesson, setLesson] = useState<Lesson | null>(null);
   const [lessonSlideIndex, setLessonSlideIndex] = useState(0);
+  const [presenterMode, setPresenterMode] = useState(false);
+  const [narrating, setNarrating] = useState(false);
+  const [renderBusy, setRenderBusy] = useState(false);
+  const [renderJob, setRenderJob] = useState<LessonRenderJob | null>(null);
+  const pollTimerRef = useRef<number | null>(null);
   const messageCounterRef = useRef(0);
 
   const nextMessageId = useCallback((prefix: string) => {
@@ -156,12 +163,14 @@ export default function DashboardPage() {
   }
 
   async function generateLesson() {
+    const question = lessonQuestion.trim();
+    if (!question) return;
     setLessonLoading(true);
     try {
       const res = await fetch("/api/lesson", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ docId: lessonDocId, hireId: selectedHireId }),
+        body: JSON.stringify({ docId: lessonDocId, hireId: selectedHireId, question }),
       });
       const data = (await res.json()) as Lesson;
       if (!res.ok || !data?.slides?.length) throw new Error("Lesson generation failed");
@@ -174,10 +183,75 @@ export default function DashboardPage() {
         summary: "Could not generate lesson right now.",
         slides: [EMPTY_LESSON_SLIDE],
         narrationScript: "No narration available.",
+        confidence: "partial",
       });
       setLessonSlideIndex(0);
     } finally {
       setLessonLoading(false);
+    }
+  }
+
+  function stopNarration() {
+    if (typeof window === "undefined") return;
+    window.speechSynthesis.cancel();
+    setNarrating(false);
+  }
+
+  function speakCurrentSlide() {
+    if (!lesson || typeof window === "undefined") return;
+    const slide = lesson.slides[lessonSlideIndex];
+    if (!slide) return;
+    const text = [slide.title, slide.speakerNotes || slide.body].join(". ");
+    if (!text.trim()) return;
+    window.speechSynthesis.cancel();
+    const utter = new SpeechSynthesisUtterance(text);
+    utter.rate = 1;
+    utter.onend = () => setNarrating(false);
+    utter.onerror = () => setNarrating(false);
+    setNarrating(true);
+    window.speechSynthesis.speak(utter);
+  }
+
+  async function pollRenderJob(jobId: string) {
+    if (pollTimerRef.current) {
+      window.clearInterval(pollTimerRef.current);
+      pollTimerRef.current = null;
+    }
+    const tick = async () => {
+      const res = await fetch(`/api/lesson/render/${jobId}`);
+      const data = (await res.json()) as LessonRenderJob;
+      if (!res.ok) return;
+      setRenderJob(data);
+      if (data.status === "completed" || data.status === "failed") {
+        setRenderBusy(false);
+        if (pollTimerRef.current) {
+          window.clearInterval(pollTimerRef.current);
+          pollTimerRef.current = null;
+        }
+      }
+    };
+    await tick();
+    pollTimerRef.current = window.setInterval(() => {
+      void tick();
+    }, 1800);
+  }
+
+  async function renderLessonVideo() {
+    if (!lesson) return;
+    setRenderBusy(true);
+    try {
+      const res = await fetch("/api/lesson/render", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ lesson }),
+      });
+      const data = (await res.json()) as LessonRenderJob;
+      if (!res.ok) throw new Error("Failed to queue lesson render");
+      setRenderJob(data);
+      await pollRenderJob(data.id);
+    } catch (error) {
+      console.error(error);
+      setRenderBusy(false);
     }
   }
 
@@ -194,11 +268,29 @@ export default function DashboardPage() {
   const progressPct = visibleTasks.length ? Math.round((completed / visibleTasks.length) * 100) : 0;
   const currentSlide = lesson?.slides?.[lessonSlideIndex] ?? EMPTY_LESSON_SLIDE;
   const selectedHire = hires.find((hire) => hire.id === selectedHireId);
+  const visualThemeClass = useMemo(() => {
+    const hint = (currentSlide.visualHint || "").toLowerCase();
+    if (hint.includes("timeline")) return "bg-gradient-to-br from-indigo-950 via-slate-950 to-cyan-950";
+    if (hint.includes("checklist")) return "bg-gradient-to-br from-emerald-950 via-slate-950 to-cyan-950";
+    if (hint.includes("support")) return "bg-gradient-to-br from-fuchsia-950 via-slate-950 to-sky-950";
+    return "bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950";
+  }, [currentSlide.visualHint]);
+
+  useEffect(() => {
+    return () => {
+      if (pollTimerRef.current) {
+        window.clearInterval(pollTimerRef.current);
+      }
+      if (typeof window !== "undefined") {
+        window.speechSynthesis.cancel();
+      }
+    };
+  }, []);
 
   return (
     <main className="min-h-screen bg-slate-950 p-6 text-slate-100 sm:p-10">
-      <div className="mx-auto grid max-w-7xl gap-6 lg:grid-cols-[1.2fr_1fr]">
-        <section className="space-y-6">
+      <div className={`mx-auto grid max-w-7xl gap-6 ${presenterMode ? "grid-cols-1" : "lg:grid-cols-[1.2fr_1fr]"}`}>
+        <section className={`space-y-6 ${presenterMode ? "hidden" : ""}`}>
           <SectionCard
             title={`Welcome, ${selectedHire?.name || DEMO_PERSONAS.newHire.name}`}
             subtitle="Track onboarding tasks, ask Runbook for help, and review lessons with source-backed guidance."
@@ -366,8 +458,18 @@ export default function DashboardPage() {
 
           <SectionCard
             title="Lesson Viewer"
-            subtitle="Generate a bite-sized lesson from a source document, then step through slides."
+            subtitle="Ask a question and generate a grounded walkthrough, presenter narration, and optional MP4."
           >
+            <div className="mt-3 space-y-2">
+              <label className="block text-xs uppercase tracking-wide text-slate-400">What do you want to learn?</label>
+              <textarea
+                className="w-full rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+                rows={3}
+                value={lessonQuestion}
+                onChange={(event) => setLessonQuestion(event.target.value)}
+                placeholder="Example: How do I onboard for engineering setup, get repo access, and ship my first PR?"
+              />
+            </div>
             <div className="mt-3 flex gap-2">
               <select
                 className="flex-1 rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
@@ -383,19 +485,27 @@ export default function DashboardPage() {
               <AppButton
                 type="button"
                 onClick={() => void generateLesson()}
-                disabled={lessonLoading}
+                disabled={lessonLoading || !lessonQuestion.trim()}
                 variant="secondary"
                 className="px-4 py-2"
               >
                 {lessonLoading ? "Loading..." : "Generate"}
               </AppButton>
             </div>
-            <div className="mt-4 rounded-lg border border-slate-700 bg-slate-950 p-4">
+            <div className={`mt-4 rounded-lg border border-slate-700 p-4 ${visualThemeClass}`}>
               <p className="text-xs uppercase tracking-wide text-slate-400">
                 {lesson ? `${lesson.title} · Slide ${lessonSlideIndex + 1}/${lesson.slides.length}` : "Lesson preview"}
               </p>
+              {lesson?.confidence ? (
+                <p className="mt-1 text-[11px] uppercase tracking-wide text-slate-400">
+                  Confidence: {lesson.confidence}{lesson.limitedSources ? " · limited sources" : ""}
+                </p>
+              ) : null}
               <h3 className="mt-2 text-lg font-semibold">{currentSlide.title}</h3>
-              <p className="mt-2 text-sm text-slate-300">{currentSlide.body}</p>
+              <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-slate-200">{currentSlide.body}</p>
+              {currentSlide.citations?.length ? (
+                <p className="mt-3 text-xs text-cyan-300">Sources: {currentSlide.citations.join(" · ")}</p>
+              ) : null}
             </div>
             <div className="mt-3 flex items-center justify-between">
               <AppButton
@@ -420,8 +530,66 @@ export default function DashboardPage() {
                 Next
               </AppButton>
             </div>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <AppButton
+                type="button"
+                variant="ghost"
+                className="px-3 py-1"
+                onClick={() => setPresenterMode((v) => !v)}
+                disabled={!lesson}
+              >
+                {presenterMode ? "Exit presenter" : "Presenter mode"}
+              </AppButton>
+              <AppButton
+                type="button"
+                variant="ghost"
+                className="px-3 py-1"
+                onClick={() => (narrating ? stopNarration() : speakCurrentSlide())}
+                disabled={!lesson}
+              >
+                {narrating ? "Stop narration" : "Read slide aloud"}
+              </AppButton>
+              <AppButton
+                type="button"
+                variant="ghost"
+                className="px-3 py-1"
+                onClick={() => void renderLessonVideo()}
+                disabled={!lesson || renderBusy}
+              >
+                {renderBusy ? "Rendering MP4..." : "Export MP4"}
+              </AppButton>
+            </div>
             {lesson?.summary ? (
-              <p className="mt-3 text-xs text-slate-400">Summary: {lesson.summary}</p>
+              <p className="mt-3 whitespace-pre-wrap text-xs leading-relaxed text-slate-300">Summary: {lesson.summary}</p>
+            ) : null}
+            {lesson?.sourcesUsed?.length ? (
+              <div className="mt-3 rounded border border-slate-700 bg-slate-950/70 p-3">
+                <p className="text-[11px] uppercase tracking-wide text-slate-400">Sources used</p>
+                <ul className="mt-2 list-disc space-y-1 pl-5 text-xs text-slate-300">
+                  {lesson.sourcesUsed.map((source, idx) => (
+                    <li key={`${source.title}-${idx}`}>
+                      {source.url ? (
+                        <a href={source.url} target="_blank" rel="noopener noreferrer" className="underline decoration-slate-600 underline-offset-2 hover:text-cyan-200">
+                          {source.title}
+                        </a>
+                      ) : (
+                        source.title
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+            {renderJob ? (
+              <div className="mt-3 rounded border border-slate-700 bg-slate-950/70 p-3 text-xs text-slate-300">
+                <p>Render status: <span className="font-semibold text-cyan-200">{renderJob.status}</span></p>
+                {renderJob.outputUrl ? (
+                  <a href={renderJob.outputUrl} className="mt-1 inline-block underline underline-offset-2 hover:text-cyan-200" target="_blank" rel="noopener noreferrer">
+                    Download generated video
+                  </a>
+                ) : null}
+                {renderJob.error ? <p className="mt-1 text-rose-300">{renderJob.error}</p> : null}
+              </div>
             ) : null}
           </SectionCard>
         </section>
