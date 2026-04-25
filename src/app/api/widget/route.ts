@@ -4,6 +4,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { demoDocs } from "@/lib/demoDocs";
+import { generateFromGemini } from "@/lib/ai";
 
 function fallbackTaskFromUrlOrText(url: string, pageText: string) {
   const haystack = `${url}\n${pageText}`.toLowerCase();
@@ -76,6 +77,19 @@ function cleanInstructionText(input: unknown, fallback: string) {
   const text = typeof input === "string" ? input.trim() : "";
   if (!text) return fallback;
   return text.slice(0, 240);
+}
+
+async function generateWidgetJson(
+  systemPrompt: string,
+  userPrompt: string,
+): Promise<unknown | null> {
+  try {
+    const responseText = await generateFromGemini(systemPrompt, userPrompt);
+    return parseJsonObject(responseText);
+  } catch (error) {
+    console.error("/api/widget model error:", error);
+    return null;
+  }
 }
 
 const SYSTEM_PROMPT = `You are Runbook, an AI onboarding copilot.
@@ -179,40 +193,29 @@ If you cannot confidently find a specific target, return:
   "instruction": "A short fallback instruction."
 }`;
 
-      const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            contents: [
-              {
-                role: "user",
-                parts: [{ text: finderPrompt }],
-              },
-            ],
-            generation_config: {
-              max_output_tokens: 400,
-              temperature: 0.2,
-            },
-          }),
-        }
-      );
-
-      const data = await response.json();
-      const text = data.candidates?.[0]?.content?.parts?.[0]?.text ?? '{"found":false,"elementText":"","instruction":"Try scanning this page again."}';
-
       const parsed =
-        (parseJsonObject(text) as
+        (await generateWidgetJson(
+          `You are Runbook's page action locator.
+Respond only with JSON.
+Never include markdown fences.
+Keep instruction concise.`,
+          finderPrompt,
+        )) as
           | { found?: boolean; elementText?: string; instruction?: string }
-          | null) ??
+          | null;
+
+      const safeParsed =
+        parsed ??
         { found: false, elementText: "", instruction: "Try scanning this page again." };
 
       return NextResponse.json({
-        found: !!parsed.found,
-        elementText: typeof parsed.elementText === "string" ? parsed.elementText.slice(0, 200) : "",
+        found: !!safeParsed.found,
+        elementText:
+          typeof safeParsed.elementText === "string"
+            ? safeParsed.elementText.slice(0, 200)
+            : "",
         instruction: cleanInstructionText(
-          parsed.instruction,
+          safeParsed.instruction,
           "Try scanning this page again.",
         ),
       });
@@ -225,39 +228,20 @@ ${String(pageText).slice(0, 3000)}
 
 Is any onboarding task relevant here? If yes, return the task and steps.`;
 
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${process.env.GEMINI_API_KEY}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          system_instruction: { parts: [{ text: SYSTEM_PROMPT }] },
-          contents: [
-            {
-              role: "user",
-              parts: [{ text: userMessage }],
-            },
-          ],
-          generation_config: {
-            max_output_tokens: 800,
-            temperature: 0.7,
-          },
-        }),
-      }
-    );
-
-    const data = await response.json();
-    const text = data.candidates?.[0]?.content?.parts?.[0]?.text ?? '{"found":false}';
-
-    let parsed = parseJsonObject(text);
+    let parsed = (await generateWidgetJson(SYSTEM_PROMPT, userMessage)) as
+      | { found?: boolean; task?: unknown }
+      | null;
     if (!parsed) {
-      parsed = fallbackTaskFromUrlOrText(String(url), String(pageText));
+      parsed = fallbackTaskFromUrlOrText(String(url), String(pageText)) as {
+        found?: boolean;
+        task?: unknown;
+      };
     }
 
     if (!parsed?.found || !parsed?.task) {
       const fallback = fallbackTaskFromUrlOrText(String(url), String(pageText));
       if (fallback.found) {
-        parsed = fallback;
+        parsed = fallback as { found?: boolean; task?: unknown };
       }
     }
 

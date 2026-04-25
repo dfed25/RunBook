@@ -429,7 +429,7 @@ function injectCSS() {
   const style = document.createElement("style");
   style.id = "rb-inline-style";
   style.textContent = `
-    #runbook-root * { box-sizing: border-box; font-family: -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; }
+    #runbook-extension-root * { box-sizing: border-box; font-family: -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; }
     #rb-fab { position: fixed; right: 20px; bottom: 20px; z-index: 999999; width: 56px; height: 56px; border: 0; border-radius: 9999px; cursor: pointer; background: linear-gradient(135deg,#6366f1,#4f46e5); color:#fff; box-shadow: 0 8px 20px rgba(79,70,229,.35); }
     #rb-fab.rb-open { background: linear-gradient(135deg,#4f46e5,#3730a3); }
     #rb-panel { position: fixed; right: 20px; bottom: 80px; z-index: 999999; width: 320px; max-width: 320px; background:#fff; border-radius: 14px; overflow: hidden; border: 1px solid rgba(0,0,0,.08); box-shadow: 0 10px 34px rgba(0,0,0,.18); color:#111827; }
