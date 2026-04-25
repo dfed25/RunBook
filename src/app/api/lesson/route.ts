@@ -42,50 +42,98 @@ function normalizeLesson(lesson: Lesson, question: string, limitedSources: boole
   };
 }
 
-function fallbackLesson(question: string, limitedSources: boolean): Lesson {
+function fallbackLesson(
+  question: string,
+  limitedSources: boolean,
+  context?: {
+    tasks?: Array<{ title: string; description: string; status: string; sourceTitle: string; estimatedTime: string }>;
+    docs?: Array<{ title: string; url?: string; content: string }>;
+  }
+): Lesson {
+  const tasks = context?.tasks || [];
+  const docs = context?.docs || [];
+  const topTasks = tasks.slice(0, 4);
+  const docA = docs[0];
+  const sourceTitles = Array.from(
+    new Set([
+      ...topTasks.map((t) => t.sourceTitle),
+      ...docs.slice(0, 4).map((d) => d.title),
+      "First Week Onboarding Plan",
+    ])
+  ).filter(Boolean);
+
+  const taskBlock =
+    topTasks.length > 0
+      ? topTasks
+          .map(
+            (task, i) =>
+              `${i + 1}. ${task.title} [${task.status}] · ETA ${task.estimatedTime}\n- Action: ${task.description}\n- Source: ${task.sourceTitle}`
+          )
+          .join("\n\n")
+      : "No assigned tasks were found for this hire.";
+
+  const referenceBlock = docs.length
+    ? docs
+        .slice(0, 3)
+        .map((doc, i) => `${i + 1}. ${doc.title}${doc.url ? ` (${doc.url})` : ""}`)
+        .join("\n")
+    : "No retrieved docs were available for this question.";
+
   return {
-    title: "Guided Walkthrough",
-    summary: "This fallback lesson gives you a practical path while highlighting any missing context.",
+    title: "Question-Grounded Walkthrough",
+    summary:
+      "Gemini is temporarily unavailable, so this lesson is generated from your assigned tasks and retrieved onboarding sources.",
     confidence: "partial",
     limitedSources,
     question,
-    sourcesUsed: [{ title: "First Week Onboarding Plan" }],
+    sourcesUsed: sourceTitles.map((title) => ({ title })),
     slides: [
       {
-        title: "Clarify the goal",
-        body: `Question: ${question}`,
-        speakerNotes: "Start by restating the exact outcome you need so the process stays focused.",
-        citations: ["First Week Onboarding Plan"],
+        title: "Question focus",
+        body: `Goal: ${question}\n\nUse this runbook to complete relevant tasks, verify outcomes, and escalate blockers quickly.`,
+        speakerNotes: "Restate the goal and align the walkthrough to what the user asked.",
+        citations: sourceTitles.slice(0, 2),
         estimatedDurationSec: 15,
         visualHint: "simple title card with checklist icon",
       },
       {
-        title: "Gather references",
-        body: "Open the most relevant onboarding docs and identify the exact system, policy, or tool involved.",
-        speakerNotes: "Collect references before acting so each step stays grounded in source docs.",
-        citations: ["First Week Onboarding Plan"],
-        estimatedDurationSec: 20,
+        title: "Task execution plan",
+        body: taskBlock,
+        speakerNotes: "Follow tasks in order, starting with the highest-priority open item.",
+        citations: sourceTitles.slice(0, 3),
+        estimatedDurationSec: 28,
+        visualHint: "timeline icon",
+      },
+      {
+        title: "Use docs for exact steps",
+        body: `Primary references:\n${referenceBlock}\n\nUse these sources to validate commands, channels, and policy constraints while executing tasks.`,
+        speakerNotes: "Cross-check each step against source docs before marking tasks complete.",
+        citations: sourceTitles.slice(0, 4),
+        estimatedDurationSec: 24,
         visualHint: "document stack illustration",
       },
       {
-        title: "Execute in sequence",
-        body: "Perform the steps in order, and pause if you hit a gap that is not documented.",
-        speakerNotes: "Use a strict step order and avoid assumptions when details are missing.",
-        citations: ["First Week Onboarding Plan"],
+        title: "Verification checkpoints",
+        body:
+          "After each task, confirm:\n- expected output/result is visible\n- task status is updated\n- blockers are captured with context",
+        speakerNotes: "Verification prevents hidden mistakes and keeps progress measurable.",
+        citations: sourceTitles.slice(0, 2),
         estimatedDurationSec: 20,
-        visualHint: "numbered timeline style",
+        visualHint: "checklist icon",
       },
       {
-        title: "Escalate unknowns",
-        body: "If a required detail is missing, ask your manager or the owning team channel before proceeding.",
+        title: "Troubleshooting and escalation",
+        body:
+          `If blocked:\n- capture the exact failing step and error text\n- attach the related task + source reference\n- escalate to your manager or owning channel with reproducible context\n\n` +
+          `Known context sample:\n${(docA?.content || "No additional doc snippets available.").slice(0, 260)}...`,
         speakerNotes: "Escalating unknowns early prevents errors and keeps onboarding safe.",
-        citations: ["First Week Onboarding Plan"],
-        estimatedDurationSec: 18,
+        citations: sourceTitles.slice(0, 4),
+        estimatedDurationSec: 22,
         visualHint: "help/support icon over abstract background",
       },
     ],
     narrationScript:
-      "Here is your guided walkthrough. First, clarify the exact goal. Next, gather references. Then execute the process in sequence. Finally, escalate any unknowns to the owning team.",
+      "This walkthrough is generated from your tasks and available docs. Start with question focus, execute the ordered task plan, use source docs for exact details, verify each step, then escalate blockers with context.",
   };
 }
 
@@ -212,7 +260,7 @@ export async function POST(req: Request) {
     const context = await buildLessonContext(question, docId, hireId);
 
     if (!process.env.GEMINI_API_KEY) {
-      return NextResponse.json(fallbackLesson(question, context.limitedSources));
+      return NextResponse.json(fallbackLesson(question, context.limitedSources, context));
     }
 
     const contextText = context.docs
@@ -237,7 +285,7 @@ export async function POST(req: Request) {
       return NextResponse.json(normalizeLesson(parsedLesson, question, context.limitedSources));
     } catch (e) {
       console.error("Lesson API Gemini Error:", e);
-      return NextResponse.json(fallbackLesson(question, context.limitedSources));
+      return NextResponse.json(fallbackLesson(question, context.limitedSources, context));
     }
 
   } catch (error) {

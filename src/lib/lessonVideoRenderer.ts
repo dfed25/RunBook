@@ -22,6 +22,14 @@ function bgColorForHint(hint?: string): string {
   return "0x0f172a";
 }
 
+function fallbackVisualFilterForHint(hint?: string): string {
+  const value = (hint || "").toLowerCase();
+  if (value.includes("timeline")) return "hue=h=45:s=0.35,eq=contrast=1.05:brightness=-0.02";
+  if (value.includes("checklist")) return "hue=h=95:s=0.32,eq=contrast=1.03:brightness=-0.03";
+  if (value.includes("support")) return "hue=h=260:s=0.38,eq=contrast=1.06:brightness=-0.01";
+  return "hue=h=200:s=0.28,eq=contrast=1.02:brightness=-0.02";
+}
+
 function pickSlideVoiceText(lesson: Lesson, index: number) {
   const slide = lesson.slides[index];
   if (!slide) return "";
@@ -68,7 +76,8 @@ async function renderSlideClip(
   color: string,
   durationSec: number,
   textPath: string,
-  useDrawtext: boolean
+  useDrawtext: boolean,
+  hint?: string
 ): Promise<string> {
   const output = path.join(assetDir, `clip-${index + 1}.mp4`);
   if (useDrawtext) {
@@ -106,13 +115,17 @@ async function renderSlideClip(
     return output;
   }
 
-  // Fallback for ffmpeg builds without drawtext (no libfreetype).
+  // Fallback for ffmpeg builds without drawtext (no libfreetype):
+  // produce a moving patterned background so output isn't a flat single-color screen.
+  const fallbackFilter = fallbackVisualFilterForHint(hint);
   await execFileAsync("ffmpeg", [
     "-y",
     "-f",
     "lavfi",
     "-i",
-    `color=c=${color}:s=1280x720:d=${durationSec}`,
+    `testsrc2=s=1280x720:r=30:d=${durationSec}`,
+    "-vf",
+    fallbackFilter,
     "-c:v",
     "libx264",
     "-pix_fmt",
@@ -164,7 +177,7 @@ export async function renderLessonVideo(jobId: string, lesson: Lesson): Promise<
     const noteText = pickSlideVoiceText(lesson, i);
     const slideText = `${slide.body}${noteText ? `\n\nNarration: ${noteText}` : ""}`;
     const textPath = await writeSlideTextFile(assetDir, i, slide.title, slideText);
-    const clipPath = await renderSlideClip(assetDir, i, color, duration, textPath, useDrawtext);
+    const clipPath = await renderSlideClip(assetDir, i, color, duration, textPath, useDrawtext, slide.visualHint);
     clips.push(clipPath);
   }
 
