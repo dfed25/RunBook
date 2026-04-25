@@ -51,3 +51,20 @@ export default async function Page() {
   )
 }
 ```
+
+## 🚀 The To-Do List (What needs to be done next)
+
+**1. Data Source Setup (Database Admin)**
+- Navigate to the Supabase Studio SQL editor and execute the file at `supabase/migrations/00000000000000_init_vector_db.sql`. This spins up the PGVector `runbook_documents` table so our API can store embeddings.
+- Track down the API Keys for Google Drive, Slack, and Notion and inject them into your `.env.local` alongside your `GEMINI_API_KEY`.
+
+**2. The Sync Trigger (Frontend Team)**
+- The backend synchronization engine is fully written inside `src/lib/vectorizer.ts`. 
+- The frontend team needs to build a "Sync Knowledge" button in the Dashboard that securely invokes `syncUserKnowledge()` to trigger the mass enterprise data pull and vector embedding cycle!
+
+**3. The UI Elements (Frontend Team)**
+- **Chat Panel**: Build a React UI to hit `POST /api/chat`. The backend will natively use Gemini embeddings to search the Supabase Postgres vector database and return markdown chat answers!
+- **Tasks & Checklists**: Build the visual checkmark boxes for onboarding tasks.
+- **Floating Browser Widget**: Build the Chrome-extension-style widget that floats on demo screens and intercepts workflows.
+
+**Note on "Demo Documents"**: Since we pivoted to live enterprise integrations, we purposefully **do not need fake demo documents!** When you hit Sync, it will rip actual text from your live, connected Notion and GDrive workspaces.
