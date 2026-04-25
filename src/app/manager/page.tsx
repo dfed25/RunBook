@@ -4,6 +4,9 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { DEMO_PERSONAS, DEMO_QUESTIONS } from "@/lib/demoScenario";
 import { OnboardingTask } from "@/lib/types";
+import { AppButton } from "@/components/ui/AppButton";
+import { SectionCard } from "@/components/ui/SectionCard";
+import { StatusBadge } from "@/components/ui/StatusBadge";
 
 type PersonSummary = {
   hireId: string;
@@ -95,8 +98,7 @@ export default function ManagerPage() {
           </div>
         </section>
 
-        <section className="rounded-lg border border-slate-800 bg-slate-900 p-4">
-          <h2 className="text-base font-semibold">Task status by employee</h2>
+        <SectionCard title="Task status by employee" subtitle="Filter by hire to inspect blockers and completion trends.">
           {loading ? (
             <p className="mt-3 text-sm text-slate-300">Loading manager view...</p>
           ) : people.length === 0 ? (
@@ -104,30 +106,26 @@ export default function ManagerPage() {
           ) : (
             <div className="mt-4 space-y-4">
               <div className="flex flex-wrap gap-2">
-                <button
+                <AppButton
                   type="button"
                   onClick={() => setActiveHireId("ALL")}
-                  className={`rounded-full border px-3 py-1 text-sm transition ${
-                    selectedHireId === "ALL"
-                      ? "border-cyan-400 bg-cyan-400/20 text-cyan-200"
-                      : "border-slate-700 bg-slate-950 text-slate-300 hover:border-slate-500"
-                  }`}
+                  className="rounded-full px-3 py-1 text-sm"
+                  variant="ghost"
+                  tone={selectedHireId === "ALL" ? "active" : "inactive"}
                 >
                   All Employees
-                </button>
+                </AppButton>
                 {people.map((person) => (
-                  <button
+                  <AppButton
                     key={person.hireId}
                     type="button"
                     onClick={() => setActiveHireId(person.hireId)}
-                    className={`rounded-full border px-3 py-1 text-sm transition ${
-                      selectedHireId === person.hireId
-                        ? "border-cyan-400 bg-cyan-400/20 text-cyan-200"
-                        : "border-slate-700 bg-slate-950 text-slate-300 hover:border-slate-500"
-                    }`}
+                    className="rounded-full px-3 py-1 text-sm"
+                    variant="ghost"
+                    tone={selectedHireId === person.hireId ? "active" : "inactive"}
                   >
                     {person.name}
-                  </button>
+                  </AppButton>
                 ))}
               </div>
               <div className="grid gap-3">
@@ -135,15 +133,9 @@ export default function ManagerPage() {
                   <article key={person.hireId} className="rounded border border-slate-700 bg-slate-950 p-4">
                     <div className="flex flex-wrap items-center justify-between gap-3">
                       <p className="font-semibold">{person.name}</p>
-                      <span
-                        className={`rounded-full px-2 py-1 text-xs ${
-                          person.status === "On Track"
-                            ? "bg-emerald-500/20 text-emerald-300"
-                            : "bg-amber-500/20 text-amber-300"
-                        }`}
-                      >
+                      <StatusBadge tone={person.status === "On Track" ? "success" : "warning"}>
                         {person.status}
-                      </span>
+                      </StatusBadge>
                     </div>
                     <p className="mt-2 text-sm text-slate-300">
                       Progress: {person.progress}% ({person.completedTasks}/{person.totalTasks} tasks complete)
@@ -170,7 +162,7 @@ export default function ManagerPage() {
               </div>
             </div>
           )}
-        </section>
+        </SectionCard>
 
         <section className="grid gap-4 md:grid-cols-2">
           <article className="rounded-lg border border-slate-800 bg-slate-900 p-4">

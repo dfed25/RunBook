@@ -3,6 +3,7 @@ import { retrieveDocs } from "@/lib/retrieval";
 import { CHAT_SYSTEM_PROMPT } from "@/lib/prompts";
 import { ChatResponse, ChatSource } from "@/lib/types";
 import { generateFromGemini } from "@/lib/ai";
+import { requireHireAccess } from "@/lib/apiAuth";
 
 const FALLBACKS: Record<string, ChatResponse> = {
   "what should i do on my first day?": {
@@ -36,6 +37,15 @@ export async function POST(req: Request) {
     const body = await req.json();
     const question = body.question || "";
     const hireId = typeof body.hireId === "string" ? body.hireId : undefined;
+    if (hireId) {
+      const auth = await requireHireAccess(hireId);
+      if (!auth.ok) {
+        return NextResponse.json(
+          { error: auth.status === 401 ? "Authentication required" : "Forbidden" },
+          { status: auth.status }
+        );
+      }
+    }
     const qLower = question.toLowerCase().trim().replace(/[?!.]$/, "");
 
     const fallbackKeys = Object.keys(FALLBACKS).sort((a, b) => b.length - a.length);
@@ -49,9 +59,21 @@ export async function POST(req: Request) {
 
     const retrieved = await retrieveDocs(question, hireId);
     const validDocs = retrieved.filter(r => r.score > 0).map(r => r.doc);
-    
-    const sources: ChatSource[] = validDocs.map(d => ({ title: d.title, excerpt: d.content.substring(0, 150) + "..." }));
-    const context = validDocs.map(d => `Document Title: ${d.title}\nContent:\n${d.content}`).join("\n\n");
+
+    const sources: ChatSource[] = validDocs.map((d) => ({
+      title: d.title,
+      excerpt: (() => {
+        const content = d.content || "";
+        return content.length > 180 ? `${content.slice(0, 180)}...` : content;
+      })(),
+      url: d.url || undefined,
+    }));
+    const context = validDocs
+      .map(
+        (d, index) =>
+          `[Source ${index + 1}] Title: ${d.title}\nProvider: ${d.provider}\nURL: ${d.url || "N/A"}\nContent:\n${d.content}`
+      )
+      .join("\n\n");
 
     if (!process.env.GEMINI_API_KEY) {
        return NextResponse.json({
@@ -61,9 +83,9 @@ export async function POST(req: Request) {
     }
 
     try {
-      const userPrompt = `Company Context:\n${context || "No context found."}\n\nUser Question: ${question}`;
+      const userPrompt = `Company Context:\n${context || "No context found."}\n\nUser Question: ${question}\n\nAnswer with concise guidance and ground it in the provided sources.`;
       const answer = await generateFromGemini(CHAT_SYSTEM_PROMPT, userPrompt);
-      return NextResponse.json({ answer, sources: sources.length > 0 ? sources : undefined });
+      return NextResponse.json({ answer, sources });
     } catch (e) {
       console.error("Chat API Gemini Error:", e);
       return NextResponse.json({ answer: "Runbook AI is temporarily unavailable.", sources }, { status: 500 });
