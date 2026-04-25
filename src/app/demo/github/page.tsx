@@ -92,7 +92,7 @@ export default function DemoGithubPage() {
           </ul>
         </div>
       </div>
-      <RunbookWidget pageKey="github" />
+      <RunbookWidget key="github" pageKey="github" />
     </main>
   );
 }

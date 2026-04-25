@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { RunbookWidgetButton } from "./RunbookWidgetButton";
 import { RunbookWidgetPanel } from "./RunbookWidgetPanel";
 import { getDemoTaskContext } from "./demoTaskMap";
@@ -17,12 +17,7 @@ export function RunbookWidget({ pageKey, children }: RunbookWidgetProps) {
   const [isSaving, setIsSaving] = useState(false);
   const [saveSource, setSaveSource] = useState<"api" | "local" | null>(null);
   const task = useMemo(() => getDemoTaskContext(pageKey), [pageKey]);
-  const [taskStatus, setTaskStatus] = useState(getTaskStatus(task.taskId));
-
-  useEffect(() => {
-    setTaskStatus(getTaskStatus(task.taskId));
-    setSaveSource(null);
-  }, [task.taskId]);
+  const [taskStatus, setTaskStatus] = useState(() => getTaskStatus(task.taskId));
 
   async function handleMarkComplete() {
     setIsSaving(true);

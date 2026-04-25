@@ -92,7 +92,7 @@ export default function DemoExpensesPage() {
           </ul>
         </div>
       </div>
-      <RunbookWidget pageKey="expenses" />
+      <RunbookWidget key="expenses" pageKey="expenses" />
     </main>
   );
 }
