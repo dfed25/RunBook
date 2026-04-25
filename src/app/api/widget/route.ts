@@ -9,6 +9,36 @@ import { generateFromGemini } from "@/lib/ai";
 function fallbackTaskFromUrlOrText(url: string, pageText: string) {
   const haystack = `${url}\n${pageText}`.toLowerCase();
 
+  if (
+    haystack.includes("github.com/") &&
+    (haystack.includes("followers") ||
+      haystack.includes("following") ||
+      haystack.includes("contributions") ||
+      haystack.includes("repositories"))
+  ) {
+    return {
+      found: true,
+      task: {
+        taskId: "github-profile-setup",
+        taskTitle: "Review your GitHub profile setup",
+        steps: [
+          {
+            text: "Open the Repositories tab to verify your public projects are visible.",
+            selector: null,
+          },
+          {
+            text: "Open the Stars tab and star one onboarding-related repository to bookmark it.",
+            selector: null,
+          },
+          {
+            text: "Open your profile edit/settings controls to update your bio or profile details.",
+            selector: null,
+          },
+        ],
+      },
+    };
+  }
+
   if (haystack.includes("/demo/github") || haystack.includes("github") || haystack.includes("eng-access")) {
     return {
       found: true,

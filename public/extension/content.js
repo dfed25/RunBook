@@ -333,6 +333,39 @@ async function findOnPage() {
     }
   }
 
+  // Deterministic fallback for real GitHub profile pages.
+  if (
+    currentTask.taskId === "github-profile-setup" &&
+    window.location.hostname.includes("github.com")
+  ) {
+    const profileStepTargets = [
+      [
+        "a[href*='?tab=repositories']",
+        "a[data-tab-item='repositories']",
+        "a[href$='/repositories']",
+      ],
+      [
+        "a[href*='?tab=stars']",
+        "a[data-tab-item='stars']",
+        "a[href$='/stars']",
+      ],
+      [
+        "a[href='/settings/profile']",
+        "a[href='/settings']",
+        "button[aria-label*='Edit profile']",
+      ],
+    ];
+    const selectors = profileStepTargets[currentStepIndex] || [];
+    for (const selector of selectors) {
+      const el = document.querySelector(selector);
+      if (el) {
+        highlightElement(el);
+        setInstruction(step?.text || "Follow the highlighted GitHub profile step.");
+        return;
+      }
+    }
+  }
+
   try {
     const data = await apiRequest("/api/widget", {
       url: window.location.href,
