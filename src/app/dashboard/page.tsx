@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useSyncExternalStore } from "react";
 import {
   getTaskStatuses,
   subscribeToTaskStatus,
   type TaskStatus,
+  type TaskStatusMap,
 } from "@/lib/taskStatusAdapter";
 
 type DemoTask = {
@@ -43,12 +44,11 @@ function statusClasses(status: TaskStatus): string {
 }
 
 export default function DashboardPage() {
-  const [taskStatuses, setTaskStatuses] = useState(getTaskStatuses());
-
-  useEffect(() => {
-    const unsubscribe = subscribeToTaskStatus(setTaskStatuses);
-    return unsubscribe;
-  }, []);
+  const taskStatuses = useSyncExternalStore(
+    (onStoreChange) => subscribeToTaskStatus(() => onStoreChange()),
+    () => getTaskStatuses(),
+    (): TaskStatusMap => ({}),
+  );
 
   const completedCount = useMemo(() => {
     return demoTasks.filter((task) => taskStatuses[task.id] === "complete").length;

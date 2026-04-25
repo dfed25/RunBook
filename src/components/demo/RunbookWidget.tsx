@@ -1,30 +1,58 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { useMemo, useState } from "react";
+import { useMemo, useState, useSyncExternalStore } from "react";
 import { RunbookWidgetButton } from "./RunbookWidgetButton";
 import { RunbookWidgetPanel } from "./RunbookWidgetPanel";
 import { getDemoTaskContext } from "./demoTaskMap";
-import { getTaskStatus, updateTaskStatus } from "@/lib/taskStatusAdapter";
+import {
+  getTaskStatus,
+  subscribeToTaskStatus,
+  updateTaskStatus,
+  type TaskStatus,
+} from "@/lib/taskStatusAdapter";
 
 type RunbookWidgetProps = {
   pageKey: string;
   children?: ReactNode;
 };
 
+function useTaskStatusFromStore(taskId: string): TaskStatus {
+  return useSyncExternalStore(
+    (onStoreChange) => subscribeToTaskStatus(() => onStoreChange()),
+    () => getTaskStatus(taskId),
+    () => "todo",
+  );
+}
+
 export function RunbookWidget({ pageKey, children }: RunbookWidgetProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [saveSource, setSaveSource] = useState<"api" | "local" | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const task = useMemo(() => getDemoTaskContext(pageKey), [pageKey]);
-  const [taskStatus, setTaskStatus] = useState(() => getTaskStatus(task.taskId));
+  const taskStatus = useTaskStatusFromStore(task.taskId);
 
   async function handleMarkComplete() {
+    const taskIdAtStart = task.taskId;
+    setSaveError(null);
+    setSaveSource(null);
     setIsSaving(true);
-    const source = await updateTaskStatus(task.taskId, "complete");
-    setTaskStatus("complete");
-    setSaveSource(source);
-    setIsSaving(false);
+    try {
+      const source = await updateTaskStatus(taskIdAtStart, "complete");
+      if (taskIdAtStart !== task.taskId) {
+        return;
+      }
+      if (source === "rejected") {
+        setSaveError(
+          "The server rejected this update (check the task ID and status).",
+        );
+        return;
+      }
+      setSaveSource(source);
+    } finally {
+      setIsSaving(false);
+    }
   }
 
   return (
@@ -44,6 +72,9 @@ export function RunbookWidget({ pageKey, children }: RunbookWidgetProps) {
                   ? "Saving..."
                   : "Mark Complete"}
             </button>
+            {saveError ? (
+              <p className="text-xs text-red-600">{saveError}</p>
+            ) : null}
             {saveSource ? (
               <p className="text-xs text-slate-500">
                 Status saved via {saveSource === "api" ? "API" : "local demo"}{" "}

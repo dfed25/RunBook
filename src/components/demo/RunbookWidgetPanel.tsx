@@ -1,4 +1,7 @@
+"use client";
+
 import type { ReactNode } from "react";
+import { useEffect, useId } from "react";
 import type { DemoTaskContext } from "./demoTaskMap";
 
 type RunbookWidgetPanelProps = {
@@ -12,14 +15,33 @@ export function RunbookWidgetPanel({
   onClose,
   children,
 }: RunbookWidgetPanelProps) {
+  const titleId = useId();
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        onClose();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [onClose]);
+
   return (
-    <aside className="fixed right-6 bottom-24 z-50 w-[22rem] max-w-[calc(100vw-2rem)] rounded-2xl border border-slate-200 bg-white p-5 shadow-xl">
+    <aside
+      role="dialog"
+      aria-modal="false"
+      aria-labelledby={titleId}
+      className="fixed right-6 bottom-24 z-50 w-[22rem] max-w-[calc(100vw-2rem)] rounded-2xl border border-slate-200 bg-white p-5 shadow-xl"
+    >
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-xs font-semibold uppercase tracking-wide text-blue-600">
             Runbook Assistant
           </p>
-          <h2 className="mt-1 text-lg font-semibold text-slate-900">{task.title}</h2>
+          <h2 id={titleId} className="mt-1 text-lg font-semibold text-slate-900">
+            {task.title}
+          </h2>
         </div>
         <button
           type="button"

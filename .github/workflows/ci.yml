@@ -27,3 +27,35 @@ jobs:
 
       - name: Build app
         run: npm run build
+
+      - name: Install Playwright Chromium
+        run: npx playwright install chromium --with-deps
+
+      - name: Run QA flow (screenshots + bug log)
+        run: |
+          npm start &
+          SERVER_PID=$!
+          for _ in $(seq 1 90); do
+            if curl -sf "http://127.0.0.1:3000" >/dev/null; then
+              echo "Server ready"
+              break
+            fi
+            sleep 2
+          done
+          npm run qa:flow
+          QA_EXIT=$?
+          kill "$SERVER_PID" 2>/dev/null || true
+          wait "$SERVER_PID" 2>/dev/null || true
+          exit "$QA_EXIT"
+        env:
+          BASE_URL: http://127.0.0.1:3000
+
+      - name: Upload QA artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: qa-flow
+          path: |
+            QA_BUG_LOG.md
+            screenshots
+          if-no-files-found: ignore

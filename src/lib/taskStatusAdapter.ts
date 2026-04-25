@@ -1,12 +1,37 @@
 export type TaskStatus = "todo" | "in_progress" | "complete";
 
-type TaskStatusMap = Record<string, TaskStatus>;
+export type TaskStatusMap = Record<string, TaskStatus>;
+
+export type UpdateTaskStatusResult = "api" | "local" | "rejected";
 
 const STORAGE_KEY = "runbook-task-statuses";
 const STATUS_EVENT_NAME = "runbook-task-status-updated";
 
+const ALLOWED_STATUSES: TaskStatus[] = ["todo", "in_progress", "complete"];
+
 function isBrowser(): boolean {
   return typeof window !== "undefined";
+}
+
+function parseStoredTaskStatuses(raw: string): TaskStatusMap {
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return {};
+    }
+    const out: TaskStatusMap = {};
+    for (const [key, value] of Object.entries(parsed as Record<string, unknown>)) {
+      if (typeof key !== "string" || typeof value !== "string") {
+        continue;
+      }
+      if ((ALLOWED_STATUSES as readonly string[]).includes(value)) {
+        out[key] = value as TaskStatus;
+      }
+    }
+    return out;
+  } catch {
+    return {};
+  }
 }
 
 export function getTaskStatuses(): TaskStatusMap {
@@ -19,11 +44,7 @@ export function getTaskStatuses(): TaskStatusMap {
     return {};
   }
 
-  try {
-    return JSON.parse(storedValue) as TaskStatusMap;
-  } catch {
-    return {};
-  }
+  return parseStoredTaskStatuses(storedValue);
 }
 
 export function getTaskStatus(taskId: string): TaskStatus {
@@ -53,7 +74,7 @@ function setTaskStatus(taskId: string, status: TaskStatus) {
 export async function updateTaskStatus(
   taskId: string,
   status: TaskStatus,
-): Promise<"api" | "local"> {
+): Promise<UpdateTaskStatusResult> {
   if (!isBrowser()) {
     return "local";
   }
@@ -69,8 +90,15 @@ export async function updateTaskStatus(
       setTaskStatus(taskId, status);
       return "api";
     }
-  } catch {
-    // Fall back to local persistence for demo resiliency.
+
+    const bodyText = await response.text().catch(() => "");
+    console.warn(
+      `[updateTaskStatus] API ${response.status} for taskId=${taskId} status=${status}:`,
+      bodyText.slice(0, 500),
+    );
+    return "rejected";
+  } catch (error) {
+    console.warn("[updateTaskStatus] network error; using local fallback:", error);
   }
 
   setTaskStatus(taskId, status);
@@ -84,17 +112,24 @@ export function subscribeToTaskStatus(
     return () => {};
   }
 
-  const handler = () => callback(getTaskStatuses());
+  const storageHandler = (event: Event) => {
+    const storageEvent = event as StorageEvent;
+    if (storageEvent.key !== null && storageEvent.key !== STORAGE_KEY) {
+      return;
+    }
+    callback(getTaskStatuses());
+  };
+
   const customHandler = (event: Event) => {
     const customEvent = event as CustomEvent<TaskStatusMap>;
     callback(customEvent.detail);
   };
 
-  window.addEventListener("storage", handler);
+  window.addEventListener("storage", storageHandler);
   window.addEventListener(STATUS_EVENT_NAME, customHandler as EventListener);
 
   return () => {
-    window.removeEventListener("storage", handler);
+    window.removeEventListener("storage", storageHandler);
     window.removeEventListener(
       STATUS_EVENT_NAME,
       customHandler as EventListener,
