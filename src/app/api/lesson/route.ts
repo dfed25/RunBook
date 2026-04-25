@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server";
 import { demoDocs } from "@/lib/demoDocs";
 import { LESSON_GENERATION_SYSTEM_PROMPT } from "@/lib/prompts";
-import { generateJsonFromGemini } from "@/lib/ai";
+import { generateFromGemini } from "@/lib/ai";
 import { Lesson } from "@/lib/types";
 import { retrieveDocs } from "@/lib/retrieval";
 import { requireHireAccess } from "@/lib/apiAuth";
+import { getTasks } from "@/lib/dataStore";
 
 const MAX_CONTEXT_CHARS = 18_000;
 
@@ -91,10 +92,66 @@ function fallbackLesson(question: string, limitedSources: boolean): Lesson {
 type LessonContext = {
   question: string;
   docs: Array<{ title: string; url?: string; content: string }>;
+  tasks: Array<{ title: string; description: string; status: string; sourceTitle: string; estimatedTime: string }>;
   limitedSources: boolean;
 };
 
+function questionKeywords(question: string): string[] {
+  return question
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .split(/\s+/)
+    .filter((token) => token.length > 2)
+    .slice(0, 20);
+}
+
+function scoreTaskAgainstQuestion(task: { title: string; description: string; sourceTitle: string }, keywords: string[]): number {
+  const hay = `${task.title} ${task.description} ${task.sourceTitle}`.toLowerCase();
+  let score = 0;
+  for (const key of keywords) {
+    if (hay.includes(key)) score += 1;
+  }
+  return score;
+}
+
+function parseLessonJson(raw: string): Lesson {
+  const direct = raw.trim().replace(/```json/g, "").replace(/```/g, "").trim();
+  try {
+    return JSON.parse(direct) as Lesson;
+  } catch {
+    const firstBrace = direct.indexOf("{");
+    const lastBrace = direct.lastIndexOf("}");
+    if (firstBrace >= 0 && lastBrace > firstBrace) {
+      const sliced = direct.slice(firstBrace, lastBrace + 1);
+      return JSON.parse(sliced) as Lesson;
+    }
+    throw new Error("Model output did not contain parseable lesson JSON.");
+  }
+}
+
 async function buildLessonContext(question: string, docId: string, hireId?: string): Promise<LessonContext> {
+  const keywords = questionKeywords(question);
+  const tasks = hireId
+    ? (await getTasks())
+        .filter((task) => task.assigneeId === hireId)
+        .map((task) => ({
+          title: task.title,
+          description: task.description,
+          status: task.status,
+          sourceTitle: task.sourceTitle,
+          estimatedTime: task.estimatedTime,
+          score: scoreTaskAgainstQuestion(task, keywords),
+        }))
+        .sort((a, b) => b.score - a.score)
+        .slice(0, 8)
+        .map((task) => ({
+          title: task.title,
+          description: task.description,
+          status: task.status,
+          sourceTitle: task.sourceTitle,
+          estimatedTime: task.estimatedTime,
+        }))
+    : [];
   const retrieved = await retrieveDocs(question, hireId);
   const docs = retrieved
     .sort((a, b) => b.score - a.score)
@@ -114,7 +171,7 @@ async function buildLessonContext(question: string, docId: string, hireId?: stri
   }
 
   if (packed.length > 0) {
-    return { question, docs: packed, limitedSources: false };
+    return { question, docs: packed, tasks, limitedSources: false };
   }
 
   const staticDoc = demoDocs.find((d) => d.id === docId) || demoDocs[0];
@@ -127,6 +184,7 @@ async function buildLessonContext(question: string, docId: string, hireId?: stri
         content: staticDoc.content.trim(),
       },
     ],
+    tasks,
   };
 }
 
@@ -163,10 +221,19 @@ export async function POST(req: Request) {
         return `[Source ${index + 1}] ${doc.title}\n${urlLine}\nContent:\n${doc.content}`;
       })
       .join("\n\n");
-    const userPrompt = `User question:\n${question}\n\nAvailable sources:\n${contextText}\n\nGenerate a grounded, in-depth walkthrough lesson that directly answers this specific question and teaches execution end-to-end. The first slide must be a \"Question focus\" slide that restates the user goal in concrete terms.`;
+    const taskContext = context.tasks.length
+      ? context.tasks
+          .map(
+            (task, idx) =>
+              `${idx + 1}. ${task.title} [${task.status}] · ETA ${task.estimatedTime}\nDescription: ${task.description}\nSource: ${task.sourceTitle}`
+          )
+          .join("\n\n")
+      : "No hire tasks available.";
+    const userPrompt = `User question:\n${question}\n\nRelevant assigned tasks:\n${taskContext}\n\nAvailable sources:\n${contextText}\n\nGenerate a grounded, in-depth walkthrough lesson that directly answers this specific question and teaches execution end-to-end. The first slide must be a \"Question focus\" slide that restates the user goal in concrete terms, and the action slides should prioritize relevant assigned tasks when present.`;
     
     try {
-      const parsedLesson = await generateJsonFromGemini<Lesson>(LESSON_GENERATION_SYSTEM_PROMPT, userPrompt);
+      const raw = await generateFromGemini(LESSON_GENERATION_SYSTEM_PROMPT, userPrompt);
+      const parsedLesson = parseLessonJson(raw);
       return NextResponse.json(normalizeLesson(parsedLesson, question, context.limitedSources));
     } catch (e) {
       console.error("Lesson API Gemini Error:", e);

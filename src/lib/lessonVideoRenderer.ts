@@ -59,8 +59,8 @@ async function renderSlideClip(
   const output = path.join(assetDir, `clip-${index + 1}.mp4`);
   const relativeTextPath = path.basename(textPath);
   const drawtext = [
-    "drawtext",
-    `textfile=${relativeTextPath}`,
+    "drawtext=textfile",
+    relativeTextPath,
     "reload=0",
     "fontcolor=white",
     "fontsize=42",
