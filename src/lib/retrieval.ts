@@ -154,6 +154,33 @@ async function fetchHireKeywordFallback(question: string, hireId: string): Promi
   }));
 }
 
+function titleKeywordScore(title: string, tokens: string[]): number {
+  const hay = title.toLowerCase();
+  let score = 0;
+  for (const t of tokens) {
+    if (!t) continue;
+    if (hay.includes(t)) score += 1;
+  }
+  return score;
+}
+
+function rankHireDocuments(docs: MatchedDocument[], tokens: string[]): MatchedDocument[] {
+  const scored = docs.map((d) => {
+    const kw = titleKeywordScore(d.title, tokens);
+    // Strongly prefer explicit title matches from the user's question, then embedding similarity.
+    const rank = kw * 2.5 + d.similarity;
+    return { d, rank, kw };
+  });
+
+  scored.sort((a, b) => {
+    if (b.rank !== a.rank) return b.rank - a.rank;
+    if (b.kw !== a.kw) return b.kw - a.kw;
+    return b.d.similarity - a.d.similarity;
+  });
+
+  return scored.map((s) => s.d);
+}
+
 async function matchDocumentsWithBackoff(
   embedding: number[],
   hireId?: string
@@ -193,40 +220,16 @@ async function matchDocumentsWithBackoff(
 export async function retrieveDocs(question: string, hireId?: string): Promise<RetrievedDoc[]> {
   try {
     const TOP_K = 3;
+    const hireTokens = hireId ? tokenizeQuestion(question) : [];
     const embedding = await generateEmbedding(question);
     if (!embedding) {
       if (!hireId) return [];
       const fallbackOnly = await fetchHireKeywordFallback(question, hireId);
-      return fallbackOnly
-        .filter((doc) => matchesRetrievalScope(doc.content, hireId))
-        .slice(0, TOP_K)
-        .map((doc) => ({
-          doc: {
-            id: doc.id,
-            title: doc.title,
-            content: doc.content,
-            url: doc.url,
-            provider: doc.provider,
-          },
-          score: doc.similarity,
-        }));
-    }
-
-    const documents = await matchDocumentsWithBackoff(embedding, hireId);
-    const vectorScoped = documents
-      .filter((doc) => matchesRetrievalScope(doc.content, hireId))
-      .slice(0, TOP_K);
-
-    if (hireId && vectorScoped.length < TOP_K) {
-      const fallback = await fetchHireKeywordFallback(question, hireId);
-      const merged = new Map<string, MatchedDocument>();
-      for (const doc of [...vectorScoped, ...fallback]) merged.set(doc.id, doc);
-      const filled = Array.from(merged.values())
-        .filter((doc) => matchesRetrievalScope(doc.content, hireId))
-        .sort((a, b) => b.similarity - a.similarity)
-        .slice(0, TOP_K);
-
-      return filled.map((doc) => ({
+      const ranked = rankHireDocuments(
+        fallbackOnly.filter((doc) => matchesRetrievalScope(doc.content, hireId)),
+        hireTokens,
+      );
+      return ranked.slice(0, TOP_K).map((doc) => ({
         doc: {
           id: doc.id,
           title: doc.title,
@@ -238,16 +241,44 @@ export async function retrieveDocs(question: string, hireId?: string): Promise<R
       }));
     }
 
-    return vectorScoped.map((doc) => ({
-      doc: {
-        id: doc.id,
-        title: doc.title,
-        content: doc.content,
-        url: doc.url,
-        provider: doc.provider,
-      },
-      score: doc.similarity,
-    }));
+    const documents = await matchDocumentsWithBackoff(embedding, hireId);
+    const vectorScoped = documents.filter((doc) => matchesRetrievalScope(doc.content, hireId));
+
+    if (hireId) {
+      const fallback = hireTokens.length > 0 ? await fetchHireKeywordFallback(question, hireId) : [];
+      const merged = new Map<string, MatchedDocument>();
+      for (const doc of [...vectorScoped, ...fallback]) merged.set(doc.id, doc);
+      const ranked = rankHireDocuments(
+        Array.from(merged.values()).filter((doc) => matchesRetrievalScope(doc.content, hireId)),
+        hireTokens,
+      );
+
+      return ranked.slice(0, TOP_K).map((doc) => ({
+        doc: {
+          id: doc.id,
+          title: doc.title,
+          content: doc.content,
+          url: doc.url,
+          provider: doc.provider,
+        },
+        score: doc.similarity,
+      }));
+    }
+
+    return vectorScoped
+      .slice()
+      .sort((a, b) => b.similarity - a.similarity)
+      .slice(0, TOP_K)
+      .map((doc) => ({
+        doc: {
+          id: doc.id,
+          title: doc.title,
+          content: doc.content,
+          url: doc.url,
+          provider: doc.provider,
+        },
+        score: doc.similarity,
+      }));
   } catch (err) {
     console.error("Retrieval Pipeline Error:", err);
     return [];
