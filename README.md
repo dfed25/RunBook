@@ -1,97 +1,80 @@
 # Runbook
 
-Runbook is an AI onboarding copilot that turns scattered company knowledge into step-by-step onboarding workflows.
+**Runbook** is an embeddable AI onboarding assistant. Companies connect or import docs, configure the assistant in **Studio**, and embed it into any app or site. The assistant answers questions using **seeded demo knowledge** plus any **manual sources** you add in Studio (stored in the browser until real integrations ship).
+
+**Tagline:** Turn your docs into an embedded onboarding copilot.
 
 ## What it does
-- Answers new hire questions using company documents
-- Generates onboarding checklists
-- Tracks task progress
-- Shows manager visibility into onboarding
-- Turns docs into short onboarding lessons
-- Supports a manager control plane to add/remove hires and attach per-hire knowledge links (Notion, Google, Slack, URL)
 
-## Supabase Integration Guide (For Teammates)
+1. **Knowledge** — Curated demo docs (engineering setup, first week, security, product, expenses). In Studio you see seeded “connected” sources and can add **manual** title + content entries. Those merge into retrieval for `northstar-demo` chat when you use the same browser profile (`localStorage`).
+2. **Studio (`/studio`)** — Edit assistant name, welcome message, primary color, suggested questions, and manual sources. Changes persist to `localStorage` key `runbook_demo_bundle_v1` and update the **live preview** (same `EmbeddedRunbookAssistant` as embed-demo).
+3. **Embed** — Two options:
+   - **React (recommended for Next apps):** import `EmbeddedRunbookAssistant` from `@/components/EmbeddedRunbookAssistant`.
+   - **Script tag (any HTML page):** load `public/runbook-embed.js` with `data-project-id="northstar-demo"`. On the **same origin**, the script reads `runbook_demo_bundle_v1` for welcome, title, color, suggestions, and `customSources` on each chat request.
 
-1. **Install packages**
-Run this command to install the required dependencies (Already completed on branch):
+4. **Chat API** — `POST /api/embed/chat` returns **answer**, **sources** (with excerpts), and **steps**. For `northstar-demo`, answers use **keyword retrieval** over seeded + manual docs, then **Gemini** (with **OpenAI** fallback if Gemini fails) when `GEMINI_API_KEY` and/or `OPENAI_API_KEY` is set. If no LLM is configured or the API errors, **deterministic fallbacks** still answer common onboarding questions.
+
+## Demo flow (keep this working)
+
+1. Open **`/`** — marketing landing.
+2. Open **`/studio`** — knowledge sources (seeded + add manual), assistant config, embed snippet, live preview.
+3. Open **`/embed-demo`** — sample “Northstar” docs page with the **React** assistant (reads the same `localStorage` bundle as Studio).
+4. Click the **Runbook** bubble → ask **“How do I get GitHub access?”** → receive steps + sources (LLM when configured, otherwise curated fallback).
+
+## Routes
+
+| Route | Purpose |
+|--------|---------|
+| `/` | Landing |
+| `/studio` | Studio — config, sources, embed code, live assistant preview |
+| `/embed-demo` | Sample customer page + embedded assistant |
+| `/runbook-embed.js` | Static embed script (`public/runbook-embed.js`) |
+| `POST /api/embed/chat` | Body: `projectId`, `message`, optional `pageContext`, optional `customSources` (demo) |
+
+Bearer-authenticated `projectId` (non-demo) uses indexed project retrieval when Supabase is wired; see route implementation.
+
+## Tech stack
+
+- **Next.js** (App Router) + React + Tailwind
+- **Gemini** + optional **OpenAI** fallback (`src/lib/ai.ts`) for text generation
+- **Keyword retrieval** for the public demo (`src/lib/embedKeywordRetrieval.ts`) — no extra vector DB for `northstar-demo`
+- **Supabase** (optional) for vector-backed keyed projects
+
+## Run locally
+
 ```bash
-npm install @supabase/supabase-js @supabase/ssr
+npm install
+npm run dev
 ```
 
-2. **Add Env Variables**
-Make sure `.env.local` possesses the correct Supabase connection strings (get values from the team or Supabase dashboard):
-```txt
-NEXT_PUBLIC_SUPABASE_URL=<your-supabase-project-url>
-NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=<your-supabase-publishable-key>
+Visit `http://localhost:3000`, `/studio`, and `/embed-demo`.
+
+```bash
+npm run build
 ```
 
-3. **Supabase Client Helpers**
-The architecture heavily relies on pre-built client wrappers mapped under `src/utils/supabase/`. 
-- `src/utils/supabase/server.ts` handles SSR queries (e.g. inside `page.tsx` React Server Components).
-- `src/utils/supabase/client.ts` handles traditional CSR browser connections.
-- `src/utils/supabase/middleware.ts` forces secure session refreshes.
+## Environment variables
 
-## Demo QA flow (Playwright)
+See `.env.example`. The app **must not crash** if keys are missing.
 
-With the dev server running (`npm run dev` in another terminal), install browsers once (`npx playwright install chromium`), then run `npm run qa:flow`. The script writes `QA_BUG_LOG.md` and `screenshots/` in the project root (both are gitignored). Set `BASE_URL` if the app is not on `http://localhost:3000`. The process exits with a non-zero code when bugs are logged or the run crashes.
+| Variable | Role |
+|----------|------|
+| `GEMINI_API_KEY` | Primary LLM for `/api/embed/chat` (northstar + keyed paths use `generateFromGemini`) |
+| `OPENAI_API_KEY` | Optional: used if Gemini fails or is absent (see `generateFromGemini` in `src/lib/ai.ts`) |
+| Supabase / GitHub / OAuth | Optional for production-style indexing and keyed embeds |
 
-## Manager onboarding control plane flow
+**Northstar demo:** no keys required — keyword retrieval + scripted fallbacks for GitHub access, local setup, first steps, “explain this page”, security rules, etc.
 
-1. Open `/manager/tasks`.
-2. Add a hire (name/role/email).
-3. Select the hire and attach knowledge links (Notion pages/databases, Google Docs/folders/files, Slack channels, URLs).
-4. Click **Sync selected hire** to ingest source content into the vector store (URLs are fetched and parsed immediately; provider-backed enrichment runs when API credentials are configured).
-5. Create/duplicate onboarding tasks and assign by hire.
-6. Open `/dashboard`, select the same hire, then test:
-   - task checklist is scoped to that hire
-   - chat answers are generated from hire-scoped context with richer citation cards (including source URLs when present)
-   - lesson generation can use hire-scoped retrieval when a question is provided
-   - lesson presenter mode can read slides aloud and queue an MP4 render
+## Persistence note
 
-## Lesson video rendering (optional MP4)
+Studio and embed-demo share **`localStorage`** (`runbook_demo_bundle_v1`) in the same browser. The vanilla **`/runbook-embed.js`** widget reads that bundle only on the **same origin** as Runbook (the script uses `localStorage`). Cross-origin embeds get built-in defaults unless you add a future config mechanism.
 
-- MP4 export uses `ffmpeg` from your system PATH.
-- Install on macOS: `brew install ffmpeg`
-- Install on Debian/Ubuntu: `sudo apt update && sudo apt install -y ffmpeg`
-- Install on Windows (Chocolatey): `choco install ffmpeg`
-- The app queues render jobs via:
-  - `POST /api/lesson/render` (queue a render for a generated lesson payload)
-  - `GET /api/lesson/render/:jobId` (poll status)
-  - `GET /api/lesson/render/:jobId/video` (download generated MP4 when complete)
-- Render artifacts are stored locally under `.runbook-data/lesson-renders/` (gitignored runtime data).
+## TODOs / extensions
 
-## API endpoints (manager flow)
+- Server-side persistence for Studio config and manual sources.
+- Wire real GitHub / Notion ingestion into retrieval for production projects.
+- Billing / multi-tenant auth — out of scope for this demo.
 
-- `GET/POST /api/manager/hires`
-- `PATCH/DELETE /api/manager/hires/:hireId`
-- `GET/POST /api/manager/hires/:hireId/sources`
-- `DELETE /api/manager/hires/:hireId/sources/:sourceId`
-- `POST /api/sync/knowledge` (optional body: `{ "hireId": "..." }`)
+## Legacy code
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
-
-**Example Usage in `page.tsx`:**
-```tsx
-import { createClient } from '@/utils/supabase/server'
-import { cookies } from 'next/headers'
-
-export default async function Page() {
-  const cookieStore = await cookies()
-  const supabase = createClient(cookieStore)
-
-  const { data: todos } = await supabase.from('todos').select()
-
-  return (
-    <ul>
-      {todos?.map((todo) => (
-        <li key={todo.id}>{todo.name}</li>
-      ))}
-    </ul>
-  )
-}
-```
-
-## Setup reminders
-
-- Apply `supabase/migrations/00000000000000_init_vector_db.sql` in Supabase Studio.
-- Set provider credentials in `.env.local` to enable live ingestion depth.
+Routes such as `/dashboard`, `/manager`, `/demo/*` may still exist but are **not** part of the main product shell.
