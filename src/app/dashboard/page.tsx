@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DEMO_PERSONAS, DEMO_QUESTIONS } from "@/lib/demoScenario";
 import { ChatSource, Hire, Lesson, LessonSlide, OnboardingTask } from "@/lib/types";
 import { AppButton } from "@/components/ui/AppButton";
+import { ChatMessageBody } from "@/components/ui/ChatMessageBody";
 import { SectionCard } from "@/components/ui/SectionCard";
 import { StatusBadge } from "@/components/ui/StatusBadge";
 
@@ -301,13 +302,15 @@ export default function DashboardPage() {
               </div>
               {messages.map((message) => (
                 <div key={message.id} className={`space-y-2 ${message.role === "user" ? "text-right" : ""}`}>
-                  <p
-                    className={`inline-block max-w-[95%] rounded-lg px-3 py-2 text-sm ${
-                      message.role === "user" ? "bg-cyan-500 text-slate-900" : "bg-slate-800 text-slate-100"
+                  <div
+                    className={`inline-block rounded-lg px-3 py-2 text-sm ${
+                      message.role === "user"
+                        ? "max-w-[min(92%,28rem)] bg-cyan-500 text-slate-900"
+                        : "max-w-[min(96%,42rem)] bg-slate-800 text-slate-100"
                     }`}
                   >
-                    {message.text}
-                  </p>
+                    <ChatMessageBody role={message.role} text={message.text} />
+                  </div>
                   {message.role === "assistant" && message.sources?.length ? (
                     <div className="grid gap-2">
                       {message.sources.map((source, idx) => (
@@ -324,7 +327,9 @@ export default function DashboardPage() {
                           ) : (
                             <p className="text-xs font-semibold text-cyan-200">{source.title}</p>
                           )}
-                          <p className="text-xs text-slate-300">{source.excerpt}</p>
+                          <p className="mt-1 whitespace-pre-wrap break-words text-xs leading-relaxed text-slate-300">
+                            {source.excerpt}
+                          </p>
                         </article>
                       ))}
                     </div>
