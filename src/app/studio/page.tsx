@@ -17,26 +17,17 @@ const SEEDED_SOURCES = [
 ] as const;
 
 export default function StudioPage() {
-  const [origin, setOrigin] = useState("");
-  const [hydrated, setHydrated] = useState(false);
-  const [assistantName, setAssistantName] = useState(DEFAULT_DEMO_BUNDLE.assistantName);
-  const [welcome, setWelcome] = useState(DEFAULT_DEMO_BUNDLE.welcome);
-  const [primaryColor, setPrimaryColor] = useState(DEFAULT_DEMO_BUNDLE.primaryColor);
-  const [suggestedRaw, setSuggestedRaw] = useState(DEFAULT_DEMO_BUNDLE.suggestedQuestions.join("\n"));
-  const [manualSources, setManualSources] = useState<DemoManualSource[]>([]);
+  const origin = typeof window !== "undefined" ? window.location.origin : "";
+  const [assistantName, setAssistantName] = useState(() => loadDemoBundle().assistantName);
+  const [welcome, setWelcome] = useState(() => loadDemoBundle().welcome);
+  const [primaryColor, setPrimaryColor] = useState(() => loadDemoBundle().primaryColor);
+  const [suggestedRaw, setSuggestedRaw] = useState(() => {
+    const questions = loadDemoBundle().suggestedQuestions;
+    return questions.length ? questions.join("\n") : DEFAULT_DEMO_BUNDLE.suggestedQuestions.join("\n");
+  });
+  const [manualSources, setManualSources] = useState<DemoManualSource[]>(() => loadDemoBundle().manualSources);
   const [newTitle, setNewTitle] = useState("");
   const [newContent, setNewContent] = useState("");
-
-  useEffect(() => {
-    setOrigin(window.location.origin);
-    const b = loadDemoBundle();
-    setAssistantName(b.assistantName);
-    setWelcome(b.welcome);
-    setPrimaryColor(b.primaryColor);
-    setSuggestedRaw(b.suggestedQuestions.length ? b.suggestedQuestions.join("\n") : DEFAULT_DEMO_BUNDLE.suggestedQuestions.join("\n"));
-    setManualSources(b.manualSources);
-    setHydrated(true);
-  }, []);
 
   const suggestedQuestions = useMemo(
     () =>
@@ -48,7 +39,6 @@ export default function StudioPage() {
   );
 
   useEffect(() => {
-    if (!hydrated) return;
     saveDemoBundle({
       assistantName,
       welcome,
@@ -56,7 +46,7 @@ export default function StudioPage() {
       suggestedQuestions,
       manualSources
     });
-  }, [hydrated, assistantName, welcome, primaryColor, suggestedQuestions, manualSources]);
+  }, [assistantName, welcome, primaryColor, suggestedQuestions, manualSources]);
 
   const embedSnippet = origin
     ? `<script src="${origin}/runbook-embed.js" data-project-id="northstar-demo" async></script>`

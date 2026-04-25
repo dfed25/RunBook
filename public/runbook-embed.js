@@ -35,7 +35,7 @@
       var j = JSON.parse(raw);
       if (!j || typeof j !== "object") return null;
       return j;
-    } catch (e) {
+    } catch {
       return null;
     }
   }
@@ -267,7 +267,7 @@
           html += "</div>";
         }
         addBot(html || "(empty)");
-      } catch (e) {
+      } catch {
         addBot("Network error — is <code>" + escapeHtml(base) + "</code> reachable from this page?");
       } finally {
         sendBtn.disabled = false;
