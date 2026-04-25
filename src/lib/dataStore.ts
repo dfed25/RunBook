@@ -233,6 +233,41 @@ function presetTaskPlaybook(title: string, sourceTitle: string): string | null {
   return null;
 }
 
+function normalizeGuidedFields(
+  task: Partial<OnboardingTask>
+): Partial<Pick<OnboardingTask, "appName" | "appUrl" | "actionSteps" | "currentStep">> {
+  const out: Partial<Pick<OnboardingTask, "appName" | "appUrl" | "actionSteps" | "currentStep">> = {};
+  if (typeof task.appName === "string" && task.appName.trim()) {
+    out.appName = task.appName.trim();
+  }
+  if (typeof task.appUrl === "string" && task.appUrl.trim()) {
+    out.appUrl = task.appUrl.trim();
+  }
+  const steps =
+    Array.isArray(task.actionSteps) && task.actionSteps.length
+      ? task.actionSteps.map((s) => String(s).trim()).filter(Boolean)
+      : [];
+  if (steps.length) {
+    out.actionSteps = steps;
+    const rawStep = task.currentStep;
+    if (typeof rawStep === "number" && Number.isFinite(rawStep)) {
+      out.currentStep = Math.min(Math.max(0, Math.floor(rawStep)), steps.length - 1);
+    } else {
+      out.currentStep = 0;
+    }
+  }
+  return out;
+}
+
+/** Backfill guided fields from seed definitions when legacy tasks.json lacks them. */
+function mergeSeedGuidedFields(task: OnboardingTask): OnboardingTask {
+  if (task.actionSteps && task.actionSteps.length > 0) return task;
+  const seed = initialTasks.find((t) => t.id === task.id);
+  if (!seed?.actionSteps?.length) return task;
+  const guided = normalizeGuidedFields(seed);
+  return { ...task, ...guided };
+}
+
 function ensureStructuredTaskDescription(title: string, description: string): string {
   const raw = String(description || "").replace(/\r/g, "").trim();
   if (/Objective:|Steps:|Verification:|If blocked:/i.test(raw)) {
@@ -281,7 +316,7 @@ function normalizeTask(
     /Expected output\/result is visible\./i.test(existingDescription) ||
     /Follow the task description and team runbook\./i.test(existingDescription);
 
-  return {
+  const base: OnboardingTask = {
     id: String(task.id || makeId("task")),
     title: normalizedTitle,
     description:
@@ -297,6 +332,7 @@ function normalizeTask(
     sourceTitle: String(task.sourceTitle || "User Added").trim(),
     estimatedTime: String(task.estimatedTime || "15 min").trim()
   };
+  return { ...base, ...normalizeGuidedFields(task) };
 }
 
 async function runMutation<T>(mutate: () => Promise<T>): Promise<T> {
@@ -503,7 +539,8 @@ export async function getTasks(): Promise<OnboardingTask[]> {
   const storedTasks = await readJson<unknown[]>(TASKS_FILE, []);
   const normalized = storedTasks
     .filter((value): value is Record<string, unknown> => !!value && typeof value === "object")
-    .map((task) => normalizeTask(task, hiresByName, defaultHire));
+    .map((task) => normalizeTask(task, hiresByName, defaultHire))
+    .map(mergeSeedGuidedFields);
   if (JSON.stringify(normalized) !== JSON.stringify(storedTasks)) {
     await writeJson(TASKS_FILE, normalized);
   }
@@ -517,6 +554,10 @@ export async function addTask(input: {
   assignee?: string;
   estimatedTime?: string;
   sourceTitle?: string;
+  appName?: string;
+  appUrl?: string;
+  actionSteps?: string[];
+  currentStep?: number;
 }): Promise<OnboardingTask> {
   return runMutation(async () => {
     const hires = await getHires();
@@ -534,7 +575,11 @@ export async function addTask(input: {
         assignee: assigneeHire.name || input.assignee,
         status: "todo",
         sourceTitle: input.sourceTitle || "User Added",
-        estimatedTime: input.estimatedTime || "15 min"
+        estimatedTime: input.estimatedTime || "15 min",
+        appName: input.appName,
+        appUrl: input.appUrl,
+        actionSteps: input.actionSteps,
+        currentStep: input.currentStep
       },
       hiresByName,
       defaultHire
@@ -545,17 +590,37 @@ export async function addTask(input: {
   });
 }
 
-export async function updateTaskStatus(taskId: string, status: OnboardingTask["status"]): Promise<OnboardingTask | null> {
+export async function patchTask(
+  taskId: string,
+  patch: { status?: OnboardingTask["status"]; currentStep?: number }
+): Promise<OnboardingTask | null> {
   return runMutation(async () => {
     const tasks = await getTasks();
     const idx = tasks.findIndex((task) => task.id === taskId);
     if (idx < 0) return null;
-    const updatedTask = { ...tasks[idx], status };
+    const prev = tasks[idx]!;
+    const next: OnboardingTask = { ...prev };
+    if (patch.status !== undefined) {
+      if (patch.status !== "todo" && patch.status !== "in_progress" && patch.status !== "complete") {
+        return null;
+      }
+      next.status = patch.status;
+    }
+    if (patch.currentStep !== undefined) {
+      const n = next.actionSteps?.length ?? 0;
+      if (n > 0) {
+        next.currentStep = Math.min(Math.max(0, Math.floor(patch.currentStep)), n - 1);
+      }
+    }
     const nextTasks = [...tasks];
-    nextTasks[idx] = updatedTask;
+    nextTasks[idx] = next;
     await writeJson(TASKS_FILE, nextTasks);
-    return updatedTask;
+    return next;
   });
+}
+
+export async function updateTaskStatus(taskId: string, status: OnboardingTask["status"]): Promise<OnboardingTask | null> {
+  return patchTask(taskId, { status });
 }
 
 export async function removeTask(taskId: string): Promise<boolean> {

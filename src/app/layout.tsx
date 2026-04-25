@@ -49,6 +49,9 @@ export default function RootLayout({
             <Link href="/demo/expenses" className="rounded-md px-2 py-1 text-slate-200 hover:bg-slate-800">
               Demo: Expenses
             </Link>
+            <Link href="/demo/security" className="rounded-md px-2 py-1 text-slate-200 hover:bg-slate-800">
+              Demo: Security
+            </Link>
           </nav>
         </header>
         <div className="flex-1">{children}</div>

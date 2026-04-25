@@ -94,10 +94,22 @@ export async function POST(req: Request) {
         .slice(0, 18);
       if (hireTasks.length > 0) {
         taskContext = hireTasks
-          .map(
-            (task, index) =>
-              `${index + 1}. ${task.title} [${task.status}] · ETA ${task.estimatedTime}\nDescription: ${task.description}\nSource: ${task.sourceTitle}`
-          )
+          .map((task, index) => {
+            const guidedLines: string[] = [];
+            if (task.appName) guidedLines.push(`App/tool label: ${task.appName}`);
+            if (task.appUrl) guidedLines.push(`In-app guidance URL: ${task.appUrl}`);
+            if (task.actionSteps?.length) {
+              guidedLines.push(
+                `Guided steps:\n${task.actionSteps.map((s, i) => `  ${i + 1}. ${s}`).join("\n")}`,
+              );
+            }
+            if (typeof task.currentStep === "number") {
+              guidedLines.push(`Current guided step index (0-based): ${task.currentStep}`);
+            }
+            const guidedBlock =
+              guidedLines.length > 0 ? `\n${guidedLines.join("\n")}` : "";
+            return `${index + 1}. ${task.title} [${task.status}] · ETA ${task.estimatedTime}\nDescription: ${task.description}\nSource: ${task.sourceTitle}${guidedBlock}`;
+          })
           .join("\n\n");
         sources.unshift({
           title: "Assigned onboarding tasks",
@@ -120,7 +132,7 @@ export async function POST(req: Request) {
     }
 
     try {
-      const userPrompt = `Assigned Tasks (for selected hire):\n${taskContext}\n\nCompany Context:\n${context || "No context found."}\n\nUser Question: ${question}\n\nWrite the answer in clear, scannable markdown: use "## " section headings, "- " bullets or numbered steps where appropriate, and **bold** for key terms. Ground every claim in the sources above.\n\nIf the question asks what they should do or how to complete work, build a concrete, ordered task execution plan using Assigned Tasks first, then docs as supporting context.`;
+      const userPrompt = `Assigned Tasks (for selected hire):\n${taskContext}\n\nCompany Context:\n${context || "No context found."}\n\nUser Question: ${question}\n\nWrite the answer in clear, scannable markdown. Ground every claim in the Assigned Tasks block and/or company sources.\n\nIf the question asks what they should do or how to complete work: (1) Prefer the task's guided steps, app/tool labels, and in-app URLs when present; (2) use numbered steps; (3) include a short "## Apps / tools" section naming specific products; (4) end with "## Sources" listing relevant source titles from the context.`;
       const answer = await generateFromGemini(CHAT_SYSTEM_PROMPT, userPrompt);
       return NextResponse.json({ answer, sources });
     } catch (e) {

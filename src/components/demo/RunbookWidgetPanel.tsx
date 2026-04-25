@@ -7,12 +7,19 @@ import type { DemoTaskContext } from "./demoTaskMap";
 type RunbookWidgetPanelProps = {
   task: DemoTaskContext;
   onClose: () => void;
+  /** Zero-based guided step index */
+  stepIndex: number;
+  stepTotal: number;
+  currentStepText: string;
   children?: ReactNode;
 };
 
 export function RunbookWidgetPanel({
   task,
   onClose,
+  stepIndex,
+  stepTotal,
+  currentStepText,
   children,
 }: RunbookWidgetPanelProps) {
   const titleId = useId();
@@ -54,9 +61,11 @@ export function RunbookWidgetPanel({
       <p className="mt-3 text-sm text-slate-700">{task.description}</p>
       <div className="mt-4 rounded-lg border border-blue-100 bg-blue-50 p-3">
         <p className="text-xs font-semibold uppercase tracking-wide text-blue-700">
-          Next step
+          {stepTotal > 0 ? `Guided step ${stepIndex + 1} / ${stepTotal}` : "Next step"}
         </p>
-        <p className="mt-1 text-sm text-blue-900">{task.nextStep}</p>
+        <p className="mt-1 text-sm text-blue-900">
+          {currentStepText || task.nextStep}
+        </p>
       </div>
       {children ? <div className="mt-4">{children}</div> : null}
     </aside>

@@ -9,10 +9,13 @@ export default function Home() {
           <p className="inline-block rounded-full border border-slate-700 px-3 py-1 text-xs text-slate-300">
             Northstar AI - Runbook
           </p>
-          <h1 className="text-4xl font-bold tracking-tight">Manager Onboarding Control Center</h1>
+          <h1 className="text-4xl font-bold tracking-tight">
+            Turn company knowledge into guided onboarding across every app.
+          </h1>
           <p className="max-w-3xl text-sm text-slate-300 sm:text-base">
-            Use this landing page as the default entry point for manager workflows. From here you can review onboarding
-            results by employee and create new tasks assigned to each person.
+            Runbook connects policies and playbooks to assignee tasks, in-app walkthroughs on demo tools, and a copilot
+            that answers with numbered steps—so new hires move from reading docs to doing the work in GitHub, finance,
+            security portals, and more.
           </p>
         </header>
 

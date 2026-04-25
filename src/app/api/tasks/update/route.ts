@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { updateTaskStatus } from "@/lib/dataStore";
+import { patchTask } from "@/lib/dataStore";
 import { OnboardingTask } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -10,22 +10,35 @@ export async function POST(req: Request) {
     const taskId = typeof (body as { taskId?: unknown })?.taskId === "string"
       ? (body as { taskId: string }).taskId
       : null;
-    const status = typeof (body as { status?: unknown })?.status === "string"
+    const statusRaw = typeof (body as { status?: unknown })?.status === "string"
       ? (body as { status: string }).status
       : null;
+    const currentStepRaw = (body as { currentStep?: unknown }).currentStep;
+    const currentStep =
+      typeof currentStepRaw === "number" && Number.isFinite(currentStepRaw) ? currentStepRaw : undefined;
     const ALLOWED: OnboardingTask["status"][] = ["todo", "in_progress", "complete"];
 
-    if (!taskId || !status) {
-      return NextResponse.json({ error: "taskId and status must be strings" }, { status: 400 });
+    if (!taskId) {
+      return NextResponse.json({ error: "taskId is required" }, { status: 400 });
     }
-    
-    if (!ALLOWED.includes(status as OnboardingTask["status"])) {
+
+    const hasStatus = statusRaw !== null && statusRaw !== "";
+    const hasStep = currentStep !== undefined;
+
+    if (!hasStatus && !hasStep) {
+      return NextResponse.json({ error: "Provide status and/or currentStep" }, { status: 400 });
+    }
+
+    if (hasStatus && !ALLOWED.includes(statusRaw as OnboardingTask["status"])) {
       return NextResponse.json({ error: "Invalid status" }, { status: 400 });
     }
 
-    const updatedTask = await updateTaskStatus(taskId, status as OnboardingTask["status"]);
+    const updatedTask = await patchTask(taskId, {
+      ...(hasStatus ? { status: statusRaw as OnboardingTask["status"] } : {}),
+      ...(hasStep ? { currentStep } : {}),
+    });
     if (!updatedTask) {
-      return NextResponse.json({ error: "Task not found" }, { status: 404 });
+      return NextResponse.json({ error: "Task not found or invalid patch" }, { status: 404 });
     }
 
     return NextResponse.json({ success: true, task: updatedTask });

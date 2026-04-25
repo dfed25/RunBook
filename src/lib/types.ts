@@ -16,6 +16,14 @@ export type SourceDoc = {
     status: "todo" | "in_progress" | "complete";
     sourceTitle: string;
     estimatedTime: string;
+    /** Demo / guided flow: product or surface label (e.g. "Ramp", "GitHub / Slack"). */
+    appName?: string;
+    /** In-app guidance URL path (e.g. "/demo/github"). */
+    appUrl?: string;
+    /** Short step labels shown in dashboard + demo widget (ordered). */
+    actionSteps?: string[];
+    /** Zero-based index into `actionSteps` while progressing in the demo app. */
+    currentStep?: number;
   };
 
   export type Hire = {

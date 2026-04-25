@@ -32,7 +32,36 @@ export const initialTasks: OnboardingTask[] = [
     assignee: "Alex Chen",
     status: "todo",
     sourceTitle: "Engineering Setup Guide",
-    estimatedTime: "15 min"
+    estimatedTime: "15 min",
+    appName: "GitHub / Slack",
+    appUrl: "/demo/github",
+    currentStep: 0,
+    actionSteps: [
+      "Confirm manager approval for org access",
+      "Open the IT GitHub request form and enter your username",
+      "Post your GitHub handle in #eng-access for visibility",
+      "Accept the org invite and verify repo access",
+    ],
+  },
+  {
+    id: "expense-submission",
+    title: "Submit onboarding expense",
+    description:
+      "Objective:\nReimburse approved onboarding purchases through finance.\n\nSteps:\n1) Open Ramp and start a new reimbursement.\n2) Attach receipt and select the onboarding / equipment category.\n3) Add business justification and submit for manager review.\n\nVerification:\n- Submission shows as pending or approved in Ramp.\n- You receive email confirmation.\n\nIf blocked:\n- Ask #finance-help with receipt and error screenshot.",
+    assigneeId: "hire-alex-chen",
+    assignee: "Alex Chen",
+    status: "todo",
+    sourceTitle: "Expense Policy",
+    estimatedTime: "20 min",
+    appName: "Ramp",
+    appUrl: "/demo/expenses",
+    currentStep: 0,
+    actionSteps: [
+      "Gather receipt and purchase details",
+      "Create reimbursement in Ramp with correct category",
+      "Attach receipt image or PDF",
+      "Submit for approval and note expected pay date",
+    ],
   },
   {
     id: "local-dev",
@@ -54,6 +83,15 @@ export const initialTasks: OnboardingTask[] = [
     assignee: "Jordan Lee",
     status: "todo",
     sourceTitle: "Security Policy",
-    estimatedTime: "30 min"
+    estimatedTime: "30 min",
+    appName: "Security Portal",
+    appUrl: "/demo/security",
+    currentStep: 0,
+    actionSteps: [
+      "Sign in to the security training portal",
+      "Finish assigned modules and pass the quiz",
+      "Enable 2FA on GitHub and core SSO apps",
+      "Acknowledge secure handling of secrets and phishing reporting",
+    ],
   }
 ];

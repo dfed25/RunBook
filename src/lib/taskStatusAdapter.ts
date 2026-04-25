@@ -123,6 +123,86 @@ export async function updateTaskStatus(
   return "local";
 }
 
+const STEPS_STORAGE_KEY = "runbook-task-current-steps";
+const STEPS_EVENT_NAME = "runbook-task-current-step-updated";
+
+function parseStepMap(raw: string): Record<string, number> {
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+    const out: Record<string, number> = {};
+    for (const [key, value] of Object.entries(parsed as Record<string, unknown>)) {
+      if (typeof key === "string" && typeof value === "number" && Number.isFinite(value)) {
+        out[key] = Math.max(0, Math.floor(value));
+      }
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
+
+function getStepMap(): Record<string, number> {
+  if (!isBrowser()) return {};
+  const raw = window.localStorage.getItem(STEPS_STORAGE_KEY);
+  return raw ? parseStepMap(raw) : {};
+}
+
+function setTaskCurrentStepLocal(taskId: string, step: number) {
+  if (!isBrowser()) return;
+  const next = { ...getStepMap(), [taskId]: Math.max(0, Math.floor(step)) };
+  window.localStorage.setItem(STEPS_STORAGE_KEY, JSON.stringify(next));
+  window.dispatchEvent(new CustomEvent(STEPS_EVENT_NAME, { detail: next }));
+}
+
+export function getTaskCurrentStep(taskId: string): number {
+  const map = getStepMap();
+  return map[taskId] ?? 0;
+}
+
+export function subscribeToTaskCurrentStep(callback: (map: Record<string, number>) => void): () => void {
+  if (!isBrowser()) return () => {};
+  const handler = (event: Event) => {
+    const detail = (event as CustomEvent<Record<string, number>>).detail;
+    callback(detail ?? getStepMap());
+  };
+  window.addEventListener(STEPS_EVENT_NAME, handler as EventListener);
+  return () => window.removeEventListener(STEPS_EVENT_NAME, handler as EventListener);
+}
+
+/** Persist guided-flow step index (API + local fallback for demo). */
+export async function updateTaskCurrentStep(
+  taskId: string,
+  currentStep: number,
+): Promise<UpdateTaskStatusResult> {
+  if (!isBrowser()) {
+    setTaskCurrentStepLocal(taskId, currentStep);
+    return "local";
+  }
+
+  try {
+    const response = await fetch("/api/tasks/update", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ taskId, currentStep }),
+    });
+
+    if (response.ok) {
+      setTaskCurrentStepLocal(taskId, currentStep);
+      return "api";
+    }
+
+    console.warn(`[updateTaskCurrentStep] API ${response.status} for taskId=${taskId}`);
+    setTaskCurrentStepLocal(taskId, currentStep);
+    return "local";
+  } catch (error) {
+    console.warn("[updateTaskCurrentStep] network error; using local fallback:", error);
+  }
+
+  setTaskCurrentStepLocal(taskId, currentStep);
+  return "local";
+}
+
 export function subscribeToTaskStatus(
   callback: (taskStatuses: TaskStatusMap) => void,
 ): () => void {

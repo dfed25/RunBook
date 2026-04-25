@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DEMO_PERSONAS, DEMO_QUESTIONS } from "@/lib/demoScenario";
 import { ChatSource, Hire, Lesson, LessonRenderJob, LessonSlide, OnboardingTask } from "@/lib/types";
@@ -532,11 +533,29 @@ export default function DashboardPage() {
                       >
                         <div className="flex flex-wrap items-start justify-between gap-3">
                           <div className="space-y-1">
-                            <p className="font-semibold">{task.title}</p>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <p className="font-semibold">{task.title}</p>
+                              {task.appName ? (
+                                <span className="rounded-full border border-cyan-500/40 bg-cyan-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-cyan-200">
+                                  {task.appName}
+                                </span>
+                              ) : null}
+                            </div>
                             <p className="text-sm text-slate-300">
                               {detail.objective || "Open this task to view the full execution playbook."}
                             </p>
-                            {detail.steps.length > 0 ? (
+                            {task.actionSteps && task.actionSteps.length > 0 ? (
+                              <ul className="mt-1 list-inside list-disc text-xs text-slate-300">
+                                {task.actionSteps.slice(0, 3).map((s, i) => (
+                                  <li key={`${task.id}-guided-${i}`}>{s}</li>
+                                ))}
+                                {task.actionSteps.length > 3 ? (
+                                  <li className="list-none text-slate-500">
+                                    +{task.actionSteps.length - 3} more in app guidance
+                                  </li>
+                                ) : null}
+                              </ul>
+                            ) : detail.steps.length > 0 ? (
                               <p className="text-xs text-cyan-200">Next: {detail.steps[0]}</p>
                             ) : null}
                             <p className="text-xs text-slate-400">
@@ -588,7 +607,15 @@ export default function DashboardPage() {
                           ) : null}
                         </div>
                       ) : null}
-                      <div className="mt-3 flex flex-wrap gap-2">
+                      <div className="mt-3 flex flex-wrap items-center gap-2">
+                        {task.appUrl ? (
+                          <Link
+                            href={task.appUrl}
+                            className="rounded-md border border-cyan-500/60 bg-cyan-500/15 px-3 py-1 text-xs font-semibold text-cyan-200 hover:border-cyan-400 hover:bg-cyan-500/25"
+                          >
+                            Guide me
+                          </Link>
+                        ) : null}
                         {(["todo", "in_progress", "complete"] as const).map((status) => (
                           <AppButton
                             key={status}
