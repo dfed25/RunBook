@@ -1,5 +1,3 @@
-import type { TraineeName } from "./trainees";
-
 export type SourceDoc = {
     id: string;
     title: string;
@@ -13,10 +11,44 @@ export type SourceDoc = {
     id: string;
     title: string;
     description: string;
-    assignee: TraineeName;
+    assigneeId: string;
+    assignee: string;
     status: "todo" | "in_progress" | "complete";
     sourceTitle: string;
     estimatedTime: string;
+  };
+
+  export type Hire = {
+    id: string;
+    name: string;
+    role?: string;
+    email?: string;
+    active: boolean;
+    createdAt: string;
+    updatedAt: string;
+  };
+
+export const KNOWLEDGE_SOURCE_TYPES = [
+  "notion_page",
+  "notion_database",
+  "google_doc",
+  "google_drive_folder",
+  "google_drive_file",
+  "slack_channel",
+  "url"
+] as const;
+
+export type KnowledgeSourceType = (typeof KNOWLEDGE_SOURCE_TYPES)[number];
+
+  export type HireKnowledgeSource = {
+    id: string;
+    hireId: string;
+    type: KnowledgeSourceType;
+    title: string;
+    url: string;
+    providerRef?: string;
+    createdAt: string;
+    updatedAt: string;
   };
   
   export type ChatSource = {

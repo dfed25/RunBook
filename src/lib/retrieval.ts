@@ -21,15 +21,27 @@ interface MatchedDocument {
   similarity: number;
 }
 
-export async function retrieveDocs(question: string): Promise<RetrievedDoc[]> {
+function matchesHireScope(content: string, hireId?: string): boolean {
+  if (!hireId) return true;
+  const scopeMarkers = content
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => /^\[hire:[^\]]+\]$/.test(line));
+  if (scopeMarkers.length === 0) return true;
+  if (scopeMarkers.includes(`[hire:${hireId}]`)) return true;
+  return scopeMarkers.includes("[hire:global]");
+}
+
+export async function retrieveDocs(question: string, hireId?: string): Promise<RetrievedDoc[]> {
   try {
+    const TOP_K = 3;
     const embedding = await generateEmbedding(question);
     if (!embedding) return [];
 
     const { data: documents, error } = await supabaseAdmin.rpc("match_documents", {
       query_embedding: `[${embedding.join(",")}]`,
       match_threshold: 0.7,
-      match_count: 3
+      match_count: hireId ? TOP_K * 10 : TOP_K
     });
 
     if (error) {
@@ -39,7 +51,10 @@ export async function retrieveDocs(question: string): Promise<RetrievedDoc[]> {
 
     if (!documents) return [];
 
-    return (documents as MatchedDocument[]).map((doc) => ({
+    const scoped = (documents as MatchedDocument[])
+      .filter((doc) => matchesHireScope(doc.content, hireId))
+      .slice(0, TOP_K);
+    return scoped.map((doc) => ({
       doc: {
         id: doc.id,
         title: doc.title,

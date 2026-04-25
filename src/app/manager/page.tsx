@@ -6,11 +6,12 @@ import { DEMO_PERSONAS, DEMO_QUESTIONS } from "@/lib/demoScenario";
 import { OnboardingTask } from "@/lib/types";
 
 type PersonSummary = {
+  hireId: string;
   name: string;
   tasks: OnboardingTask[];
   progress: number;
-  completed: number;
-  total: number;
+  completedTasks: number;
+  totalTasks: number;
   status: "On Track" | "At Risk";
 };
 
@@ -18,7 +19,7 @@ export default function ManagerPage() {
   const [people, setPeople] = useState<PersonSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [activeEmployee, setActiveEmployee] = useState<string>("ALL");
+  const [activeHireId, setActiveHireId] = useState<string>("ALL");
 
   useEffect(() => {
     const controller = new AbortController();
@@ -59,11 +60,11 @@ export default function ManagerPage() {
         .map((task) => ({ ...task, owner: person.name })),
     )
     .slice(0, 6);
-  const employeeNames = people.map((person) => person.name);
-  const selectedEmployee =
-    activeEmployee === "ALL" || employeeNames.includes(activeEmployee) ? activeEmployee : "ALL";
-  const selectedPerson = people.find((person) => person.name === selectedEmployee) || null;
-  const visiblePeople = selectedEmployee === "ALL" ? people : selectedPerson ? [selectedPerson] : [];
+  const knownHireIds = new Set(people.map((person) => person.hireId));
+  const selectedHireId =
+    activeHireId === "ALL" || knownHireIds.has(activeHireId) ? activeHireId : "ALL";
+  const selectedPerson = people.find((person) => person.hireId === selectedHireId) || null;
+  const visiblePeople = selectedHireId === "ALL" ? people : selectedPerson ? [selectedPerson] : [];
 
   return (
     <main className="min-h-screen bg-slate-950 p-6 text-slate-100 sm:p-10">
@@ -105,9 +106,9 @@ export default function ManagerPage() {
               <div className="flex flex-wrap gap-2">
                 <button
                   type="button"
-                  onClick={() => setActiveEmployee("ALL")}
+                  onClick={() => setActiveHireId("ALL")}
                   className={`rounded-full border px-3 py-1 text-sm transition ${
-                    selectedEmployee === "ALL"
+                    selectedHireId === "ALL"
                       ? "border-cyan-400 bg-cyan-400/20 text-cyan-200"
                       : "border-slate-700 bg-slate-950 text-slate-300 hover:border-slate-500"
                   }`}
@@ -116,11 +117,11 @@ export default function ManagerPage() {
                 </button>
                 {people.map((person) => (
                   <button
-                    key={person.name}
+                    key={person.hireId}
                     type="button"
-                    onClick={() => setActiveEmployee(person.name)}
+                    onClick={() => setActiveHireId(person.hireId)}
                     className={`rounded-full border px-3 py-1 text-sm transition ${
-                      selectedEmployee === person.name
+                      selectedHireId === person.hireId
                         ? "border-cyan-400 bg-cyan-400/20 text-cyan-200"
                         : "border-slate-700 bg-slate-950 text-slate-300 hover:border-slate-500"
                     }`}
@@ -131,7 +132,7 @@ export default function ManagerPage() {
               </div>
               <div className="grid gap-3">
                 {visiblePeople.map((person) => (
-                  <article key={person.name} className="rounded border border-slate-700 bg-slate-950 p-4">
+                  <article key={person.hireId} className="rounded border border-slate-700 bg-slate-950 p-4">
                     <div className="flex flex-wrap items-center justify-between gap-3">
                       <p className="font-semibold">{person.name}</p>
                       <span
@@ -145,7 +146,7 @@ export default function ManagerPage() {
                       </span>
                     </div>
                     <p className="mt-2 text-sm text-slate-300">
-                      Progress: {person.progress}% ({person.completed}/{person.total} tasks complete)
+                      Progress: {person.progress}% ({person.completedTasks}/{person.totalTasks} tasks complete)
                     </p>
                     <div className="mt-2 h-2 w-full rounded bg-slate-700">
                       <div className="h-2 rounded bg-cyan-400" style={{ width: `${person.progress}%` }} />
@@ -220,7 +221,7 @@ export default function ManagerPage() {
             ) : (
               <ul className="mt-3 space-y-2 text-sm text-slate-300">
                 {atRisk.map((person) => (
-                  <li key={person.name}>
+                  <li key={person.hireId}>
                     <span className="font-medium text-slate-100">{person.name}:</span> follow up on incomplete tasks.
                   </li>
                 ))}
