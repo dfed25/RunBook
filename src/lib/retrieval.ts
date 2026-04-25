@@ -40,7 +40,7 @@ export async function retrieveDocs(question: string, hireId?: string): Promise<R
 
     const { data: documents, error } = await supabaseAdmin.rpc("match_documents", {
       query_embedding: `[${embedding.join(",")}]`,
-      match_threshold: 0.7,
+      match_threshold: 0.4,
       match_count: hireId ? TOP_K * 10 : TOP_K
     });
 
