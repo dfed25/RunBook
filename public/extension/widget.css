@@ -10,8 +10,8 @@
 #rb-fab {
   position: fixed;
   bottom: 24px;
-  right: 24px;
-  z-index: 2147483646;
+  right: 20px;
+  z-index: 999999;
   width: 52px;
   height: 52px;
   border-radius: 50%;
@@ -46,10 +46,11 @@
 /* ── Panel ──────────────────────────────────────────────────────────────── */
 #rb-panel {
   position: fixed;
-  bottom: 88px;
-  right: 24px;
-  z-index: 2147483645;
-  width: 320px;
+  bottom: 80px;
+  right: 20px;
+  z-index: 999999;
+  width: 100%;
+  max-width: 320px;
   background: #ffffff;
   border-radius: 16px;
   box-shadow: 0 8px 40px rgba(0,0,0,0.16), 0 2px 8px rgba(0,0,0,0.08);

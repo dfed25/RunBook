@@ -1,382 +1,95 @@
-// content.js — Runbook widget with professional UI
-console.log("Runbook: Content script initialized on", window.location.href);
+// content.js — Runbook widget content script
+console.log("Runbook content script initialized on", window.location.href);
 
 const RUNBOOK_API = "http://localhost:3000";
+const PAGE_TEXT_LIMIT = 7000;
 
-const DEMO_MAP = {
+const DEMO_TASKS = {
   "/demo/github": {
     taskId: "github-access",
     taskTitle: "Request GitHub access",
+    taskDescription: "Submit a GitHub access request.",
     steps: [
-      {
-        text: "Fill in your GitHub username in the form field above.",
-        selector: "input[value='alexchen-dev']",
-      },
-      {
-        text: "Review the manager approval notes below the form.",
-        selector: ".next-error-h2",
-      },
-      {
-        text: "Wait for approval — you'll receive a GitHub invite by email within 24 hours.",
-        selector: null,
-      },
+      { text: "Click Request Access to submit your onboarding request.", selector: "#request-access-btn" },
+      { text: "Review the GitHub username and manager approval notes before proceeding.", selector: "input[value='alexchen-dev']" },
+    ],
+  },
+  "/demo/expenses": {
+    taskId: "expense-policy",
+    taskTitle: "Submit your first expense report",
+    taskDescription: "Complete an expense submission flow.",
+    steps: [
+      { text: "Open the expense form.", selector: "#submit-expense-btn" },
+      { text: "Attach receipt before submitting.", selector: "input[type='file']" },
     ],
   },
 };
 
 let widgetVisible = false;
+let chatVisible = false;
 let currentTask = null;
 let currentStepIndex = 0;
 let highlightedEl = null;
+let rootEl = null;
 
-// Inject professional CSS
-function injectCSS() {
-  const style = document.createElement("style");
-  style.textContent = `
-    #runbook-root * {
-      box-sizing: border-box;
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
-      margin: 0;
-      padding: 0;
-    }
-    
-    /* Hide original Runbook widget if it exists */
-    button[aria-label="Open Runbook assistant"],
-    .runbook-widget-button {
-      display: none !important;
-    }
-    
-    #rb-fab {
-      position: fixed;
-      bottom: 24px;
-      right: 24px;
-      z-index: 2147483646;
-      width: 56px;
-      height: 56px;
-      border-radius: 50%;
-      background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
-      border: none;
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      box-shadow: 0 4px 16px rgba(99, 102, 241, 0.4);
-      transition: all 0.2s ease;
-    }
-    
-    #rb-fab:hover {
-      transform: scale(1.1);
-      box-shadow: 0 6px 24px rgba(99, 102, 241, 0.5);
-    }
-    
-    #rb-fab:active {
-      transform: scale(0.95);
-    }
-    
-    #rb-fab svg {
-      filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.1));
-    }
-    
-    #rb-panel {
-      position: fixed;
-      bottom: 90px;
-      right: 24px;
-      z-index: 2147483645;
-      width: 360px;
-      background: white;
-      border-radius: 14px;
-      box-shadow: 0 10px 40px rgba(0, 0, 0, 0.12), 0 2px 8px rgba(0, 0, 0, 0.08);
-      overflow: hidden;
-      display: flex;
-      flex-direction: column;
-      max-height: 580px;
-      border: 1px solid rgba(0, 0, 0, 0.06);
-    }
-    
-    #rb-header {
-      padding: 16px 20px;
-      background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
-      color: white;
-      font-weight: 600;
-      font-size: 15px;
-      letter-spacing: -0.3px;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-    
-    #rb-task-view {
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-      padding: 20px;
-      overflow-y: auto;
-    }
-    
-    #rb-no-task {
-      text-align: center;
-      color: #6b7280;
-    }
-    
-    #rb-no-task p {
-      font-size: 14px;
-      margin-bottom: 16px;
-      line-height: 1.4;
-    }
-    
-    #rb-task-title {
-      font-size: 16px;
-      font-weight: 700;
-      color: #111827;
-      margin-bottom: 16px;
-    }
-    
-    #rb-progress {
-      margin-bottom: 16px;
-      font-size: 12px;
-      color: #9ca3af;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-      font-weight: 600;
-    }
-    
-    #rb-step-text {
-      font-size: 14px;
-      color: #374151;
-      line-height: 1.6;
-      background: linear-gradient(135deg, #f8f9ff 0%, #f0f4ff 100%);
-      padding: 14px 16px;
-      border-radius: 10px;
-      margin-bottom: 16px;
-      border-left: 3px solid #6366f1;
-    }
-    
-    #rb-step-actions {
-      display: flex;
-      gap: 10px;
-      margin-bottom: 12px;
-    }
-    
-    .rb-btn {
-      border: none;
-      cursor: pointer;
-      border-radius: 8px;
-      padding: 10px 16px;
-      font-size: 13px;
-      font-weight: 600;
-      transition: all 0.15s ease;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 6px;
-      letter-spacing: -0.2px;
-    }
-    
-    .rb-btn:active {
-      transform: scale(0.98);
-    }
-    
-    .rb-btn-primary {
-      background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
-      color: white;
-      flex: 1;
-      box-shadow: 0 2px 8px rgba(99, 102, 241, 0.25);
-    }
-    
-    .rb-btn-primary:hover {
-      box-shadow: 0 4px 12px rgba(99, 102, 241, 0.35);
-      transform: translateY(-1px);
-    }
-    
-    .rb-btn-primary:disabled {
-      opacity: 0.5;
-      cursor: not-allowed;
-    }
-    
-    .rb-btn-secondary {
-      background: #f3f4f6;
-      color: #374151;
-      border: 1px solid #d1d5db;
-    }
-    
-    .rb-btn-secondary:hover:not(:disabled) {
-      background: #e5e7eb;
-      border-color: #9ca3af;
-    }
-    
-    .rb-btn-secondary:disabled {
-      opacity: 0.4;
-      cursor: not-allowed;
-    }
-    
-    #rb-scan-btn {
-      width: 100%;
-      background: linear-gradient(135deg, #f0f4ff 0%, #ede9fe 100%);
-      color: #6366f1;
-      border: 1px solid #c7d2fe;
-      margin-top: 4px;
-    }
-    
-    #rb-scan-btn:hover {
-      background: linear-gradient(135deg, #e0e7ff 0%, #ddd6fe 100%);
-      border-color: #a5b4fc;
-    }
-    
-    #rb-complete-btn {
-      width: 100%;
-      background: linear-gradient(135deg, #dcfce7 0%, #bbf7d0 100%);
-      color: #166534;
-      border: 1px solid #86efac;
-      margin-top: 4px;
-    }
-    
-    #rb-complete-btn:hover {
-      background: linear-gradient(135deg, #bbf7d0 0%, #86efac 100%);
-      border-color: #22c55e;
-    }
-    
-    .rb-hidden {
-      display: none !important;
-    }
-    
-    .rb-highlight {
-      outline: 3px solid #6366f1 !important;
-      outline-offset: 3px !important;
-      box-shadow: 0 0 0 8px rgba(99, 102, 241, 0.15) !important;
-      animation: rb-pulse 1.5s ease-in-out infinite !important;
-      z-index: 999998 !important;
-      border-radius: 4px !important;
-    }
-    
-    @keyframes rb-pulse {
-      0%, 100% {
-        box-shadow: 0 0 0 8px rgba(99, 102, 241, 0.15);
-      }
-      50% {
-        box-shadow: 0 0 0 12px rgba(99, 102, 241, 0.08);
-      }
-    }
-  `;
-  document.documentElement.appendChild(style);
-  console.log("Runbook CSS injected");
+function getDemoTaskForLocation() {
+  const path = (window.location.pathname || "").toLowerCase();
+  if (path.includes("/demo/github")) return DEMO_TASKS["/demo/github"];
+  if (path.includes("/demo/expenses")) return DEMO_TASKS["/demo/expenses"];
+  return null;
 }
 
-function injectWidget() {
-  if (document.getElementById("runbook-root")) return;
-  
-  const root = document.createElement("div");
-  root.id = "runbook-root";
-  root.innerHTML = `
-    <button id="rb-fab" title="Runbook">
-      <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-        <path d="M3 12c0-4.97056 4.02944-9 9-9s9 4.02944 9 9-4.02944 9-9 9-9-4.02944-9-9Z" stroke="white" stroke-width="1.5" fill="none"/>
-        <path d="M8 12h8M8 8h8M8 16h5" stroke="white" stroke-width="1.5" stroke-linecap="round"/>
-      </svg>
-    </button>
-    <div id="rb-panel" class="rb-hidden">
-      <div id="rb-header">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" opacity="0.9">
-          <path d="M3 12c0-4.97056 4.02944-9 9-9s9 4.02944 9 9-4.02944 9-9 9-9-4.02944-9-9Z"/>
-          <path d="M8 12h8M8 8h8M8 16h5" stroke="white" stroke-width="1.5" stroke-linecap="round" fill="none"/>
-        </svg>
-        <span>Runbook</span>
-      </div>
-      <div id="rb-task-view">
-        <div id="rb-no-task">
-          <p>No active task detected.</p>
-          <p style="font-size: 12px; color: #9ca3af;">Click the button below to scan this page.</p>
-          <button class="rb-btn rb-btn-secondary" id="rb-scan-btn" style="margin-top: 12px;">📍 Scan this page</button>
-        </div>
-        <div id="rb-task-content" class="rb-hidden">
-          <div id="rb-progress"></div>
-          <div id="rb-task-title"></div>
-          <div id="rb-step-text"></div>
-          <div id="rb-step-actions">
-            <button class="rb-btn rb-btn-secondary" id="rb-highlight-btn" disabled>🔍 Highlight</button>
-            <button class="rb-btn rb-btn-primary" id="rb-next-btn">Next →</button>
-          </div>
-          <button class="rb-btn rb-btn-secondary rb-hidden" id="rb-complete-btn" style="width: 100%; margin-top: 4px;">✓ Mark complete</button>
-        </div>
-      </div>
-    </div>
-  `;
-  document.body.appendChild(root);
-  console.log("✓ Runbook widget injected");
+function byId(id) {
+  if (!rootEl) return null;
+  return rootEl.querySelector(`#${id}`);
 }
 
-function bindEvents() {
-  document.getElementById("rb-fab").addEventListener("click", toggleWidget);
-  document.getElementById("rb-scan-btn").addEventListener("click", scanPage);
-  document.getElementById("rb-highlight-btn").addEventListener("click", highlightCurrentStep);
-  document.getElementById("rb-next-btn").addEventListener("click", nextStep);
-  document.getElementById("rb-complete-btn").addEventListener("click", completeTask);
+function normalize(text) {
+  return (text || "").replace(/\s+/g, " ").trim().toLowerCase();
 }
 
-function toggleWidget() {
-  widgetVisible = !widgetVisible;
-  const panel = document.getElementById("rb-panel");
-  const fab = document.getElementById("rb-fab");
-  
-  if (widgetVisible) {
-    panel.classList.remove("rb-hidden");
-    fab.style.background = "linear-gradient(135deg, #4f46e5 0%, #3730a3 100%)";
-  } else {
-    panel.classList.add("rb-hidden");
-    fab.style.background = "linear-gradient(135deg, #6366f1 0%, #4f46e5 100%)";
-    clearHighlight();
-  }
+function getPageText() {
+  return (document.body?.innerText || "").replace(/\s+/g, " ").trim().slice(0, PAGE_TEXT_LIMIT);
 }
 
-function updateTaskPanel() {
-  if (!currentTask) return;
-  
-  document.getElementById("rb-no-task").classList.add("rb-hidden");
-  document.getElementById("rb-task-content").classList.remove("rb-hidden");
-  
-  const totalSteps = currentTask.steps.length;
-  const progress = `Step ${currentStepIndex + 1} of ${totalSteps}`;
-  document.getElementById("rb-progress").textContent = progress;
-  document.getElementById("rb-task-title").textContent = currentTask.taskTitle;
-  document.getElementById("rb-step-text").textContent = currentTask.steps[currentStepIndex].text;
-  
-  const isLast = currentStepIndex === totalSteps - 1;
-  document.getElementById("rb-next-btn").classList.toggle("rb-hidden", isLast);
-  document.getElementById("rb-complete-btn").classList.toggle("rb-hidden", !isLast);
-  
-  const hasSelector = !!currentTask.steps[currentStepIndex].selector;
-  document.getElementById("rb-highlight-btn").disabled = !hasSelector;
-  
-  console.log(`Step ${currentStepIndex + 1}/${totalSteps}`);
+function addMessage(role, text) {
+  const container = byId("rb-messages");
+  if (!container) return;
+  const msg = document.createElement("div");
+  msg.className = `rb-msg ${role === "user" ? "rb-msg-user" : "rb-msg-assistant"}`;
+  msg.textContent = text;
+  container.appendChild(msg);
+  container.scrollTop = container.scrollHeight;
 }
 
-function nextStep() {
-  clearHighlight();
-  if (currentStepIndex < currentTask.steps.length - 1) {
-    currentStepIndex++;
-    updateTaskPanel();
-  }
+function setInstruction(text) {
+  const stepText = byId("rb-step-text");
+  if (stepText) stepText.textContent = text;
 }
 
-function highlightCurrentStep() {
-  clearHighlight();
-  const selector = currentTask?.steps[currentStepIndex]?.selector;
-  
-  if (!selector) {
-    console.log("No selector for this step");
-    return;
-  }
-  
-  const el = document.querySelector(selector);
-  if (!el) {
-    console.error("❌ Element not found:", selector);
-    alert("Could not find element on page:\n\n" + selector);
-    return;
-  }
-  
-  highlightedEl = el;
-  el.classList.add("rb-highlight");
-  el.scrollIntoView({ behavior: "smooth", block: "center" });
-  console.log("✓ Highlighted:", selector);
+function apiRequest(path, body) {
+  const url = `${RUNBOOK_API}${path}`;
+  return new Promise((resolve, reject) => {
+    if (typeof chrome === "undefined" || !chrome.runtime?.id) {
+      reject(new Error("Chrome runtime unavailable"));
+      return;
+    }
+    chrome.runtime.sendMessage(
+      { type: "API_REQUEST", url, method: "POST", body },
+      (response) => {
+        const runtimeErr = chrome.runtime.lastError;
+        if (runtimeErr) {
+          reject(new Error(runtimeErr.message));
+          return;
+        }
+        if (!response?.ok) {
+          reject(new Error(response?.error || "API request failed"));
+          return;
+        }
+        resolve(response.data);
+      },
+    );
+  });
 }
 
 function clearHighlight() {
@@ -386,104 +99,383 @@ function clearHighlight() {
   }
 }
 
-function completeTask() {
-  fetch(`${RUNBOOK_API}/api/tasks/update`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ taskId: currentTask.taskId, status: "complete" }),
-  })
-  .then(r => r.json())
-  .then(data => {
-    console.log("✓ Task marked complete");
-    document.getElementById("rb-task-content").innerHTML = 
-      `<div style="text-align: center; padding: 32px 16px;">
-         <div style="font-size: 48px; margin-bottom: 12px;">✨</div>
-         <div style="font-size: 16px; font-weight: 600; color: #16a34a; margin-bottom: 4px;">Task complete!</div>
-         <div style="font-size: 13px; color: #6b7280;">Great job! Keep going.</div>
-       </div>`;
-  })
-  .catch(e => console.error("Error:", e));
+function highlightElement(el) {
+  clearHighlight();
+  highlightedEl = el;
+  el.classList.add("rb-highlight");
+  el.scrollIntoView({ behavior: "smooth", block: "center", inline: "nearest" });
+}
+
+function looksClickable(el) {
+  const tag = (el.tagName || "").toLowerCase();
+  if (["a", "button", "summary", "label"].includes(tag)) return true;
+  if (tag === "input") {
+    const type = (el.getAttribute("type") || "").toLowerCase();
+    return ["button", "submit", "radio", "checkbox"].includes(type);
+  }
+  if (el.getAttribute("role") === "button") return true;
+  return false;
+}
+
+function findElementByText(target) {
+  const wanted = normalize(target);
+  if (!wanted) return null;
+
+  const clickable = Array.from(document.querySelectorAll("button, a, [role='button'], input[type='submit'], input[type='button'], label, summary"));
+  for (const el of clickable) {
+    const text = normalize(el.innerText || el.value || el.getAttribute("aria-label") || "");
+    if (text && (text === wanted || text.includes(wanted) || wanted.includes(text))) return el;
+  }
+
+  const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+  let node = walker.nextNode();
+  while (node) {
+    const text = normalize(node.textContent || "");
+    if (text && (text === wanted || text.includes(wanted))) {
+      let p = node.parentElement;
+      while (p && p !== document.body) {
+        if (looksClickable(p)) return p;
+        p = p.parentElement;
+      }
+    }
+    node = walker.nextNode();
+  }
+  return null;
+}
+
+function updateTaskPanel() {
+  if (!currentTask) return;
+  const noTask = byId("rb-no-task");
+  const content = byId("rb-task-content");
+  const title = byId("rb-task-title");
+  const stepNumber = byId("rb-step-number");
+  const stepText = byId("rb-step-text");
+  const progressFill = byId("rb-progress-fill");
+  const progressLabel = byId("rb-progress-label");
+  const nextBtn = byId("rb-next-btn");
+  const completeBtn = byId("rb-complete-btn");
+  if (!content || !title || !stepNumber || !stepText || !progressFill || !progressLabel || !nextBtn || !completeBtn) return;
+
+  noTask?.classList.add("rb-hidden");
+  content.classList.remove("rb-hidden");
+
+  const total = currentTask.steps?.length || 1;
+  const current = Math.min(currentStepIndex + 1, total);
+  const pct = Math.round((current / total) * 100);
+
+  title.textContent = currentTask.taskTitle || "Current onboarding task";
+  stepNumber.textContent = `Step ${current} of ${total}`;
+  stepText.textContent = currentTask.steps[currentStepIndex]?.text || "";
+  progressFill.style.width = `${pct}%`;
+  progressLabel.textContent = `${current}/${total}`;
+
+  const isLast = currentStepIndex >= total - 1;
+  nextBtn.classList.toggle("rb-hidden", isLast);
+  completeBtn.classList.toggle("rb-hidden", !isLast);
+}
+
+function togglePanel(forceOpen) {
+  const panel = byId("rb-panel");
+  const fab = byId("rb-fab");
+  if (!panel || !fab) return;
+  widgetVisible = typeof forceOpen === "boolean" ? forceOpen : !widgetVisible;
+  panel.classList.toggle("rb-hidden", !widgetVisible);
+  fab.classList.toggle("rb-open", widgetVisible);
+  if (!widgetVisible) clearHighlight();
+}
+
+function toggleChat(forceOpen) {
+  const taskView = byId("rb-task-view");
+  const chatView = byId("rb-chat-view");
+  const chatBtn = byId("rb-chat-toggle");
+  if (!taskView || !chatView || !chatBtn) return;
+  chatVisible = typeof forceOpen === "boolean" ? forceOpen : !chatVisible;
+  taskView.classList.toggle("rb-hidden", chatVisible);
+  chatView.classList.toggle("rb-hidden", !chatVisible);
+  chatBtn.classList.toggle("rb-active", chatVisible);
 }
 
 async function scanPage() {
-  const btn = document.getElementById("rb-scan-btn");
-  const origText = btn.textContent;
-  btn.textContent = "⏳ Scanning...";
+  const btn = byId("rb-scan-btn");
+  if (!btn) return;
+  const original = btn.textContent;
+  btn.textContent = "Scanning...";
   btn.disabled = true;
-  
-  const pageText = document.body.innerText.slice(0, 4000);
-  const url = window.location.href;
-  
   try {
-    const resp = await fetch(`${RUNBOOK_API}/api/widget`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ url, pageText }),
-    });
-    const json = await resp.json();
-    
-    if (json?.task) {
-      currentTask = json.task;
+    const demoTask = getDemoTaskForLocation();
+    if (demoTask) {
+      currentTask = demoTask;
       currentStepIndex = 0;
       updateTaskPanel();
-      console.log("✓ Task:", currentTask.taskTitle);
+      addMessage("assistant", `Detected task: ${currentTask.taskTitle}`);
+      togglePanel(true);
+      return;
+    }
+
+    const data = await apiRequest("/api/widget", {
+      url: window.location.href,
+      pageText: getPageText(),
+    });
+    if (data?.task?.steps?.length) {
+      currentTask = data.task;
+      currentStepIndex = 0;
+      updateTaskPanel();
+      addMessage("assistant", `Detected task: ${currentTask.taskTitle}`);
+      togglePanel(true);
     } else {
-      btn.textContent = "No task found";
-      setTimeout(() => { 
-        btn.textContent = origText;
-        btn.disabled = false;
-      }, 2000);
+      addMessage("assistant", "No relevant onboarding task found on this page.");
     }
   } catch (err) {
-    console.error("Scan failed:", err);
-    btn.textContent = "Error scanning";
-    setTimeout(() => { 
-      btn.textContent = origText;
-      btn.disabled = false;
-    }, 2000);
+    console.error("Runbook scan failed", err);
+    addMessage("assistant", "Scan failed. Check RUNBOOK_API and try again.");
+  } finally {
+    btn.textContent = original;
+    btn.disabled = false;
+  }
+}
+
+async function findOnPage() {
+  if (!currentTask) return;
+  const step = currentTask.steps[currentStepIndex];
+
+  if (window.location.pathname === "/demo/github") {
+    const demoEl = document.querySelector("#request-access-btn");
+    if (demoEl) {
+      highlightElement(demoEl);
+      setInstruction("Click Request Access.");
+      return;
+    }
+  }
+
+  if (DEMO_TASKS[window.location.pathname] && step?.selector) {
+    const demoEl = document.querySelector(step.selector);
+    if (demoEl) {
+      highlightElement(demoEl);
+      setInstruction(step.text);
+      return;
+    }
+  }
+
+  try {
+    const data = await apiRequest("/api/widget", {
+      url: window.location.href,
+      pageText: getPageText(),
+      taskTitle: currentTask.taskTitle || "",
+      taskDescription: step?.text || currentTask.taskDescription || "",
+    });
+
+    if (!data?.found || !data?.elementText) {
+      setInstruction(data?.instruction || "I could not find a matching element.");
+      return;
+    }
+
+    const el = findElementByText(data.elementText);
+    if (!el) {
+      setInstruction(data.instruction || `Look for "${data.elementText}" and click it.`);
+      return;
+    }
+
+    highlightElement(el);
+    setInstruction(data.instruction || `Click "${data.elementText}".`);
+  } catch (err) {
+    console.error("Runbook find failed", err);
+    setInstruction("Find on page failed. Try again.");
+  }
+}
+
+function nextStep() {
+  clearHighlight();
+  if (!currentTask) return;
+  if (currentStepIndex < currentTask.steps.length - 1) {
+    currentStepIndex += 1;
+    updateTaskPanel();
+  }
+}
+
+async function completeTask() {
+  if (!currentTask?.taskId) return;
+  try {
+    await apiRequest("/api/tasks/update", {
+      taskId: currentTask.taskId,
+      status: "complete",
+    });
+    const content = byId("rb-task-content");
+    if (content) {
+      content.innerHTML = `
+        <div style="text-align:center; padding:20px 0;">
+          <div style="font-size:36px;">✅</div>
+          <div style="font-weight:600; color:#16a34a;">Task complete!</div>
+        </div>
+      `;
+    }
+    setTimeout(clearHighlight, 2000);
+  } catch (err) {
+    console.error("Task completion failed", err);
+  }
+}
+
+async function sendChat() {
+  const input = byId("rb-input");
+  if (!input) return;
+  const text = input.value.trim();
+  if (!text) return;
+  input.value = "";
+  addMessage("user", text);
+
+  const context = `Current URL: ${window.location.href}
+Current task: ${currentTask?.taskTitle || "none"}
+Current step: ${currentTask?.steps?.[currentStepIndex]?.text || "none"}
+
+User question: ${text}`;
+
+  try {
+    const data = await apiRequest("/api/chat", { question: context });
+    addMessage("assistant", data?.answer || "No answer available right now.");
+  } catch (err) {
+    console.error("Chat failed", err);
+    addMessage("assistant", "Chat is temporarily unavailable.");
   }
 }
 
 function detectDemo() {
-  const path = window.location.pathname;
-  
-  if (DEMO_MAP[path]) {
-    console.log("✓ Demo detected:", path);
-    currentTask = DEMO_MAP[path];
-    currentStepIndex = 0;
-    updateTaskPanel();
-    
-    // Auto-open widget
-    widgetVisible = true;
-    document.getElementById("rb-panel").classList.remove("rb-hidden");
-    document.getElementById("rb-fab").style.background = "linear-gradient(135deg, #4f46e5 0%, #3730a3 100%)";
-  }
+  const demoTask = getDemoTaskForLocation();
+  if (!demoTask) return;
+  currentTask = demoTask;
+  currentStepIndex = 0;
+  updateTaskPanel();
+  togglePanel(true);
+}
+
+function injectCSS() {
+  if (document.getElementById("rb-inline-style")) return;
+  const style = document.createElement("style");
+  style.id = "rb-inline-style";
+  style.textContent = `
+    #runbook-root * { box-sizing: border-box; font-family: -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; }
+    #rb-fab { position: fixed; right: 20px; bottom: 20px; z-index: 999999; width: 56px; height: 56px; border: 0; border-radius: 9999px; cursor: pointer; background: linear-gradient(135deg,#6366f1,#4f46e5); color:#fff; box-shadow: 0 8px 20px rgba(79,70,229,.35); }
+    #rb-fab.rb-open { background: linear-gradient(135deg,#4f46e5,#3730a3); }
+    #rb-panel { position: fixed; right: 20px; bottom: 80px; z-index: 999999; width: 320px; max-width: 320px; background:#fff; border-radius: 14px; overflow: hidden; border: 1px solid rgba(0,0,0,.08); box-shadow: 0 10px 34px rgba(0,0,0,.18); color:#111827; }
+    #rb-header { background: linear-gradient(135deg,#6366f1,#4f46e5); color:#fff; display:flex; align-items:center; justify-content:space-between; padding: 12px 14px; }
+    #rb-logo { font-weight: 700; }
+    #rb-header-actions { display:flex; gap:6px; }
+    #rb-header-actions button { border:0; border-radius:8px; width:28px; height:28px; cursor:pointer; background: rgba(255,255,255,.2); color:#fff; }
+    #rb-header-actions #rb-chat-toggle.rb-active { background: rgba(255,255,255,.35); }
+    #rb-task-view, #rb-chat-view { padding: 12px; max-height: 470px; overflow:auto; }
+    #rb-no-task p { margin: 0 0 10px 0; font-size: 13px; color:#6b7280; }
+    #rb-task-title { font-weight:700; margin-bottom: 8px; font-size: 15px; }
+    #rb-progress-row { display:flex; align-items:center; gap:8px; margin-bottom: 10px; }
+    #rb-progress-bar { flex:1; background:#e5e7eb; border-radius:999px; height: 6px; overflow: hidden; }
+    #rb-progress-fill { width:0; height:6px; background:#4f46e5; }
+    #rb-progress-label { font-size: 11px; color:#9ca3af; }
+    #rb-step-card { border:1px solid #e5e7eb; background:#f9fafb; border-radius:10px; padding:10px; margin-bottom: 10px; }
+    #rb-step-number { font-size: 11px; color:#9ca3af; text-transform: uppercase; font-weight:700; margin-bottom: 6px; }
+    #rb-step-text { font-size: 13px; color:#374151; line-height: 1.45; }
+    #rb-step-actions { display:flex; gap:8px; margin-bottom: 8px; }
+    #rb-highlight-btn, #rb-next-btn, #rb-complete-btn, #rb-scan-btn { border:0; border-radius:8px; cursor:pointer; padding: 8px 10px; font-size: 12px; font-weight: 600; }
+    #rb-scan-btn, #rb-highlight-btn { background:#eef2ff; color:#4f46e5; }
+    #rb-next-btn { background:#4f46e5; color:#fff; flex:1; }
+    #rb-complete-btn { background:#dcfce7; color:#166534; width:100%; }
+    #rb-messages { min-height: 180px; max-height: 300px; overflow:auto; display:flex; flex-direction:column; gap:8px; }
+    .rb-msg { font-size: 13px; border-radius: 10px; padding: 8px 10px; max-width: 90%; line-height: 1.4; word-break: break-word; }
+    .rb-msg-user { align-self:flex-end; background:#4f46e5; color:#fff; }
+    .rb-msg-assistant { align-self:flex-start; background:#f3f4f6; color:#111827; }
+    #rb-input-row { display:flex; gap:8px; margin-top: 10px; }
+    #rb-input { flex:1; border:1px solid #d1d5db; border-radius:8px; padding: 8px 10px; font-size: 13px; }
+    #rb-send { width:36px; border:0; border-radius:8px; background:#4f46e5; color:#fff; cursor:pointer; }
+    .rb-hidden { display:none !important; }
+    .rb-highlight { box-shadow: 0 0 0 3px #6366f1 !important; animation: rb-pulse 1.5s ease-in-out infinite !important; border-radius: 4px !important; }
+    @keyframes rb-pulse { 0%,100% { box-shadow: 0 0 0 3px rgba(99,102,241,.9); } 50% { box-shadow: 0 0 0 7px rgba(99,102,241,.25); } }
+  `;
+  document.documentElement.appendChild(style);
+}
+
+function injectWidget() {
+  if (!document.body || document.getElementById("runbook-extension-root")) return;
+  const root = document.createElement("div");
+  root.id = "runbook-extension-root";
+  root.innerHTML = `
+    <button id="rb-fab" aria-label="Open Runbook assistant" title="Runbook">RB</button>
+    <section id="rb-panel" class="rb-hidden">
+      <div id="rb-header">
+        <div id="rb-logo">Runbook</div>
+        <div id="rb-header-actions">
+          <button id="rb-chat-toggle" aria-label="Toggle chat">💬</button>
+          <button id="rb-close" aria-label="Close panel">✕</button>
+        </div>
+      </div>
+      <div id="rb-task-view">
+        <div id="rb-no-task">
+          <p>No onboarding task detected yet.</p>
+          <button id="rb-scan-btn">Scan this page</button>
+        </div>
+        <div id="rb-task-content" class="rb-hidden">
+          <div id="rb-task-title"></div>
+          <div id="rb-progress-row">
+            <div id="rb-progress-bar"><div id="rb-progress-fill"></div></div>
+            <div id="rb-progress-label"></div>
+          </div>
+          <div id="rb-step-card">
+            <div id="rb-step-number"></div>
+            <div id="rb-step-text"></div>
+          </div>
+          <div id="rb-step-actions">
+            <button id="rb-highlight-btn">Find it on this page</button>
+            <button id="rb-next-btn">Next</button>
+          </div>
+          <button id="rb-complete-btn" class="rb-hidden">Mark complete</button>
+        </div>
+      </div>
+      <div id="rb-chat-view" class="rb-hidden">
+        <div id="rb-messages"></div>
+        <div id="rb-input-row">
+          <input id="rb-input" placeholder="Ask Runbook..." />
+          <button id="rb-send">➤</button>
+        </div>
+      </div>
+    </section>
+  `;
+  document.body.appendChild(root);
+  rootEl = root;
+}
+
+function bindEvents() {
+  byId("rb-fab")?.addEventListener("click", () => togglePanel());
+  byId("rb-close")?.addEventListener("click", () => togglePanel(false));
+  byId("rb-chat-toggle")?.addEventListener("click", () => toggleChat());
+  byId("rb-scan-btn")?.addEventListener("click", () => void scanPage());
+  byId("rb-highlight-btn")?.addEventListener("click", () => void findOnPage());
+  byId("rb-next-btn")?.addEventListener("click", nextStep);
+  byId("rb-complete-btn")?.addEventListener("click", () => void completeTask());
+  byId("rb-send")?.addEventListener("click", () => void sendChat());
+  byId("rb-input")?.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      void sendChat();
+    }
+  });
 }
 
 function init() {
-  console.log("🚀 Runbook loading...");
-  
-  // Hide existing Runbook widgets on demo pages
-  const existingButton = document.querySelector('button[aria-label="Open Runbook assistant"]');
-  if (existingButton) {
-    existingButton.style.display = "none";
-    console.log("✓ Original widget hidden");
+  try {
+    if (window.top !== window.self) return;
+    if (document.getElementById("runbook-extension-root")) return;
+    if (!document.body) return;
+    injectCSS();
+    injectWidget();
+    if (!rootEl) return;
+    bindEvents();
+    detectDemo();
+    addMessage("assistant", "Runbook is ready. Use Scan this page to start.");
+  } catch (err) {
+    console.error("Runbook init failed", err);
   }
-  
-  injectCSS();
-  injectWidget();
-  bindEvents();
-  detectDemo();
-  
-  console.log("✓ Runbook ready");
 }
 
-// Inject on DOMContentLoaded
 if (document.readyState === "loading") {
-  document.addEventListener("DOMContentLoaded", init);
+  document.addEventListener("DOMContentLoaded", init, { once: true });
 } else {
   init();
 }
-
-// Fallback: also inject after a short delay
-setTimeout(init, 200);
+setTimeout(init, 300);
+setTimeout(init, 1200);
+setTimeout(init, 2400);

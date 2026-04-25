@@ -39,6 +39,15 @@ export default function DemoExpensesPage() {
           titleClassName: "font-semibold text-slate-900",
         }}
       />
+      <div className="mx-auto mt-4 flex max-w-3xl items-center justify-end">
+        <button
+          id="submit-expense-btn"
+          type="button"
+          className="rounded-lg bg-emerald-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-500"
+        >
+          Submit Expense
+        </button>
+      </div>
       <RunbookWidget key="expenses" pageKey="expenses" />
     </DemoPageLayout>
   );
