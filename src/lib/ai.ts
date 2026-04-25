@@ -1,4 +1,42 @@
-export async function generateFromGemini(
+async function generateFromOpenAI(
+  systemPrompt: string,
+  userContext: string
+): Promise<string> {
+  const OPENAI_API_KEY = process.env.OPENAI_API_KEY?.trim();
+  if (!OPENAI_API_KEY) {
+    throw new Error("Missing OPENAI_API_KEY");
+  }
+
+  const response = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${OPENAI_API_KEY}`,
+    },
+    body: JSON.stringify({
+      model: "gpt-4o-mini",
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userContext },
+      ],
+      temperature: 0.2,
+    }),
+  });
+
+  if (!response.ok) {
+    const err = await response.text();
+    throw new Error(`OpenAI error: ${err}`);
+  }
+
+  const data = await response.json();
+  const text = data.choices?.[0]?.message?.content;
+  if (typeof text !== "string" || !text.trim()) {
+    throw new Error("Invalid structure from OpenAI");
+  }
+  return text.trim();
+}
+
+async function generateFromGeminiOnly(
   systemPrompt: string, 
   userContext: string
 ): Promise<string> {
@@ -7,43 +45,76 @@ export async function generateFromGemini(
     throw new Error("Missing GEMINI_API_KEY");
   }
 
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 15_000);
+  const body = JSON.stringify({
+    contents: [{ role: "user", parts: [{ text: `${systemPrompt}\n\n${userContext}` }] }],
+  });
+  const models = ["gemini-2.5-flash", "gemini-2.0-flash"];
+  const timeoutMsByAttempt = [45_000, 75_000];
 
-  let response: Response;
-  try {
-    response = await fetch(
-      "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-goog-api-key": GEMINI_API_KEY,
-        },
-        body: JSON.stringify({
-          contents: [
-            { role: "user", parts: [{ text: `${systemPrompt}\n\n${userContext}` }] }
-          ]
-        }),
-        signal: controller.signal,
+  let lastGeminiError = "";
+  for (const model of models) {
+    const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
+    let response: Response | null = null;
+    for (let attempt = 0; attempt < timeoutMsByAttempt.length; attempt += 1) {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), timeoutMsByAttempt[attempt]);
+      try {
+        response = await fetch(endpoint, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-goog-api-key": GEMINI_API_KEY,
+          },
+          body,
+          signal: controller.signal,
+        });
+        break;
+      } catch (error) {
+        const isAbort = error instanceof Error && error.name === "AbortError";
+        const message = error instanceof Error ? error.message : String(error);
+        lastGeminiError = isAbort ? "Gemini request timed out" : message;
+        const isLastAttempt = attempt === timeoutMsByAttempt.length - 1;
+        if (!isAbort || isLastAttempt) break;
+      } finally {
+        clearTimeout(timeoutId);
       }
-    );
-  } finally {
-    clearTimeout(timeoutId);
-  }
+    }
 
-  if (!response.ok) {
+    if (!response) {
+      throw new Error("Gemini request failed before receiving a response");
+    }
+    if (response.ok) {
+      const data = await response.json();
+      const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+      if (typeof text !== "string") {
+        throw new Error("Invalid structure from Gemini");
+      }
+      return text.trim();
+    }
+
     const err = await response.text();
-    throw new Error(`Gemini error: ${err}`);
+    lastGeminiError = err;
+    const isQuotaError = response.status === 429 && /RESOURCE_EXHAUSTED|quota/i.test(err);
+    if (!isQuotaError) {
+      throw new Error(`Gemini error: ${err}`);
+    }
   }
 
-  const data = await response.json();
-  const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-  if (typeof text !== 'string') {
-    throw new Error("Invalid structure from Gemini");
+  throw new Error(`Gemini error: ${lastGeminiError || "All Gemini models failed"}`);
+}
+
+export async function generateFromGemini(
+  systemPrompt: string, 
+  userContext: string
+): Promise<string> {
+  try {
+    return await generateFromGeminiOnly(systemPrompt, userContext);
+  } catch (error) {
+    const OPENAI_API_KEY = process.env.OPENAI_API_KEY?.trim();
+    if (!OPENAI_API_KEY) throw error;
+    console.warn("Gemini unavailable, falling back to OpenAI for text generation.");
+    return generateFromOpenAI(systemPrompt, userContext);
   }
-  
-  return text.trim();
 }
 
 export async function generateJsonFromGemini<T>(

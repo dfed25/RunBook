@@ -6,7 +6,17 @@ import { Hire, HireKnowledgeSource, KNOWLEDGE_SOURCE_TYPES, KnowledgeSourceType,
 import { AppButton } from "@/components/ui/AppButton";
 import { SectionCard } from "@/components/ui/SectionCard";
 
-type TaskFormState = { title: string; description: string; assigneeId: string; estimatedTime: string; sourceTitle: string };
+type TaskFormState = {
+  title: string;
+  description: string;
+  objective: string;
+  steps: string;
+  verification: string;
+  escalation: string;
+  assigneeId: string;
+  estimatedTime: string;
+  sourceTitle: string;
+};
 type HireFormState = { name: string; role: string; email: string };
 type SourceFormState = { type: KnowledgeSourceType; title: string; url: string };
 
@@ -22,7 +32,17 @@ export default function ManagerTasksPage() {
   const [message, setMessage] = useState("");
   const [hireForm, setHireForm] = useState<HireFormState>({ name: "", role: "", email: "" });
   const [sourceForm, setSourceForm] = useState<SourceFormState>({ type: "url", title: "", url: "" });
-  const [form, setForm] = useState<TaskFormState>({ title: "", description: "", assigneeId: "", estimatedTime: "", sourceTitle: "" });
+  const [form, setForm] = useState<TaskFormState>({
+    title: "",
+    description: "",
+    objective: "",
+    steps: "",
+    verification: "",
+    escalation: "",
+    assigneeId: "",
+    estimatedTime: "",
+    sourceTitle: "",
+  });
   const [duplicateTargets, setDuplicateTargets] = useState<Record<string, string[]>>({});
 
   const activeHires = hires.filter((hire) => hire.active);
@@ -79,7 +99,17 @@ export default function ManagerTasksPage() {
     const data = await res.json();
     if (!res.ok) return setMessage(data.error || "Failed to create task.");
     setTasks((prev) => [...prev, data]);
-    setForm({ title: "", description: "", assigneeId: form.assigneeId, estimatedTime: "", sourceTitle: "" });
+    setForm({
+      title: "",
+      description: "",
+      objective: "",
+      steps: "",
+      verification: "",
+      escalation: "",
+      assigneeId: form.assigneeId,
+      estimatedTime: "",
+      sourceTitle: "",
+    });
     setMessage("Task created.");
   }
 
@@ -309,7 +339,38 @@ export default function ManagerTasksPage() {
         <SectionCard title="Create task" subtitle="Assign onboarding tasks to hires with ETA and source context.">
           <form className="mt-4 space-y-3" onSubmit={submitTask}>
             <input className="w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm" placeholder="Task title" value={form.title} onChange={(e) => setForm((p) => ({ ...p, title: e.target.value }))} required />
-            <textarea className="w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm" placeholder="Task description" value={form.description} onChange={(e) => setForm((p) => ({ ...p, description: e.target.value }))} required />
+            <textarea
+              className="w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+              placeholder="Objective (what success looks like)"
+              value={form.objective}
+              onChange={(e) => setForm((p) => ({ ...p, objective: e.target.value }))}
+            />
+            <textarea
+              className="w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+              placeholder={"Execution steps (one per line)\nExample:\nOpen repo\nInstall dependencies\nRun local server"}
+              value={form.steps}
+              onChange={(e) => setForm((p) => ({ ...p, steps: e.target.value }))}
+            />
+            <div className="grid gap-3 sm:grid-cols-2">
+              <textarea
+                className="w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+                placeholder="Verification signals (how the hire knows this is done)"
+                value={form.verification}
+                onChange={(e) => setForm((p) => ({ ...p, verification: e.target.value }))}
+              />
+              <textarea
+                className="w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+                placeholder="If blocked: where to escalate and what info to include"
+                value={form.escalation}
+                onChange={(e) => setForm((p) => ({ ...p, escalation: e.target.value }))}
+              />
+            </div>
+            <textarea
+              className="w-full rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+              placeholder="Optional additional description/context"
+              value={form.description}
+              onChange={(e) => setForm((p) => ({ ...p, description: e.target.value }))}
+            />
             <div className="grid gap-3 sm:grid-cols-3">
               <select className="rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm" value={form.assigneeId} onChange={(e) => setForm((p) => ({ ...p, assigneeId: e.target.value }))}>
                 {activeHires.map((hire) => <option key={hire.id} value={hire.id}>{hire.name}</option>)}
