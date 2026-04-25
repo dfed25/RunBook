@@ -6,6 +6,8 @@ interface RetrievedDoc {
     id: string;
     title: string;
     content: string;
+    url: string | null;
+    provider: string;
   };
   score: number;
 }
@@ -14,7 +16,7 @@ interface MatchedDocument {
   id: string;
   title: string;
   content: string;
-  url: string;
+  url: string | null;
   provider: string;
   similarity: number;
 }
@@ -35,11 +37,15 @@ export async function retrieveDocs(question: string): Promise<RetrievedDoc[]> {
       return [];
     }
 
+    if (!documents) return [];
+
     return (documents as MatchedDocument[]).map((doc) => ({
       doc: {
         id: doc.id,
         title: doc.title,
-        content: doc.content
+        content: doc.content,
+        url: doc.url,
+        provider: doc.provider,
       },
       score: doc.similarity
     }));

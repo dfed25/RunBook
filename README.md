@@ -19,10 +19,10 @@ npm install @supabase/supabase-js @supabase/ssr
 ```
 
 2. **Add Env Variables**
-Make sure `.env.local` possesses the correct Supabase connection strings:
+Make sure `.env.local` possesses the correct Supabase connection strings (get values from the team or Supabase dashboard):
 ```txt
-NEXT_PUBLIC_SUPABASE_URL=https://dkpwkuhjzmqmrdigpyqj.supabase.co
-NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=sb_publishable_8lxkeU-BTov6OAYW6CsapA_sYB2083n
+NEXT_PUBLIC_SUPABASE_URL=<your-supabase-project-url>
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=<your-supabase-publishable-key>
 ```
 
 3. **Supabase Client Helpers**
