@@ -6,7 +6,7 @@ import { Lesson } from "@/lib/types";
 import { retrieveDocs } from "@/lib/retrieval";
 import { requireHireAccess } from "@/lib/apiAuth";
 
-const MAX_CONTEXT_CHARS = 11_000;
+const MAX_CONTEXT_CHARS = 18_000;
 
 function stripScopeTokens(content: string): string {
   return content
@@ -28,12 +28,12 @@ function normalizeLesson(lesson: Lesson, question: string, limitedSources: boole
     confidence: lesson.confidence === "high" ? "high" : "partial",
     limitedSources: lesson.limitedSources ?? limitedSources,
     question,
-    slides: normalizedSlides.slice(0, 10).map((slide, index) => ({
+    slides: normalizedSlides.slice(0, 14).map((slide, index) => ({
       title: slide.title || `Step ${index + 1}`,
       body: slide.body || "No details available for this step.",
       speakerNotes: slide.speakerNotes || slide.body || "Review the references in this slide.",
       citations: Array.isArray(slide.citations) ? slide.citations : [],
-      estimatedDurationSec: Math.max(8, Math.min(90, slide.estimatedDurationSec || 22)),
+      estimatedDurationSec: Math.max(10, Math.min(120, slide.estimatedDurationSec || 28)),
       visualHint: slide.visualHint || "abstract gradient background",
     })),
     sourcesUsed: Array.isArray(lesson.sourcesUsed) ? lesson.sourcesUsed : [],
@@ -114,6 +114,16 @@ async function buildLessonContext(question: string, docId: string, hireId?: stri
   }
 
   if (packed.length > 0) {
+    const staticDoc = demoDocs.find((d) => d.id === docId);
+    if (staticDoc) {
+      const staticBlock = staticDoc.content.trim();
+      if (budget + staticBlock.length <= MAX_CONTEXT_CHARS) {
+        packed.push({
+          title: `${staticDoc.title} (baseline)`,
+          content: staticBlock,
+        });
+      }
+    }
     return { question, docs: packed, limitedSources: false };
   }
 
@@ -163,7 +173,7 @@ export async function POST(req: Request) {
         return `[Source ${index + 1}] ${doc.title}\n${urlLine}\nContent:\n${doc.content}`;
       })
       .join("\n\n");
-    const userPrompt = `User question:\n${question}\n\nAvailable sources:\n${contextText}\n\nGenerate a grounded walkthrough lesson.`;
+    const userPrompt = `User question:\n${question}\n\nAvailable sources:\n${contextText}\n\nGenerate a grounded, in-depth walkthrough lesson that directly answers this question and teaches execution end-to-end.`;
     
     try {
       const parsedLesson = await generateJsonFromGemini<Lesson>(LESSON_GENERATION_SYSTEM_PROMPT, userPrompt);

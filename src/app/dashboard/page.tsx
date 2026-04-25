@@ -15,14 +15,6 @@ type ChatMessage = {
   sources?: ChatSource[];
 };
 
-const LESSON_DOC_OPTIONS = [
-  { id: "engineering-setup", label: "Engineering Setup Guide" },
-  { id: "first-week", label: "First Week Onboarding Plan" },
-  { id: "expense-policy", label: "Expense Policy" },
-  { id: "security-policy", label: "Security Policy" },
-  { id: "product-overview", label: "Product Overview" },
-];
-
 const EMPTY_LESSON_SLIDE: LessonSlide = {
   title: "No lesson loaded",
   body: "Choose a source doc and generate a lesson to get started.",
@@ -44,7 +36,6 @@ export default function DashboardPage() {
   const [chatInput, setChatInput] = useState("");
   const [chatBusy, setChatBusy] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [lessonDocId, setLessonDocId] = useState("engineering-setup");
   const [lessonQuestion, setLessonQuestion] = useState("How do I set up and start contributing in my first week?");
   const [lessonLoading, setLessonLoading] = useState(false);
   const [lesson, setLesson] = useState<Lesson | null>(null);
@@ -170,7 +161,7 @@ export default function DashboardPage() {
       const res = await fetch("/api/lesson", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ docId: lessonDocId, hireId: selectedHireId, question }),
+        body: JSON.stringify({ hireId: selectedHireId, question }),
       });
       const data = (await res.json()) as Lesson;
       if (!res.ok || !data?.slides?.length) throw new Error("Lesson generation failed");
@@ -246,9 +237,15 @@ export default function DashboardPage() {
         body: JSON.stringify({ lesson }),
       });
       const data = (await res.json()) as LessonRenderJob;
-      if (!res.ok) throw new Error("Failed to queue lesson render");
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to render lesson video");
+      }
       setRenderJob(data);
-      await pollRenderJob(data.id);
+      if (data.status !== "completed" && data.status !== "failed") {
+        await pollRenderJob(data.id);
+      } else {
+        setRenderBusy(false);
+      }
     } catch (error) {
       console.error(error);
       setRenderBusy(false);
@@ -471,17 +468,6 @@ export default function DashboardPage() {
               />
             </div>
             <div className="mt-3 flex gap-2">
-              <select
-                className="flex-1 rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
-                value={lessonDocId}
-                onChange={(event) => setLessonDocId(event.target.value)}
-              >
-                {LESSON_DOC_OPTIONS.map((option) => (
-                  <option key={option.id} value={option.id}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
               <AppButton
                 type="button"
                 onClick={() => void generateLesson()}
@@ -492,7 +478,7 @@ export default function DashboardPage() {
                 {lessonLoading ? "Loading..." : "Generate"}
               </AppButton>
             </div>
-            <div className={`mt-4 rounded-lg border border-slate-700 p-4 ${visualThemeClass}`}>
+            <div className={`mt-4 rounded-xl border border-slate-700 p-5 shadow-lg ${visualThemeClass}`}>
               <p className="text-xs uppercase tracking-wide text-slate-400">
                 {lesson ? `${lesson.title} · Slide ${lessonSlideIndex + 1}/${lesson.slides.length}` : "Lesson preview"}
               </p>
@@ -501,13 +487,19 @@ export default function DashboardPage() {
                   Confidence: {lesson.confidence}{lesson.limitedSources ? " · limited sources" : ""}
                 </p>
               ) : null}
-              <h3 className="mt-2 text-lg font-semibold">{currentSlide.title}</h3>
-              <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-slate-200">{currentSlide.body}</p>
+              <h3 className="mt-2 text-xl font-semibold tracking-tight">{currentSlide.title}</h3>
+              <p className="mt-3 whitespace-pre-wrap text-[15px] leading-relaxed text-slate-100">{currentSlide.body}</p>
+              {currentSlide.speakerNotes ? (
+                <div className="mt-3 rounded-lg border border-slate-700/80 bg-slate-900/40 p-3">
+                  <p className="text-[11px] uppercase tracking-wide text-slate-400">Narration notes</p>
+                  <p className="mt-1 whitespace-pre-wrap text-xs leading-relaxed text-slate-300">{currentSlide.speakerNotes}</p>
+                </div>
+              ) : null}
               {currentSlide.citations?.length ? (
                 <p className="mt-3 text-xs text-cyan-300">Sources: {currentSlide.citations.join(" · ")}</p>
               ) : null}
             </div>
-            <div className="mt-3 flex items-center justify-between">
+            <div className="mt-4 flex items-center justify-between">
               <AppButton
                 type="button"
                 variant="ghost"

@@ -19,22 +19,20 @@ export async function POST(req: Request) {
     }
 
     const job = await createLessonRenderJob(body.lesson);
-    void (async () => {
-      try {
-        await setLessonRenderStatus(job.id, "running");
-        await renderLessonVideo(job.id, body.lesson);
-        await setLessonRenderStatus(job.id, "completed", {
-          outputUrl: `/api/lesson/render/${job.id}/video`,
-        });
-      } catch (error) {
-        console.error("Lesson video render failed:", error);
-        await setLessonRenderStatus(job.id, "failed", {
-          error: error instanceof Error ? error.message : "Unknown render error",
-        });
-      }
-    })();
-
-    return NextResponse.json(job, { status: 202 });
+    try {
+      await setLessonRenderStatus(job.id, "running");
+      await renderLessonVideo(job.id, body.lesson);
+      const completed = await setLessonRenderStatus(job.id, "completed", {
+        outputUrl: `/api/lesson/render/${job.id}/video`,
+      });
+      return NextResponse.json(completed || job, { status: 200 });
+    } catch (error) {
+      console.error("Lesson video render failed:", error);
+      const failed = await setLessonRenderStatus(job.id, "failed", {
+        error: error instanceof Error ? error.message : "Unknown render error",
+      });
+      return NextResponse.json(failed || job, { status: 500 });
+    }
   } catch (error) {
     console.error(error);
     return NextResponse.json({ error: "Failed to queue lesson render" }, { status: 500 });

@@ -45,10 +45,11 @@ Return strictly a JSON object with this shape:
 }
 
 Slide requirements:
-- 4-8 slides when enough context exists.
-- Use numbered steps for procedural tasks.
-- Keep each slide body concise and readable.
+- 8-12 slides when enough context exists; minimum 6 unless context is very sparse.
+- Use numbered steps for procedural tasks and include practical caveats/checks.
+- Keep each slide body detailed but scannable (2-5 short bullets or concise paragraphs).
 - "citations" should reference source titles from sourcesUsed.
 - "visualHint" must be non-factual decorative guidance only (e.g., "abstract gradient background", "timeline icon").
+- Include one dedicated troubleshooting slide and one dedicated "what to ask if blocked" slide when confidence is partial.
 
 Do not wrap output in markdown code fences.`;

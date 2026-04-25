@@ -57,9 +57,10 @@ async function renderSlideClip(
   textPath: string
 ): Promise<string> {
   const output = path.join(assetDir, `clip-${index + 1}.mp4`);
+  const relativeTextPath = path.basename(textPath);
   const drawtext = [
     "drawtext",
-    `textfile=${textPath}`,
+    `textfile=${relativeTextPath}`,
     "reload=0",
     "fontcolor=white",
     "fontsize=42",
@@ -87,7 +88,7 @@ async function renderSlideClip(
     "30",
     "-an",
     output,
-  ]);
+  ], { cwd: assetDir });
   return output;
 }
 
@@ -107,7 +108,7 @@ async function concatSlideClips(assetDir: string, clips: string[], outputFile: s
     "-c",
     "copy",
     outputFile,
-  ]);
+  ], { cwd: assetDir });
 }
 
 /**
