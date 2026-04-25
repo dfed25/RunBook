@@ -6,6 +6,7 @@ import { Lesson } from "./types";
 import { renderAssetDir, renderOutputPath } from "./lessonRenderStore";
 
 const execFileAsync = promisify(execFile);
+let drawtextSupport: boolean | null = null;
 
 function slideDuration(slide: Lesson["slides"][number]) {
   const base = slide.estimatedDurationSec || 22;
@@ -35,6 +36,18 @@ async function ensureFfmpegInstalled() {
   }
 }
 
+async function supportsDrawtext(): Promise<boolean> {
+  if (drawtextSupport != null) return drawtextSupport;
+  try {
+    const { stdout } = await execFileAsync("ffmpeg", ["-hide_banner", "-filters"]);
+    drawtextSupport = /\bdrawtext\b/.test(stdout);
+    return drawtextSupport;
+  } catch {
+    drawtextSupport = false;
+    return false;
+  }
+}
+
 function sanitizeForTextFile(value: string): string {
   return value
     .replace(/\r/g, "")
@@ -54,32 +67,52 @@ async function renderSlideClip(
   index: number,
   color: string,
   durationSec: number,
-  textPath: string
+  textPath: string,
+  useDrawtext: boolean
 ): Promise<string> {
   const output = path.join(assetDir, `clip-${index + 1}.mp4`);
-  const relativeTextPath = path.basename(textPath);
-  const drawtext = [
-    "drawtext=textfile",
-    relativeTextPath,
-    "reload=0",
-    "fontcolor=white",
-    "fontsize=42",
-    "line_spacing=14",
-    "x=72",
-    "y=120",
-    "box=1",
-    "boxcolor=0x00000088",
-    "boxborderw=24",
-  ].join(":");
+  if (useDrawtext) {
+    const relativeTextPath = path.basename(textPath);
+    const drawtext = [
+      `drawtext=textfile=${relativeTextPath}`,
+      "reload=0",
+      "fontcolor=white",
+      "fontsize=42",
+      "line_spacing=14",
+      "x=72",
+      "y=120",
+      "box=1",
+      "boxcolor=0x00000088",
+      "boxborderw=24",
+    ].join(":");
 
+    await execFileAsync("ffmpeg", [
+      "-y",
+      "-f",
+      "lavfi",
+      "-i",
+      `color=c=${color}:s=1280x720:d=${durationSec}`,
+      "-vf",
+      drawtext,
+      "-c:v",
+      "libx264",
+      "-pix_fmt",
+      "yuv420p",
+      "-r",
+      "30",
+      "-an",
+      output,
+    ], { cwd: assetDir });
+    return output;
+  }
+
+  // Fallback for ffmpeg builds without drawtext (no libfreetype).
   await execFileAsync("ffmpeg", [
     "-y",
     "-f",
     "lavfi",
     "-i",
     `color=c=${color}:s=1280x720:d=${durationSec}`,
-    "-vf",
-    drawtext,
     "-c:v",
     "libx264",
     "-pix_fmt",
@@ -118,6 +151,7 @@ async function concatSlideClips(assetDir: string, clips: string[], outputFile: s
  */
 export async function renderLessonVideo(jobId: string, lesson: Lesson): Promise<{ outputPath: string }> {
   await ensureFfmpegInstalled();
+  const useDrawtext = await supportsDrawtext();
   const assetDir = renderAssetDir(jobId);
   const outputPath = renderOutputPath(jobId);
   await fs.mkdir(assetDir, { recursive: true });
@@ -130,7 +164,7 @@ export async function renderLessonVideo(jobId: string, lesson: Lesson): Promise<
     const noteText = pickSlideVoiceText(lesson, i);
     const slideText = `${slide.body}${noteText ? `\n\nNarration: ${noteText}` : ""}`;
     const textPath = await writeSlideTextFile(assetDir, i, slide.title, slideText);
-    const clipPath = await renderSlideClip(assetDir, i, color, duration, textPath);
+    const clipPath = await renderSlideClip(assetDir, i, color, duration, textPath, useDrawtext);
     clips.push(clipPath);
   }
 
