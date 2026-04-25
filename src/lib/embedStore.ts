@@ -1,4 +1,4 @@
-import { createHash, randomBytes } from "crypto";
+import { randomBytes, scryptSync } from "crypto";
 import { promises as fs } from "fs";
 import path from "path";
 import type { EmbedApiKeyRecord, EmbedGitHubToken, EmbedProject } from "./embedTypes";
@@ -7,6 +7,9 @@ const DATA_DIR = path.join(process.cwd(), ".runbook-data");
 const PROJECTS_FILE = path.join(DATA_DIR, "embed-projects.json");
 const KEYS_FILE = path.join(DATA_DIR, "embed-api-keys.json");
 const TOKENS_FILE = path.join(DATA_DIR, "embed-github-tokens.json");
+const EMBED_KEY_HASH_SALT = "embed-api-key-hash-v1";
+const EMBED_KEY_HASH_LEN = 32;
+const EMBED_KEY_HASH_SCRYPT_OPTIONS = { N: 1 << 15, r: 8, p: 1 };
 
 let mutationQueue: Promise<void> = Promise.resolve();
 
@@ -51,7 +54,7 @@ async function runMutation<T>(fn: () => Promise<T>): Promise<T> {
 }
 
 export function hashEmbedKey(rawKey: string): string {
-  return createHash("sha256").update(rawKey, "utf8").digest("hex");
+  return scryptSync(rawKey, EMBED_KEY_HASH_SALT, EMBED_KEY_HASH_LEN, EMBED_KEY_HASH_SCRYPT_OPTIONS).toString("hex");
 }
 
 export async function listProjectsForOwner(githubId: number): Promise<EmbedProject[]> {
