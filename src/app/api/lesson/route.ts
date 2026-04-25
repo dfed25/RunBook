@@ -114,16 +114,6 @@ async function buildLessonContext(question: string, docId: string, hireId?: stri
   }
 
   if (packed.length > 0) {
-    const staticDoc = demoDocs.find((d) => d.id === docId);
-    if (staticDoc) {
-      const staticBlock = staticDoc.content.trim();
-      if (budget + staticBlock.length <= MAX_CONTEXT_CHARS) {
-        packed.push({
-          title: `${staticDoc.title} (baseline)`,
-          content: staticBlock,
-        });
-      }
-    }
     return { question, docs: packed, limitedSources: false };
   }
 
@@ -173,7 +163,7 @@ export async function POST(req: Request) {
         return `[Source ${index + 1}] ${doc.title}\n${urlLine}\nContent:\n${doc.content}`;
       })
       .join("\n\n");
-    const userPrompt = `User question:\n${question}\n\nAvailable sources:\n${contextText}\n\nGenerate a grounded, in-depth walkthrough lesson that directly answers this question and teaches execution end-to-end.`;
+    const userPrompt = `User question:\n${question}\n\nAvailable sources:\n${contextText}\n\nGenerate a grounded, in-depth walkthrough lesson that directly answers this specific question and teaches execution end-to-end. The first slide must be a \"Question focus\" slide that restates the user goal in concrete terms.`;
     
     try {
       const parsedLesson = await generateJsonFromGemini<Lesson>(LESSON_GENERATION_SYSTEM_PROMPT, userPrompt);

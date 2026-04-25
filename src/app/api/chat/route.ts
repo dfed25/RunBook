@@ -4,6 +4,7 @@ import { CHAT_SYSTEM_PROMPT } from "@/lib/prompts";
 import { ChatResponse, ChatSource } from "@/lib/types";
 import { generateFromGemini } from "@/lib/ai";
 import { requireHireAccess } from "@/lib/apiAuth";
+import { getTasks } from "@/lib/dataStore";
 
 const FALLBACKS: Record<string, ChatResponse> = {
   "what should i do on my first day?": {
@@ -32,6 +33,11 @@ function escapeRegExp(string: string) {
   return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+function isTaskIntent(question: string): boolean {
+  const q = question.toLowerCase();
+  return /(\btask\b|\btasks\b|my task|assigned|checklist|what should i do|how do i do)/.test(q);
+}
+
 /** Strip hire scope lines and collapse whitespace for compact source previews. */
 function excerptForChatSource(content: string, maxLen: number): string {
   const lines = (content || "").split("\n").filter((line) => !/^\[hire:[^\]]+\]$/.test(line.trim()));
@@ -55,13 +61,16 @@ export async function POST(req: Request) {
       }
     }
     const qLower = question.toLowerCase().trim().replace(/[?!.]$/, "");
+    const taskIntent = isTaskIntent(qLower);
 
     const fallbackKeys = Object.keys(FALLBACKS).sort((a, b) => b.length - a.length);
-    for (const key of fallbackKeys) {
-      const normalizedKey = key.replace(/[?!.]$/, "");
-      const regex = new RegExp(`\\b${escapeRegExp(normalizedKey)}\\b`);
-      if (regex.test(qLower) || qLower === normalizedKey) {
-        return NextResponse.json(FALLBACKS[key]);
+    if (!hireId || !taskIntent) {
+      for (const key of fallbackKeys) {
+        const normalizedKey = key.replace(/[?!.]$/, "");
+        const regex = new RegExp(`\\b${escapeRegExp(normalizedKey)}\\b`);
+        if (regex.test(qLower) || qLower === normalizedKey) {
+          return NextResponse.json(FALLBACKS[key]);
+        }
       }
     }
 
@@ -77,6 +86,25 @@ export async function POST(req: Request) {
       excerpt: excerptForChatSource(d.content || "", 260),
       url: d.url || undefined,
     }));
+    let taskContext = "No assigned tasks available.";
+    if (hireId) {
+      const allTasks = await getTasks();
+      const hireTasks = allTasks
+        .filter((task) => task.assigneeId === hireId)
+        .slice(0, 18);
+      if (hireTasks.length > 0) {
+        taskContext = hireTasks
+          .map(
+            (task, index) =>
+              `${index + 1}. ${task.title} [${task.status}] · ETA ${task.estimatedTime}\nDescription: ${task.description}\nSource: ${task.sourceTitle}`
+          )
+          .join("\n\n");
+        sources.unshift({
+          title: "Assigned onboarding tasks",
+          excerpt: `Loaded ${hireTasks.length} tasks for this hire and used them to produce a step-by-step response.`,
+        });
+      }
+    }
     const context = validDocs
       .map(
         (d, index) =>
@@ -92,7 +120,7 @@ export async function POST(req: Request) {
     }
 
     try {
-      const userPrompt = `Company Context:\n${context || "No context found."}\n\nUser Question: ${question}\n\nWrite the answer in clear, scannable markdown: use "## " section headings, "- " bullets or numbered steps where appropriate, and **bold** for key terms. Ground every claim in the sources above.`;
+      const userPrompt = `Assigned Tasks (for selected hire):\n${taskContext}\n\nCompany Context:\n${context || "No context found."}\n\nUser Question: ${question}\n\nWrite the answer in clear, scannable markdown: use "## " section headings, "- " bullets or numbered steps where appropriate, and **bold** for key terms. Ground every claim in the sources above.\n\nIf the question asks what they should do or how to complete work, build a concrete, ordered task execution plan using Assigned Tasks first, then docs as supporting context.`;
       const answer = await generateFromGemini(CHAT_SYSTEM_PROMPT, userPrompt);
       return NextResponse.json({ answer, sources });
     } catch (e) {
