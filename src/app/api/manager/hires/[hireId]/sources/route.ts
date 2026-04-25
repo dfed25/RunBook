@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { addHireSource, getHireSources } from "@/lib/dataStore";
 import { KNOWLEDGE_SOURCE_TYPES, type KnowledgeSourceType } from "@/lib/types";
+import { requireHireAccess } from "@/lib/apiAuth";
 
 export const runtime = "nodejs";
 
@@ -13,6 +14,13 @@ const sourceTypes: readonly KnowledgeSourceType[] = KNOWLEDGE_SOURCE_TYPES;
 export async function GET(_req: Request, { params }: Params) {
   try {
     const { hireId } = await params;
+    const auth = await requireHireAccess(hireId);
+    if (!auth.ok) {
+      return NextResponse.json(
+        { error: auth.status === 401 ? "Authentication required" : "Forbidden" },
+        { status: auth.status }
+      );
+    }
     const sources = await getHireSources(hireId);
     return NextResponse.json({ sources });
   } catch (error) {
@@ -24,6 +32,13 @@ export async function GET(_req: Request, { params }: Params) {
 export async function POST(req: Request, { params }: Params) {
   try {
     const { hireId } = await params;
+    const auth = await requireHireAccess(hireId);
+    if (!auth.ok) {
+      return NextResponse.json(
+        { error: auth.status === 401 ? "Authentication required" : "Forbidden" },
+        { status: auth.status }
+      );
+    }
     const body = await req.json();
     const rawType = String(body.type || "").trim();
     const title = String(body.title || "").trim();
