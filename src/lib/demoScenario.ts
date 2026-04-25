@@ -8,11 +8,11 @@ export const DEMO_COMPANY = {
 
 export const DEMO_PERSONAS = {
   newHire: {
-    name: "Alex Rivera",
+    name: "Alex Chen",
     role: "Software Engineer I"
   },
   manager: {
-    name: "Maya Chen",
+    name: "Maya Patel",
     role: "Engineering Manager"
   }
 };
@@ -33,5 +33,6 @@ export const DEMO_QUESTIONS: string[] = [
   "What is required before I can merge production code?",
   "How do I submit an expense and when do I need manager approval?",
   "What should I do on my first day at Northstar AI?",
-  "Who should I ask if local setup fails?"
+  "Who should I ask if local setup fails?",
+  "What does Northstar AI build and which teams should I meet first?"
 ];

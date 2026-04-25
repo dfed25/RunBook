@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { DEMO_PERSONAS } from "@/lib/demoScenario";
+import { DEMO_PERSONAS, DEMO_QUESTIONS } from "@/lib/demoScenario";
 import { OnboardingTask } from "@/lib/types";
 
 type PersonSummary = {
@@ -52,6 +52,13 @@ export default function ManagerPage() {
     : 0;
   const onTrack = people.filter((person) => person.status === "On Track").length;
   const atRisk = people.filter((person) => person.status === "At Risk");
+  const stuckTasks = people
+    .flatMap((person) =>
+      person.tasks
+        .filter((task) => task.status !== "complete")
+        .map((task) => ({ ...task, owner: person.name })),
+    )
+    .slice(0, 6);
   const employeeNames = people.map((person) => person.name);
   const selectedEmployee =
     activeEmployee === "ALL" || employeeNames.includes(activeEmployee) ? activeEmployee : "ALL";
@@ -165,6 +172,47 @@ export default function ManagerPage() {
         </section>
 
         <section className="grid gap-4 md:grid-cols-2">
+          <article className="rounded-lg border border-slate-800 bg-slate-900 p-4">
+            <h2 className="text-base font-semibold">Most asked questions</h2>
+            <ul className="mt-3 space-y-2 text-sm text-slate-300">
+              {DEMO_QUESTIONS.slice(0, 5).map((question) => (
+                <li key={question} className="rounded border border-slate-700 bg-slate-950 px-3 py-2">
+                  {question}
+                </li>
+              ))}
+            </ul>
+          </article>
+          <article className="rounded-lg border border-slate-800 bg-slate-900 p-4">
+            <h2 className="text-base font-semibold">Documentation gap insights</h2>
+            <ul className="mt-3 space-y-2 text-sm text-slate-300">
+              <li className="rounded border border-slate-700 bg-slate-950 px-3 py-2">
+                Add a short &quot;Environment troubleshooting matrix&quot; to reduce repetitive setup questions.
+              </li>
+              <li className="rounded border border-slate-700 bg-slate-950 px-3 py-2">
+                Expand Product Overview with customer use cases to help new hires frame early work.
+              </li>
+              <li className="rounded border border-slate-700 bg-slate-950 px-3 py-2">
+                Capture Slack escalation paths in one doc for faster unblock times.
+              </li>
+            </ul>
+          </article>
+          <article className="rounded-lg border border-slate-800 bg-slate-900 p-4 md:col-span-2">
+            <h2 className="text-base font-semibold">Stuck tasks</h2>
+            {stuckTasks.length === 0 ? (
+              <p className="mt-3 text-sm text-slate-300">No stuck tasks right now.</p>
+            ) : (
+              <ul className="mt-3 grid gap-2 md:grid-cols-2">
+                {stuckTasks.map((task) => (
+                  <li key={task.id} className="rounded border border-slate-700 bg-slate-950 px-3 py-2 text-sm">
+                    <p className="font-medium text-slate-100">{task.title}</p>
+                    <p className="text-slate-400">
+                      {task.owner} · {task.status} · {task.sourceTitle}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </article>
           <article className="rounded-lg border border-slate-800 bg-slate-900 p-4">
             <h2 className="text-base font-semibold">Needs manager action</h2>
             {atRisk.length === 0 ? (

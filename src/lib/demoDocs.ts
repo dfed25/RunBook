@@ -44,5 +44,16 @@ Day 3: Read the product overview and shadow one customer call recording.
 Day 4: Make your first small pull request and review the security policy.
 Day 5: Meet your manager for a first-week retro and set goals for week two.
 `
+  },
+  {
+    id: "product-overview",
+    title: "Product Overview",
+    content: `
+Northstar AI helps operations teams automate repetitive cross-system workflows.
+Core product areas include workflow orchestration, policy automation, and analytics.
+The first teams new engineers should meet are Platform, Product Design, and Support Operations.
+Current enterprise integrations include Slack, Notion, and Google Drive knowledge syncing.
+Customer value focus: faster onboarding, fewer process errors, and better visibility for managers.
+`
   }
 ];
