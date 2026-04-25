@@ -48,6 +48,7 @@ Slide requirements:
 - 8-12 slides when enough context exists; minimum 6 unless context is very sparse.
 - Use numbered steps for procedural tasks and include practical caveats/checks.
 - Keep each slide body detailed but scannable (2-5 short bullets or concise paragraphs).
+- For each major step, include: why it matters, exact action, and expected verification signal.
 - "citations" should reference source titles from sourcesUsed.
 - "visualHint" must be non-factual decorative guidance only (e.g., "abstract gradient background", "timeline icon").
 - Include one dedicated troubleshooting slide and one dedicated "what to ask if blocked" slide when confidence is partial.

@@ -44,6 +44,7 @@ export default function DashboardPage() {
   const [narrating, setNarrating] = useState(false);
   const [renderBusy, setRenderBusy] = useState(false);
   const [renderJob, setRenderJob] = useState<LessonRenderJob | null>(null);
+  const [lessonUiError, setLessonUiError] = useState<string | null>(null);
   const pollTimerRef = useRef<number | null>(null);
   const messageCounterRef = useRef(0);
 
@@ -156,6 +157,7 @@ export default function DashboardPage() {
   async function generateLesson() {
     const question = lessonQuestion.trim();
     if (!question) return;
+    setLessonUiError(null);
     setLessonLoading(true);
     try {
       const res = await fetch("/api/lesson", {
@@ -229,6 +231,7 @@ export default function DashboardPage() {
 
   async function renderLessonVideo() {
     if (!lesson) return;
+    setLessonUiError(null);
     setRenderBusy(true);
     try {
       const res = await fetch("/api/lesson/render", {
@@ -238,7 +241,23 @@ export default function DashboardPage() {
       });
       const data = (await res.json()) as LessonRenderJob;
       if (!res.ok) {
-        throw new Error(data.error || "Failed to render lesson video");
+        const message = data.error || "Failed to render lesson video";
+        setRenderJob((prev) => ({
+          id: prev?.id || `local-${Date.now()}`,
+          status: "failed",
+          createdAt: prev?.createdAt || new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          lesson,
+          error: message,
+          outputUrl: undefined,
+        }));
+        if (message.toLowerCase().includes("ffmpeg")) {
+          setLessonUiError("Video export requires ffmpeg. Install it with `brew install ffmpeg`, then restart `npm run dev`.");
+        } else {
+          setLessonUiError(message);
+        }
+        setRenderBusy(false);
+        return;
       }
       setRenderJob(data);
       if (data.status !== "completed" && data.status !== "failed") {
@@ -248,6 +267,7 @@ export default function DashboardPage() {
       }
     } catch (error) {
       console.error(error);
+      setLessonUiError("Video export failed unexpectedly. Please retry.");
       setRenderBusy(false);
     }
   }
@@ -488,11 +508,15 @@ export default function DashboardPage() {
                 </p>
               ) : null}
               <h3 className="mt-2 text-xl font-semibold tracking-tight">{currentSlide.title}</h3>
-              <p className="mt-3 whitespace-pre-wrap text-[15px] leading-relaxed text-slate-100">{currentSlide.body}</p>
+              <div className="mt-3 rounded-lg border border-slate-700/70 bg-slate-900/35 p-3">
+                <ChatMessageBody role="assistant" text={currentSlide.body} />
+              </div>
               {currentSlide.speakerNotes ? (
                 <div className="mt-3 rounded-lg border border-slate-700/80 bg-slate-900/40 p-3">
                   <p className="text-[11px] uppercase tracking-wide text-slate-400">Narration notes</p>
-                  <p className="mt-1 whitespace-pre-wrap text-xs leading-relaxed text-slate-300">{currentSlide.speakerNotes}</p>
+                  <div className="mt-1 text-xs text-slate-300">
+                    <ChatMessageBody role="assistant" text={currentSlide.speakerNotes} />
+                  </div>
                 </div>
               ) : null}
               {currentSlide.citations?.length ? (
@@ -552,7 +576,17 @@ export default function DashboardPage() {
               </AppButton>
             </div>
             {lesson?.summary ? (
-              <p className="mt-3 whitespace-pre-wrap text-xs leading-relaxed text-slate-300">Summary: {lesson.summary}</p>
+              <div className="mt-3 rounded border border-slate-700 bg-slate-950/70 p-3">
+                <p className="text-[11px] uppercase tracking-wide text-slate-400">Summary</p>
+                <div className="mt-1 text-xs text-slate-300">
+                  <ChatMessageBody role="assistant" text={lesson.summary} />
+                </div>
+              </div>
+            ) : null}
+            {lessonUiError ? (
+              <div className="mt-3 rounded border border-amber-600/60 bg-amber-950/30 p-3 text-xs text-amber-200">
+                {lessonUiError}
+              </div>
             ) : null}
             {lesson?.sourcesUsed?.length ? (
               <div className="mt-3 rounded border border-slate-700 bg-slate-950/70 p-3">
