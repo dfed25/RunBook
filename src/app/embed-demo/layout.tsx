@@ -289,7 +289,7 @@ export default function EmbedDemoLayout({ children }: { children: React.ReactNod
             </div>
           </div>
           <div className="hidden rounded-full border border-indigo-400/30 bg-indigo-500/10 px-3 py-1 text-xs text-indigo-100 lg:block">
-            Active knowledge: <span className="font-semibold">{environmentLabel}</span>
+            Active knowledge: <span suppressHydrationWarning className="font-semibold">{environmentLabel}</span>
           </div>
           <div className="hidden items-center gap-2 md:flex">
             <button

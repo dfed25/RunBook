@@ -21,7 +21,7 @@ const TOUR_STEPS: TourStep[] = [
   {
     id: "connect-github",
     feature: "integrations",
-    selector: "[data-runbook-feature='integrations']",
+    selector: "[data-tour-target='github-integration-card']",
     title: "Connect integrations",
     description: "Click Connect so workflows can read repo events.",
     success: "Nice - GitHub connected."
@@ -29,7 +29,7 @@ const TOUR_STEPS: TourStep[] = [
   {
     id: "create-api-key",
     feature: "api-keys",
-    selector: "[data-runbook-feature='api-keys']",
+    selector: "[data-tour-target='api-key-card']",
     title: "Create API key",
     description: "Generate a key so the assistant can connect securely.",
     success: "Nice - API key created."
@@ -37,7 +37,7 @@ const TOUR_STEPS: TourStep[] = [
   {
     id: "build-workflow",
     feature: "workflow-builder",
-    selector: "[data-runbook-feature='workflow-builder']",
+    selector: "[data-tour-target='workflow-builder-card']",
     title: "Build workflow",
     description: "Create a workflow that triggers from GitHub and deploys to staging.",
     success: "Nice - Workflow created."
@@ -45,7 +45,7 @@ const TOUR_STEPS: TourStep[] = [
   {
     id: "deploy-staging",
     feature: "deployments",
-    selector: "[data-runbook-feature='deployments']",
+    selector: "[data-tour-target='deployment-card']",
     title: "Deploy to staging",
     description: "Deploy your onboarding flow to staging.",
     success: "Nice - Deployed to staging."
@@ -181,6 +181,7 @@ export default function EmbedDemoPage() {
   useEffect(() => {
     if (!tourActive) return;
     const onRecalc = () => updateTourTarget();
+    onRecalc();
     window.addEventListener("resize", onRecalc);
     window.addEventListener("scroll", onRecalc, true);
     return () => {
@@ -356,6 +357,7 @@ export default function EmbedDemoPage() {
           title="Deployment Status"
           description="Track staging and production rollout states for your latest workflow version."
           className="rounded-2xl border border-white/10 bg-slate-900 p-4"
+          data-tour-target="deployment-card"
         >
           <p className="text-xs uppercase tracking-wide text-slate-400">Deployments</p>
           <p className="mt-1 text-2xl font-bold text-emerald-300">
@@ -371,6 +373,7 @@ export default function EmbedDemoPage() {
           title="API Key Setup"
           description="Create scoped keys for sandbox and production environments."
           className="rounded-2xl border border-white/10 bg-slate-900 p-4"
+          data-tour-target="api-key-card"
         >
           <p className="text-xs uppercase tracking-wide text-slate-400">API Keys</p>
           <p className="mt-1 text-xs text-slate-300">{apiKeyValue ? `Latest: ${apiKeyValue}` : "No key generated yet"}</p>
@@ -386,6 +389,7 @@ export default function EmbedDemoPage() {
           title="Workflow Builder"
           description="Compose triggers and actions, then test before deployment."
           className="rounded-2xl border border-white/10 bg-slate-900 p-4"
+          data-tour-target="workflow-builder-card"
         >
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold">Workflow Builder</h2>
@@ -426,7 +430,7 @@ export default function EmbedDemoPage() {
                 Manage
               </button>
             </div>
-            <ul className="mt-3 space-y-2 text-sm" data-runbook-feature="github-card" data-runbook-title="GitHub integration" data-runbook-description="Connect GitHub so workflows can trigger from commits and pull requests.">
+            <ul className="mt-3 space-y-2 text-sm" data-runbook-feature="github-card" data-runbook-title="GitHub integration" data-runbook-description="Connect GitHub so workflows can trigger from commits and pull requests." data-tour-target="github-integration-card">
               <li className="flex items-center justify-between rounded-lg bg-slate-950/60 px-3 py-2">
                 <span>GitHub</span>
                 <button type="button" onClick={connectGithub} className={`rounded-md px-2 py-1 text-xs ${appState.githubConnected ? "bg-emerald-500/20 text-emerald-200" : "bg-amber-500/20 text-amber-200"}`}>
@@ -486,9 +490,9 @@ export default function EmbedDemoPage() {
 
       {tourActive && tourRect ? (
         <>
-          <div className="pointer-events-none fixed inset-0 z-[2147482996] bg-black/45" />
+          <div className="pointer-events-none fixed inset-0 z-[2147482996] bg-black/28" />
           <div
-            className="pointer-events-none fixed z-[2147482997] rounded-xl border-2 border-indigo-300 shadow-[0_0_0_9999px_rgba(0,0,0,0.45)]"
+            className="pointer-events-none fixed z-[2147482997] rounded-xl border-2 border-indigo-300 ring-2 ring-indigo-300/40 animate-pulse"
             style={{
               top: tourRect.top - 6,
               left: tourRect.left - 6,
