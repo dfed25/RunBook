@@ -106,7 +106,7 @@ export default function EmbedDemoPage() {
   const activityIdRef = useRef(1);
 
   const currentTourStep = tourActive ? TOUR_STEPS[tourStepIndex] : null;
-  const viewportHeight = typeof window !== "undefined" ? window.innerHeight : 900;
+  const [viewportHeight, setViewportHeight] = useState(900);
 
   const stepComplete = useMemo(() => {
     if (!currentTourStep) return false;
@@ -195,6 +195,22 @@ export default function EmbedDemoPage() {
     },
     [setStatus]
   );
+
+  useEffect(() => {
+    const syncViewport = () => setViewportHeight(window.innerHeight);
+    syncViewport();
+    window.addEventListener("resize", syncViewport);
+    return () => window.removeEventListener("resize", syncViewport);
+  }, []);
+
+  useEffect(() => {
+    if (!showWorkflowModal) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setShowWorkflowModal(false);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [showWorkflowModal]);
 
   useEffect(() => {
     const hydrationTimer = window.setTimeout(() => {
@@ -396,9 +412,6 @@ export default function EmbedDemoPage() {
     setStatus("Nice - GitHub connected. Next: create an API key.");
     addActivity("GitHub connected");
     if (tourActive && currentTourStep?.id === "connect-github") advanceTourAfterSuccess(currentTourStep);
-    else if (tourActive && currentTourStep && stepComplete) {
-      advanceTourAfterSuccess(currentTourStep);
-    }
   };
 
   const createApiKey = () => {
@@ -409,9 +422,6 @@ export default function EmbedDemoPage() {
     setStatus("Key created. Next: build your first workflow.");
     addActivity("API key generated");
     if (tourActive && currentTourStep?.id === "create-api-key") advanceTourAfterSuccess(currentTourStep);
-    else if (tourActive && currentTourStep && stepComplete) {
-      advanceTourAfterSuccess(currentTourStep);
-    }
   };
 
   const createWorkflow = () => {
@@ -421,9 +431,6 @@ export default function EmbedDemoPage() {
     setStatus("Workflow created. Next: deploy to staging.");
     addActivity("Workflow created");
     if (tourActive && currentTourStep?.id === "build-workflow") advanceTourAfterSuccess(currentTourStep);
-    else if (tourActive && currentTourStep && stepComplete) {
-      advanceTourAfterSuccess(currentTourStep);
-    }
   };
 
   const deployStaging = () => {
@@ -441,9 +448,6 @@ export default function EmbedDemoPage() {
       window.dispatchEvent(new CustomEvent("runbook-widget-pulse", { detail: true }));
       setStatus("Your assistant is live. Ask what users can do here.");
       if (tourActive && currentTourStep?.id === "deploy-staging") advanceTourAfterSuccess(currentTourStep);
-      else if (tourActive && currentTourStep && stepComplete) {
-        advanceTourAfterSuccess(currentTourStep);
-      }
     }, 900);
   };
 
@@ -777,18 +781,35 @@ export default function EmbedDemoPage() {
       ) : null}
 
       {showWorkflowModal ? (
-        <div className="fixed inset-0 z-[2147482998] flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-md rounded-xl border border-white/20 bg-slate-900 p-4 text-sm text-slate-100">
+        <div
+          className="fixed inset-0 z-[2147482998] flex items-center justify-center bg-black/50 p-4"
+          onClick={(event) => {
+            if (event.target === event.currentTarget) setShowWorkflowModal(false);
+          }}
+        >
+          <div
+            className="w-full max-w-md rounded-xl border border-white/20 bg-slate-900 p-4 text-sm text-slate-100"
+            onClick={(event) => event.stopPropagation()}
+          >
             <p className="font-semibold">Create workflow</p>
             <p className="mt-1 text-xs text-slate-300">Create a GitHub {"->"} Deploy to staging workflow.</p>
-            <button
-              type="button"
-              onClick={createWorkflow}
-              data-tour-target="confirm-create-workflow-button"
-              className="mt-3 rounded-md bg-indigo-500 px-3 py-1 text-xs font-semibold text-white"
-            >
-              Create workflow
-            </button>
+            <div className="mt-3 flex gap-2">
+              <button
+                type="button"
+                onClick={createWorkflow}
+                data-tour-target="confirm-create-workflow-button"
+                className="rounded-md bg-indigo-500 px-3 py-1 text-xs font-semibold text-white"
+              >
+                Create workflow
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowWorkflowModal(false)}
+                className="rounded-md border border-white/20 px-3 py-1 text-xs"
+              >
+                Cancel
+              </button>
+            </div>
           </div>
         </div>
       ) : null}

@@ -6,6 +6,7 @@ import { resolveProjectFromApiKey } from "@/lib/embedStore";
 import { checkEmbedRateLimit } from "@/lib/embedRateLimit";
 import { NORTHSTAR_DEMO_PROJECT_ID } from "@/lib/embedDemoKnowledge";
 import { isServerLlmConfigured, runNorthstarEmbedChat } from "@/lib/embedNorthstarChat";
+import { getNextAction, type DemoAppState } from "@/lib/embedDemoNextAction";
 import {
   bulletsFromText,
   clipWords,
@@ -120,9 +121,6 @@ function normalizePageContext(body: ChatBody): string {
   ].join("\n");
   const hoverSection = ["Hovered feature context:", hovered || "(none)"].join("\n");
   const appStateSection = ["App state:", appState].join("\n");
-  if (typeof body.pageContext === "string" && body.pageContext.trim()) {
-    return [pageSection, appStateSection, hoverSection].join("\n\n");
-  }
   return [pageSection, appStateSection, hoverSection].join("\n\n");
 }
 
@@ -155,33 +153,40 @@ function normalizeStructured(payload: Partial<StructuredChatPayload>): Structure
   };
 }
 
-function firstIncompleteFeature(appState: unknown): { feature: string; stepId: string } {
-  const state = appState && typeof appState === "object" ? (appState as Record<string, unknown>) : {};
-  const githubConnected = Boolean(state.githubConnected);
-  const apiKeyCreated = Boolean(state.apiKeyCreated);
-  const workflowCreated = Boolean(state.workflowCreated);
-  const deployed = Boolean(state.deployed);
-  if (!githubConnected) return { feature: "integrations", stepId: "connect-github" };
-  if (!apiKeyCreated) return { feature: "api-keys", stepId: "create-api-key" };
-  if (!workflowCreated) return { feature: "workflow-builder", stepId: "build-workflow" };
-  if (!deployed) return { feature: "deployments", stepId: "deploy-staging" };
+function nextStepFromAppState(appState: unknown): { feature: string; stepId: string } {
+  const raw = appState && typeof appState === "object" ? (appState as Partial<DemoAppState>) : {};
+  const normalized: DemoAppState = {
+    githubConnected: Boolean(raw.githubConnected),
+    apiKeyCreated: Boolean(raw.apiKeyCreated),
+    workflowCreated: Boolean(raw.workflowCreated),
+    deployed: Boolean(raw.deployed)
+  };
+  const next = getNextAction(normalized);
+  if (next.id === "connect-github") return { feature: "integrations", stepId: "connect-github" };
+  if (next.id === "create-api-key") return { feature: "api-keys", stepId: "create-api-key" };
+  if (next.id === "build-workflow") return { feature: "workflow-builder", stepId: "build-workflow" };
+  if (next.id === "deploy") return { feature: "deployments", stepId: "deploy-staging" };
   return { feature: "workflow-builder", stepId: "build-workflow" };
 }
 
 function deriveUiAction(message: string, appState: unknown): StructuredChatPayload["uiAction"] {
   const m = String(message || "").toLowerCase();
   if (/start guided tour|guide me|step by step/.test(m)) {
-    const next = firstIncompleteFeature(appState);
+    const next = nextStepFromAppState(appState);
     return { type: "start_step", stepId: next.stepId, feature: next.feature };
   }
   if (/what should i do next|what can i do next|next step/.test(m)) {
-    const next = firstIncompleteFeature(appState);
+    const next = nextStepFromAppState(appState);
     return { type: "highlight", feature: next.feature, stepId: next.stepId };
   }
-  if (/connect github/.test(m)) return { type: "start_step", stepId: "connect-github", feature: "integrations" };
-  if (/api key|create key|generate key/.test(m)) return { type: "start_step", stepId: "create-api-key", feature: "api-keys" };
+  if (/\b(connect|link)\s+github\b/.test(m)) return { type: "start_step", stepId: "connect-github", feature: "integrations" };
+  if (/\b(create|generate)\s+(an?\s+)?api\s*key\b/.test(m) || /\b(create|generate)\s+key\b/.test(m)) {
+    return { type: "start_step", stepId: "create-api-key", feature: "api-keys" };
+  }
   if (/build workflow|create workflow/.test(m)) return { type: "start_step", stepId: "build-workflow", feature: "workflow-builder" };
-  if (/deploy|staging/.test(m)) return { type: "start_step", stepId: "deploy-staging", feature: "deployments" };
+  if (/\b(deploy(?:\s+now)?|push\s+to\s+staging|deploy\s+to\s+staging)\b/.test(m)) {
+    return { type: "start_step", stepId: "deploy-staging", feature: "deployments" };
+  }
   return null;
 }
 
@@ -239,6 +244,7 @@ export async function POST(req: NextRequest) {
       message,
       pageContext,
       hoveredFeature: sanitizeHoveredFeature(body.hoveredFeature),
+      appState: body.appState,
       customSources
     });
     return NextResponse.json(normalizeStructured({ ...payload, uiAction }), { headers: corsHeaders(origin) });

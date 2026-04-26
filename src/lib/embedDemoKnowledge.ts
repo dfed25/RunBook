@@ -126,29 +126,34 @@ function inferActionsFromContext(ctx: string, hovered: string): { bullets: strin
   };
 }
 
-function inferNextActionFromContext(ctx: string): { answer: string; feature: string; step: string } {
-  const page = String(ctx || "").toLowerCase();
-  const hasGithub = page.includes("github");
-  const hasGithubConnected = hasGithub && page.includes("connected");
-  if (hasGithub && !hasGithubConnected) {
+function inferNextActionFromContext(appState?: unknown): { answer: string; feature: string; step: string } {
+  const state = appState && typeof appState === "object" ? (appState as Record<string, unknown>) : {};
+  const githubConnected = Boolean(state.githubConnected);
+  const apiKeyCreated = Boolean(state.apiKeyCreated);
+  const workflowCreated = Boolean(state.workflowCreated);
+  const deployed = Boolean(state.deployed);
+  if (!githubConnected) {
     return {
       answer: "Connect GitHub first, then continue with setup.",
       feature: "integrations",
       step: "Open Integrations and connect GitHub."
     };
   }
-  const hasApiKeyEvidence = page.includes("rk_live_") || page.includes("latest:");
-  const mentionsApiKeys = page.includes("api key") || page.includes("api keys");
-  if (!hasApiKeyEvidence && mentionsApiKeys) {
+  if (!apiKeyCreated) {
     return {
       answer: "Generate a development API key next.",
       feature: "api-keys",
       step: "Open API Keys and create a development key."
     };
   }
-  const isStagingHealthy = page.includes("staging healthy");
-  const mentionsDeploy = page.includes("deploy") || page.includes("deployment");
-  if (!isStagingHealthy && mentionsDeploy) {
+  if (!workflowCreated) {
+    return {
+      answer: "Build your first workflow now.",
+      feature: "workflow-builder",
+      step: "Open Workflow Builder and create one trigger-action flow."
+    };
+  }
+  if (!deployed) {
     return {
       answer: "Deploy to staging to validate your flow.",
       feature: "deployments",
@@ -156,14 +161,19 @@ function inferNextActionFromContext(ctx: string): { answer: string; feature: str
     };
   }
   return {
-    answer: "Build your first workflow now.",
+    answer: "Your assistant is live and ready to guide users.",
     feature: "workflow-builder",
-    step: "Open Workflow Builder and create one trigger-action flow."
+    step: "Try asking what users can do on this page."
   };
 }
 
 /** Deterministic demo responses for hackathon reliability. */
-export function buildNorthstarDemoResponse(message: string, pageContext: string, hoveredFeature?: string): DemoChatResult {
+export function buildNorthstarDemoResponse(
+  message: string,
+  pageContext: string,
+  hoveredFeature?: string,
+  appState?: unknown
+): DemoChatResult {
   const m = message.toLowerCase().trim();
   const ctx = (pageContext || "").toLowerCase();
   const hovered = (hoveredFeature || "").trim();
@@ -282,7 +292,7 @@ export function buildNorthstarDemoResponse(message: string, pageContext: string,
     m.includes("start") ||
     m.includes("week one")
   ) {
-    const next = inferNextActionFromContext(ctx);
+    const next = inferNextActionFromContext(appState);
     return createResult({
       answer: next.answer,
       bullets: [`Focus on ${next.feature} first`, "Complete one action before moving on", "Ask again for the next step"],
@@ -369,7 +379,7 @@ export function buildNorthstarDemoResponse(message: string, pageContext: string,
     });
   }
 
-  if (m.includes("deploy") || m.includes("staging")) {
+  if (/\b(deploy to staging|deploy now|push to staging)\b/.test(m)) {
     return createResult({
       answer: "Deploy to staging from the Deployments card.",
       bullets: ["Open Deployments", "Click Deploy to staging", "Wait for healthy status"],

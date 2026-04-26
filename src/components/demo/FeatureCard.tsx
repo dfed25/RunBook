@@ -18,11 +18,11 @@ export function FeatureCard({
 }: FeatureCardProps) {
   return (
     <section
+      {...rest}
       className={className}
       data-runbook-feature={feature}
       data-runbook-title={title}
       data-runbook-description={description}
-      {...rest}
     >
       {children}
     </section>

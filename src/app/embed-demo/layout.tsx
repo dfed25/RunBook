@@ -92,8 +92,16 @@ function compactSentence(text: string, max = 170): string {
 
 function firstSentence(text: string): string {
   const clean = String(text || "").replace(/\s+/g, " ").trim();
-  const match = clean.match(/^.*?[.!?](?:\s|$)/);
-  return (match ? match[0] : clean).trim();
+  const abbreviationPattern = /\b(?:e\.g|i\.e|mr|mrs|ms|dr|prof)\.$/i;
+  const sentenceEndPattern = /[.!?](?:\s|$)/g;
+  let match: RegExpExecArray | null;
+  while ((match = sentenceEndPattern.exec(clean)) !== null) {
+    const candidate = clean.slice(0, match.index + 1).trim();
+    if (candidate.split(/\s+/).length < 3) continue;
+    if (abbreviationPattern.test(candidate)) continue;
+    return candidate;
+  }
+  return clean;
 }
 
 function tokenize(text: string): string[] {

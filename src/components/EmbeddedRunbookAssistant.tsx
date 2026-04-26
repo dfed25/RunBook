@@ -8,6 +8,7 @@ import {
   type ImportedDocument
 } from "@/lib/studioDemoStorage";
 import { MAX_BULLETS, MAX_SOURCES, MAX_STEPS, MAX_SUGGESTIONS } from "@/lib/embedStructured";
+import { getNextAction, type DemoAppState } from "@/lib/embedDemoNextAction";
 
 type ChatResponse = {
   answer?: string;
@@ -142,10 +143,15 @@ export function EmbeddedRunbookAssistant({
   const chatBodyRef = useRef<HTMLDivElement | null>(null);
   const hoveredFeatureRef = useRef<HoveredFeatureContext | null>(null);
   const hoverDebounceRef = useRef<number | null>(null);
+  const pulseTimeoutRef = useRef<number | null>(null);
   useEffect(() => {
     return () => {
       highlightCleanupRef.current?.();
       if (hoverDebounceRef.current) window.clearTimeout(hoverDebounceRef.current);
+      if (pulseTimeoutRef.current) {
+        window.clearTimeout(pulseTimeoutRef.current);
+        pulseTimeoutRef.current = null;
+      }
     };
   }, []);
 
@@ -173,7 +179,11 @@ export function EmbeddedRunbookAssistant({
       const shouldPulse = Boolean((evt as CustomEvent<boolean>).detail);
       setPulseLaunch(shouldPulse);
       if (shouldPulse) {
-        window.setTimeout(() => setPulseLaunch(false), 3000);
+        if (pulseTimeoutRef.current) window.clearTimeout(pulseTimeoutRef.current);
+        pulseTimeoutRef.current = window.setTimeout(() => {
+          setPulseLaunch(false);
+          pulseTimeoutRef.current = null;
+        }, 3000);
       }
     };
     window.addEventListener("runbook-active-feature", onExternalFeature as EventListener);
@@ -390,26 +400,34 @@ export function EmbeddedRunbookAssistant({
       typeof window !== "undefined"
         ? ((window as Window & { __runbookAppState?: Record<string, unknown> }).__runbookAppState ?? {})
         : {};
-    const githubConnected = Boolean(appState.githubConnected);
-    const apiKeyCreated = Boolean(appState.apiKeyCreated);
-    const workflowCreated = Boolean(appState.workflowCreated);
-    const deployed = Boolean(appState.deployed);
-    const answer = !githubConnected
-      ? "Connect GitHub next."
-      : !apiKeyCreated
-        ? "Create an API key next."
-        : !workflowCreated
-          ? "Build your first workflow next."
-          : !deployed
-            ? "Deploy to staging next."
-            : "You are ready to launch.";
+    const parsed: DemoAppState = {
+      githubConnected: Boolean(appState.githubConnected),
+      apiKeyCreated: Boolean(appState.apiKeyCreated),
+      workflowCreated: Boolean(appState.workflowCreated),
+      deployed: Boolean(appState.deployed)
+    };
+    const next = getNextAction(parsed);
+    const answerById: Record<string, string> = {
+      "connect-github": "Connect GitHub next.",
+      "create-api-key": "Create an API key next.",
+      "build-workflow": "Build your first workflow next.",
+      deploy: "Deploy to staging next.",
+      complete: "You are ready to launch."
+    };
+    const actionBullets: Record<string, string[]> = {
+      "connect-github": ["Enable repo events", "Unlock workflow triggers", "Start setup safely"],
+      "create-api-key": ["Secure the embed connection", "Use it in script setup", "Unlock deployment flow"],
+      "build-workflow": ["Define trigger and action", "Validate setup path", "Prepare deploy handoff"],
+      deploy: ["Publish to staging", "Verify healthy status", "Activate live guidance"],
+      complete: ["Assistant is live", "Ask what users can do here", "Use Guide me for walkthrough"]
+    };
     window.dispatchEvent(new CustomEvent("runbook-what-next"));
     setMessages((m) => [
       ...m,
       {
         role: "assistant",
-        answer,
-        bullets: ["It moves setup forward", "It unlocks the next step", "I highlighted where to click"],
+        answer: answerById[next.id],
+        bullets: actionBullets[next.id],
         suggestions: ["Guide me", "What can I do here?"]
       }
     ]);

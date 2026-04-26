@@ -75,6 +75,7 @@ export async function runNorthstarEmbedChat(input: {
   message: string;
   pageContext: string;
   hoveredFeature?: string;
+  appState?: unknown;
   customSources: { title: string; content: string }[];
 }): Promise<DemoChatResult> {
   const extraDocs: SourceDoc[] = input.customSources.map((s, i) => ({
@@ -103,7 +104,7 @@ export async function runNorthstarEmbedChat(input: {
           .join("\n\n")
       : allDocs.slice(0, 4).map((d) => `### ${d.title}\n${d.content.slice(0, 1_500)}`).join("\n\n");
 
-  const fallback = buildNorthstarDemoResponse(input.message, input.pageContext, input.hoveredFeature);
+  const fallback = buildNorthstarDemoResponse(input.message, input.pageContext, input.hoveredFeature, input.appState);
   const importedFallback: DemoChatResult = {
     answer: clipWords("Using your imported code and current page context first.", MAX_ANSWER_WORDS),
     bullets: normalizeBullets([

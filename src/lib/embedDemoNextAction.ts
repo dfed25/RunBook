@@ -9,7 +9,7 @@ export type DemoNextAction = {
   id: "connect-github" | "create-api-key" | "build-workflow" | "deploy" | "complete";
   title: string;
   message: string;
-  targetFeature: "integrations" | "api-keys" | "create-workflow" | "deployments" | null;
+  targetFeature: "integrations" | "api-keys" | "workflow-builder" | "deployments" | null;
   buttonLabel: string;
 };
 
@@ -37,7 +37,7 @@ export function getNextAction(state: DemoAppState): DemoNextAction {
       id: "build-workflow",
       title: "Build first workflow",
       message: "Create a GitHub to Deploy workflow to validate setup.",
-      targetFeature: "create-workflow",
+      targetFeature: "workflow-builder",
       buttonLabel: "Start"
     };
   }
