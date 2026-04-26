@@ -28,7 +28,7 @@ function originAllowed(projectSite: string | undefined, origin: string | null): 
   try {
     const allowed = new URL(projectSite.includes("://") ? projectSite : `https://${projectSite}`);
     const actual = new URL(origin);
-    return allowed.hostname === actual.hostname;
+    return actual.hostname === allowed.hostname || actual.hostname.endsWith(`.${allowed.hostname}`);
   } catch {
     return false;
   }
@@ -175,7 +175,6 @@ ${context || "(no indexed chunks yet)"}
 
 User question: ${message}
 
-If this is an onboarding/how-to question, infer the concrete user journey from the indexed code/docs: identify entry UI, exact actions, and what success looks like after each action.
 Also output 3-6 short imperative steps as a JSON array string at the very end on its own line prefixed exactly with RUNBOOK_STEPS_JSON: e.g. RUNBOOK_STEPS_JSON: ["step1","step2"]`;
 
   const baseSources = retrieved.map((r) => ({
@@ -190,7 +189,7 @@ Also output 3-6 short imperative steps as a JSON array string at the very end on
         answer:
           "AI is not configured. Set GEMINI_API_KEY and/or OPENAI_API_KEY in .env.local for grounded answers from your indexed repository.",
         sources: baseSources,
-        mode: "fallback",
+        mode: "unindexed",
         steps: [
           "Connect knowledge in Runbook Studio.",
           "Run **Index repository** so chunks exist in the vector store.",
@@ -238,7 +237,7 @@ Also output 3-6 short imperative steps as a JSON array string at the very end on
         answer:
           "Runbook AI is temporarily unavailable. I can still guide you from indexed docs below while full reasoning recovers.",
         sources: baseSources,
-        mode: "fallback",
+        mode: "error",
         steps: [
           "Open the most relevant source below and confirm the exact policy text.",
           "Follow the documented path in order, then retry this question for a deeper walkthrough.",

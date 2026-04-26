@@ -18,6 +18,9 @@
   var projectId =
     script.getAttribute("data-project-id") || script.getAttribute("data-project") || "";
   var apiKey = script.getAttribute("data-key") || "";
+  var includeBodyText =
+    script.hasAttribute("data-include-body-text") ||
+    !!document.querySelector('script[src*="runbook-embed.js"][data-include-body-text]');
   var originAttr = (script.getAttribute("data-runbook-origin") || "").trim().replace(/\/$/, "");
   var base = originAttr || script.src.replace(/\/runbook-embed\.js.*$/, "");
   if (!projectId) {
@@ -30,6 +33,19 @@
     return /(where|find|locate|click|open|go to|how do i|create account|sign up|signup|register|get started|log in|login)/i.test(
       String(text || "")
     );
+  }
+
+  function stripTrailingSentencePunctuation(input) {
+    var end = input.length;
+    while (end > 0) {
+      var ch = input[end - 1];
+      if (ch === "." || ch === "!" || ch === "?") {
+        end -= 1;
+        continue;
+      }
+      break;
+    }
+    return input.slice(0, end);
   }
 
   var BUNDLE_KEY = "runbook_demo_bundle_v1";
@@ -253,9 +269,18 @@
 
     function extractIntentPhrase(question) {
       var q = String(question || "");
-      var m = q.match(/(?:where\s+is|find|locate|click|open|go\s+to)\s+(.+)$/i);
-      if (!m || !m[1]) return "";
-      return m[1].trim().replace(/[?.!]+$/, "");
+      var lower = q.toLowerCase();
+      var prefixes = ["where is ", "find ", "locate ", "click ", "open ", "go to "];
+      for (var i = 0; i < prefixes.length; i++) {
+        var prefix = prefixes[i];
+        var idx = lower.indexOf(prefix);
+        if (idx >= 0) {
+          var rawTarget = q.slice(idx + prefix.length).trim();
+          var cleaned = stripTrailingSentencePunctuation(rawTarget).trim();
+          if (cleaned.length > 0) return cleaned;
+        }
+      }
+      return "";
     }
 
     function scoreCandidate(el, tokens, intentCompact) {
@@ -349,16 +374,41 @@
       var meta = "";
       var m = document.querySelector('meta[name="description"]');
       if (m) meta = m.getAttribute("content") || "";
-      var bodyText = "";
+      var headings = "";
       try {
-        bodyText = (document.body && document.body.innerText ? document.body.innerText : "")
-          .replace(/\s+/g, " ")
-          .trim()
-          .slice(0, 12000);
+        var hs = Array.prototype.slice.call(document.querySelectorAll("h1,h2,h3")).map(function (el) {
+          return (el && el.textContent ? String(el.textContent) : "").trim();
+        }).filter(Boolean).slice(0, 12);
+        headings = hs.join(" | ");
       } catch {
-        bodyText = "";
+        headings = "";
       }
-      return [u, t, meta, bodyText].filter(Boolean).join("\n");
+      var bodyText = "";
+      if (includeBodyText) {
+        try {
+          var clone = document.body ? document.body.cloneNode(true) : null;
+          if (clone && clone.querySelectorAll) {
+            var fields = clone.querySelectorAll("input,textarea,select");
+            for (var i = 0; i < fields.length; i++) {
+              var f = fields[i];
+              var tag = (f.tagName || "").toLowerCase();
+              if (tag === "select") {
+                f.textContent = "";
+              } else {
+                f.setAttribute("value", "");
+                f.textContent = "";
+              }
+            }
+          }
+          bodyText = (clone && clone.innerText ? clone.innerText : "")
+            .replace(/\s+/g, " ")
+            .trim()
+            .slice(0, 12000);
+        } catch {
+          bodyText = "";
+        }
+      }
+      return [u, t, meta, headings, bodyText].filter(Boolean).join("\n");
     }
 
     function addBot(html) {
@@ -438,7 +488,7 @@
         if (data.answer) html += escapeHtml(data.answer).replace(/\n/g, "<br/>");
         var sourceCount = Array.isArray(data.sources) ? data.sources.length : 0;
         var missingIndexSignal =
-          data.mode === "fallback" ||
+          data.mode === "unindexed" ||
           /AI is not configured|no indexed chunks yet/i.test(String(data.answer || "")) ||
           sourceCount === 0;
         if (missingIndexSignal) {

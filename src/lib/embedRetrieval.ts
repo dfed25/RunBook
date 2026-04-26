@@ -47,22 +47,25 @@ export async function retrieveDocsForEmbed(question: string, projectId: string):
   const queries = buildEmbedQueries(question);
   const merged = new Map<string, MatchedDocument>();
 
-  for (const query of queries) {
-    const embedding = await generateEmbedding(query);
-    if (!embedding) continue;
+  const queryResults = await Promise.all(
+    queries.map(async (query) => {
+      const embedding = await generateEmbedding(query);
+      if (!embedding) return null;
+      const { data: documents, error } = await supabaseAdmin.rpc("match_documents", {
+        query_embedding: `[${embedding.join(",")}]`,
+        match_threshold: DEFAULT_MATCH_THRESHOLD,
+        match_count: TOP_K * 4
+      });
+      if (error) {
+        console.error("Embed vector search error:", error);
+        return null;
+      }
+      return (documents || []) as MatchedDocument[];
+    })
+  );
 
-    const { data: documents, error } = await supabaseAdmin.rpc("match_documents", {
-      query_embedding: `[${embedding.join(",")}]`,
-      match_threshold: DEFAULT_MATCH_THRESHOLD,
-      match_count: TOP_K * 8
-    });
-
-    if (error) {
-      console.error("Embed vector search error:", error);
-      continue;
-    }
-
-    const batch = (documents || []) as MatchedDocument[];
+  for (const batch of queryResults) {
+    if (!batch) continue;
     for (const doc of batch) {
       if (!matchesEmbedScope(doc.content, projectId)) continue;
       const prev = merged.get(doc.id);

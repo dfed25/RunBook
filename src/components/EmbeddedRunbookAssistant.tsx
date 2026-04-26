@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   loadImportedDocs,
   loadProjectId,
@@ -58,6 +58,11 @@ export function EmbeddedRunbookAssistant({
   const [completedStepsByMessage, setCompletedStepsByMessage] = useState<Record<string, Record<number, boolean>>>({});
   const [activeSource, setActiveSource] = useState<SourceItem | null>(null);
   const highlightCleanupRef = useRef<() => void>(() => undefined);
+  useEffect(() => {
+    return () => {
+      highlightCleanupRef.current?.();
+    };
+  }, []);
 
   const posWrap = position === "embedded" ? "relative h-full min-h-[360px] w-full overflow-hidden bg-slate-50" : "";
   const fixedLaunch = position === "page" ? "fixed bottom-5 right-5 z-[2147483000]" : "absolute bottom-4 right-4 z-20";
@@ -112,7 +117,7 @@ export function EmbeddedRunbookAssistant({
         }
         const sourceCount = Array.isArray(data.sources) ? data.sources.length : 0;
         const missingIndexSignal =
-          data.mode === "fallback" ||
+          data.mode === "unindexed" ||
           /AI is not configured|no indexed chunks yet/i.test(data.answer || "") ||
           sourceCount === 0;
 
@@ -137,13 +142,20 @@ export function EmbeddedRunbookAssistant({
         highlightCleanupRef.current();
         const cleanup = maybeHighlightElementForQuestion(q, data);
         if (!cleanup) {
-          setMessages((m) => [
-            ...m,
-            {
-              role: "assistant",
-              text: "I couldn't confidently find that element on this page. Try the exact label (e.g. Create account) or ask me to explain this page."
-            }
-          ]);
+          const answerText = String(data.answer || "");
+          const looksLikeTargetedAnswer =
+            /(look for|labeled|labelled|button|cta|click|create account|sign up|get started|log in|register)/i.test(
+              answerText
+            ) || (Array.isArray(data.steps) && data.steps.length > 0);
+          if (isLocationIntent(q) && !looksLikeTargetedAnswer) {
+            setMessages((m) => [
+              ...m,
+              {
+                role: "assistant",
+                text: "I couldn't confidently find that element on this page. Try the exact label (e.g. Create account) or ask me to explain this page."
+              }
+            ]);
+          }
           highlightCleanupRef.current = () => undefined;
         } else {
           highlightCleanupRef.current = cleanup;
@@ -378,7 +390,7 @@ function maybeHighlightElementForQuestion(question: string, data: ChatResponse):
 
   ensureHighlightStyleTag();
   const hint = [question, data.answer || "", (data.steps || []).join(" ")].join(" ");
-  const target = findBestTargetWithIntent(hint, question) || findBestTarget(hint);
+  const target = findBestTarget(hint, question);
   if (!target) return null;
 
   target.classList.add("rb-highlight-target");
@@ -415,51 +427,7 @@ function ensureHighlightStyleTag(): void {
   document.head.appendChild(styleTag);
 }
 
-function findBestTarget(hint: string): HTMLElement | null {
-  const tokens = tokenize(hint).slice(0, 20);
-  if (tokens.length === 0) return null;
-  const nodes = Array.from(
-    document.querySelectorAll<HTMLElement>(
-      "button,a,[role='button'],summary,label,h1,h2,h3,input,textarea,select,[data-testid],[aria-label],nav a"
-    )
-  );
-  let best: HTMLElement | null = null;
-  let bestScore = 0;
-
-  for (const node of nodes) {
-    const rect = node.getBoundingClientRect();
-    if (rect.width < 16 || rect.height < 10) continue;
-    const text = [
-      node.innerText || "",
-      node.getAttribute("aria-label") || "",
-      node.getAttribute("title") || "",
-      node.id || "",
-      node.getAttribute("name") || "",
-      node.getAttribute("placeholder") || "",
-      node.className || ""
-    ]
-      .join(" ")
-      .toLowerCase();
-    if (!text.trim()) continue;
-
-    let score = 0;
-    const compactText = compact(text);
-    for (const token of tokens) {
-      const compactToken = compact(token);
-      if (text.includes(token)) score += token.length > 5 ? 3 : 2;
-      if (compactToken && compactText.includes(compactToken)) score += token.length > 5 ? 3 : 2;
-    }
-    if (node.tagName === "BUTTON" || node.tagName === "A") score += 2;
-    if (score > bestScore) {
-      bestScore = score;
-      best = node;
-    }
-  }
-
-  return bestScore >= 3 ? best : null;
-}
-
-function findBestTargetWithIntent(hint: string, question: string): HTMLElement | null {
+function findBestTarget(hint: string, question: string): HTMLElement | null {
   const tokens = tokenize(hint).slice(0, 20);
   if (tokens.length === 0) return null;
   const intentCompact = compact(extractIntentPhrase(question));
@@ -519,10 +487,32 @@ function compact(text: string): string {
   return String(text).toLowerCase().replace(/[^a-z0-9]/g, "");
 }
 
+function stripTrailingSentencePunctuation(input: string): string {
+  let end = input.length;
+  while (end > 0) {
+    const ch = input[end - 1];
+    if (ch === "." || ch === "!" || ch === "?") {
+      end -= 1;
+      continue;
+    }
+    break;
+  }
+  return input.slice(0, end);
+}
+
 function extractIntentPhrase(question: string): string {
-  const m = String(question).match(/(?:where\s+is|find|locate|click|open|go\s+to)\s+(.+)$/i);
-  if (!m || !m[1]) return "";
-  return m[1].trim().replace(/[?.!]+$/, "");
+  const q = String(question || "");
+  const lower = q.toLowerCase();
+  const prefixes = ["where is ", "find ", "locate ", "click ", "open ", "go to "];
+  for (const prefix of prefixes) {
+    const idx = lower.indexOf(prefix);
+    if (idx >= 0) {
+      const rawTarget = q.slice(idx + prefix.length).trim();
+      const cleaned = stripTrailingSentencePunctuation(rawTarget).trim();
+      if (cleaned.length > 0) return cleaned;
+    }
+  }
+  return "";
 }
 
 function isLocationIntent(text: string): boolean {
