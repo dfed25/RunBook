@@ -345,6 +345,33 @@ export function buildNorthstarDemoResponse(message: string, pageContext: string,
     });
   }
 
+  if (m.includes("connect github")) {
+    return createResult({
+      answer: "Open Integrations and click Connect on GitHub.",
+      bullets: ["Use the GitHub card", "Click Connect once", "Confirm Connected status appears"],
+      sources: product ? [{ title: product.title, excerpt: excerptFromContent(product.content), url: undefined }] : [],
+      steps: ["Open Integrations section.", "Click Connect on the GitHub card.", "Confirm the status changes to Connected."]
+    });
+  }
+
+  if (m.includes("build workflow") || m.includes("create workflow")) {
+    return createResult({
+      answer: "Open workflow builder and create your first flow.",
+      bullets: ["Use New workflow", "Pick GitHub trigger", "Set deploy action"],
+      sources: product ? [{ title: product.title, excerpt: excerptFromContent(product.content), url: undefined }] : [],
+      steps: ["Click New workflow.", "Choose GitHub trigger and deploy action.", "Save the workflow to continue setup."]
+    });
+  }
+
+  if (m.includes("deploy") || m.includes("staging")) {
+    return createResult({
+      answer: "Deploy to staging from the Deployments card.",
+      bullets: ["Open Deployments", "Click Deploy to staging", "Wait for healthy status"],
+      sources: product ? [{ title: product.title, excerpt: excerptFromContent(product.content), url: undefined }] : [],
+      steps: ["Open Deployments.", "Click Deploy to staging.", "Wait until status shows Staging healthy."]
+    });
+  }
+
   // Default: product onboarding journey
   const sources: { title: string; excerpt: string; url?: string }[] = [];
   if (product) sources.push({ title: product.title, excerpt: excerptFromContent(product.content) });

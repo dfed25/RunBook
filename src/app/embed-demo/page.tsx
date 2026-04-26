@@ -1,52 +1,58 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FeatureCard } from "@/components/demo/FeatureCard";
 
-type TourStep = {
-  feature: string;
-  selector: string;
-  title: string;
-  description: string;
+type AppState = {
+  githubConnected: boolean;
+  apiKeyCreated: boolean;
+  workflowCreated: boolean;
+  deployed: boolean;
 };
 
-type HoveredFeatureDetail = {
-  feature: string;
-  title: string;
-  description: string;
-};
+type FeatureDetail = { feature: string; title: string; description: string };
+type TourStep = FeatureDetail & { id: string; selector: string; success: string };
 
 const NUDGE_DISMISSED_KEY = "runbook_alive_nudge_dismissed";
+const APP_STATE_KEY = "runbook_embed_demo_state";
 
 const TOUR_STEPS: TourStep[] = [
   {
+    id: "connect-github",
     feature: "integrations",
     selector: "[data-runbook-feature='integrations']",
     title: "Connect integrations",
-    description: "Connect GitHub first so workflows can trigger from your repo."
+    description: "Click Connect so workflows can read repo events.",
+    success: "Nice - GitHub connected."
   },
   {
+    id: "create-api-key",
     feature: "api-keys",
     selector: "[data-runbook-feature='api-keys']",
     title: "Create API key",
-    description: "Generate a dev key so your app can send events securely."
+    description: "Generate a key so the assistant can connect securely.",
+    success: "Nice - API key created."
   },
   {
+    id: "build-workflow",
     feature: "workflow-builder",
     selector: "[data-runbook-feature='workflow-builder']",
     title: "Build workflow",
-    description: "Create one trigger-action flow to validate your setup."
+    description: "Create a workflow that triggers from GitHub and deploys to staging.",
+    success: "Nice - Workflow created."
   },
   {
+    id: "deploy-staging",
     feature: "deployments",
     selector: "[data-runbook-feature='deployments']",
     title: "Deploy to staging",
-    description: "Run a staging deploy and confirm the status turns healthy."
+    description: "Deploy your onboarding flow to staging.",
+    success: "Nice - Deployed to staging."
   }
 ];
 
-function emitActiveFeature(detail: HoveredFeatureDetail | null): void {
+function emitActiveFeature(detail: FeatureDetail | null): void {
   window.dispatchEvent(new CustomEvent("runbook-active-feature", { detail }));
 }
 
@@ -55,7 +61,24 @@ function emitRunbookSuggestion(text: string): void {
 }
 
 export default function EmbedDemoPage() {
-  const [githubConnected, setGithubConnected] = useState(false);
+  const [appState, setAppState] = useState<AppState>(() => {
+    if (typeof window === "undefined") {
+      return { githubConnected: false, apiKeyCreated: false, workflowCreated: false, deployed: false };
+    }
+    try {
+      const raw = window.localStorage.getItem(APP_STATE_KEY);
+      if (!raw) return { githubConnected: false, apiKeyCreated: false, workflowCreated: false, deployed: false };
+      const parsed = JSON.parse(raw) as Partial<AppState>;
+      return {
+        githubConnected: Boolean(parsed.githubConnected),
+        apiKeyCreated: Boolean(parsed.apiKeyCreated),
+        workflowCreated: Boolean(parsed.workflowCreated),
+        deployed: Boolean(parsed.deployed)
+      };
+    } catch {
+      return { githubConnected: false, apiKeyCreated: false, workflowCreated: false, deployed: false };
+    }
+  });
   const [showIntegrationsPanel, setShowIntegrationsPanel] = useState(false);
   const [showWorkflowModal, setShowWorkflowModal] = useState(false);
   const [apiKeyValue, setApiKeyValue] = useState<string | null>(null);
@@ -65,10 +88,36 @@ export default function EmbedDemoPage() {
   const [tourStepIndex, setTourStepIndex] = useState(0);
   const [tourRect, setTourRect] = useState<DOMRect | null>(null);
   const [tourHighlightFeature, setTourHighlightFeature] = useState<string | null>(null);
-  const [hoveredFeature, setHoveredFeature] = useState<HoveredFeatureDetail | null>(null);
+  const [hoveredFeature, setHoveredFeature] = useState<FeatureDetail | null>(null);
+  const [tourFeedback, setTourFeedback] = useState<string | null>(null);
+  const completedStepIdsRef = useRef<Record<string, boolean>>({});
 
   const currentTourStep = tourActive ? TOUR_STEPS[tourStepIndex] : null;
   const viewportHeight = typeof window !== "undefined" ? window.innerHeight : 900;
+
+  const stepComplete = useMemo(() => {
+    if (!currentTourStep) return false;
+    if (currentTourStep.id === "connect-github") return appState.githubConnected;
+    if (currentTourStep.id === "create-api-key") return appState.apiKeyCreated;
+    if (currentTourStep.id === "build-workflow") return appState.workflowCreated;
+    if (currentTourStep.id === "deploy-staging") return appState.deployed;
+    return false;
+  }, [appState, currentTourStep]);
+
+  const checklist = [
+    { label: "Connect GitHub", done: appState.githubConnected },
+    { label: "Create API key", done: appState.apiKeyCreated },
+    { label: "Build first workflow", done: appState.workflowCreated },
+    { label: "Deploy to staging", done: appState.deployed }
+  ];
+
+  const nextBest = useMemo(() => {
+    if (!appState.githubConnected) return TOUR_STEPS[0];
+    if (!appState.apiKeyCreated) return TOUR_STEPS[1];
+    if (!appState.workflowCreated) return TOUR_STEPS[2];
+    if (!appState.deployed) return TOUR_STEPS[3];
+    return null;
+  }, [appState]);
 
   const updateTourTarget = useCallback(() => {
     if (!tourActive || !currentTourStep) {
@@ -81,12 +130,45 @@ export default function EmbedDemoPage() {
         setTourStepIndex((s) => s + 1);
       } else {
         setTourActive(false);
+        emitRunbookSuggestion("You are ready to launch.");
       }
       return;
     }
     el.scrollIntoView({ behavior: "smooth", block: "center" });
     setTourRect(el.getBoundingClientRect());
   }, [currentTourStep, tourActive, tourStepIndex]);
+
+  const advanceTourAfterSuccess = useCallback(
+    (step: TourStep) => {
+      if (completedStepIdsRef.current[step.id]) return;
+      completedStepIdsRef.current[step.id] = true;
+      setTourFeedback(step.success);
+      emitRunbookSuggestion(step.success);
+      window.setTimeout(() => {
+        setTourFeedback(null);
+        const nextIdx = TOUR_STEPS.findIndex((s) => s.id === step.id) + 1;
+        if (nextIdx < TOUR_STEPS.length) {
+          const next = TOUR_STEPS[nextIdx];
+          setTourStepIndex(nextIdx);
+          emitRunbookSuggestion(`Next: ${next.title}.`);
+        } else {
+          setTourActive(false);
+          emitRunbookSuggestion("You are ready to launch.");
+        }
+      }, 700);
+    },
+    []
+  );
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(APP_STATE_KEY, JSON.stringify(appState));
+    } catch {
+      /* no-op */
+    }
+    (window as Window & { __runbookAppState?: AppState }).__runbookAppState = appState;
+    window.dispatchEvent(new CustomEvent("runbook-app-state", { detail: appState }));
+  }, [appState]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -139,25 +221,23 @@ export default function EmbedDemoPage() {
   useEffect(() => {
     const onGuideMe = () => {
       setTourHighlightFeature(null);
+      setTourFeedback(null);
       setTourStepIndex(0);
       setTourActive(true);
       setShowNudge(false);
+      completedStepIdsRef.current = {};
+      emitRunbookSuggestion("Guiding: Connect integrations.");
     };
     const onWhatNext = () => {
-      const nextFeature = !githubConnected
-        ? "integrations"
-        : !apiKeyValue
-          ? "api-keys"
-          : deploymentStatus !== "healthy"
-            ? "deployments"
-            : "workflow-builder";
+      const step = nextBest;
+      const nextFeature = step?.feature || "workflow-builder";
+      setTourActive(false);
       setTourHighlightFeature(nextFeature);
-      const step = TOUR_STEPS.find((s) => s.feature === nextFeature);
       if (step) {
-        setTourActive(true);
-        setTourStepIndex(TOUR_STEPS.findIndex((s) => s.feature === nextFeature));
+        emitRunbookSuggestion(`Next: ${step.title}.`);
+      } else {
+        emitRunbookSuggestion("You are ready to launch.");
       }
-      emitRunbookSuggestion(`Next: ${step?.title || "Open workflow builder"}.`);
     };
     window.addEventListener("runbook-start-tour", onGuideMe as EventListener);
     window.addEventListener("runbook-what-next", onWhatNext as EventListener);
@@ -165,7 +245,7 @@ export default function EmbedDemoPage() {
       window.removeEventListener("runbook-start-tour", onGuideMe as EventListener);
       window.removeEventListener("runbook-what-next", onWhatNext as EventListener);
     };
-  }, [apiKeyValue, deploymentStatus, githubConnected]);
+  }, [nextBest]);
 
   const dismissNudge = () => {
     window.localStorage.setItem(NUDGE_DISMISSED_KEY, "1");
@@ -173,18 +253,34 @@ export default function EmbedDemoPage() {
   };
 
   const connectGithub = () => {
-    setGithubConnected(true);
+    setAppState((s) => ({ ...s, githubConnected: true }));
     setTourHighlightFeature("github-card");
+    if (tourActive && currentTourStep?.id === "connect-github") advanceTourAfterSuccess(currentTourStep);
   };
 
   const createApiKey = () => {
     const token = `rk_live_${Math.random().toString(36).slice(2, 14)}`;
     setApiKeyValue(token);
+    setAppState((s) => ({ ...s, apiKeyCreated: true }));
+    setTourHighlightFeature("api-keys");
+    if (tourActive && currentTourStep?.id === "create-api-key") advanceTourAfterSuccess(currentTourStep);
+  };
+
+  const createWorkflow = () => {
+    setAppState((s) => ({ ...s, workflowCreated: true }));
+    setShowWorkflowModal(false);
+    setTourHighlightFeature("workflow-builder");
+    if (tourActive && currentTourStep?.id === "build-workflow") advanceTourAfterSuccess(currentTourStep);
   };
 
   const deployStaging = () => {
     setDeploymentStatus("deploying");
-    window.setTimeout(() => setDeploymentStatus("healthy"), 1100);
+    window.setTimeout(() => {
+      setDeploymentStatus("healthy");
+      setAppState((s) => ({ ...s, deployed: true }));
+      setTourHighlightFeature("deployments");
+      if (tourActive && currentTourStep?.id === "deploy-staging") advanceTourAfterSuccess(currentTourStep);
+    }, 900);
   };
 
   const outlinedFeature = useMemo(
@@ -299,7 +395,7 @@ export default function EmbedDemoPage() {
           </div>
           <div className="mt-4 grid gap-3 md:grid-cols-3">
             {[
-              ["Trigger", githubConnected ? "GitHub push event" : "Connect GitHub first"],
+              ["Trigger", appState.githubConnected ? "GitHub push event" : "Connect GitHub first"],
               ["Condition", "branch == main"],
               ["Action", "Deploy to staging"]
             ].map(([label, value], idx) => (
@@ -333,8 +429,8 @@ export default function EmbedDemoPage() {
             <ul className="mt-3 space-y-2 text-sm" data-runbook-feature="github-card" data-runbook-title="GitHub integration" data-runbook-description="Connect GitHub so workflows can trigger from commits and pull requests.">
               <li className="flex items-center justify-between rounded-lg bg-slate-950/60 px-3 py-2">
                 <span>GitHub</span>
-                <button type="button" onClick={connectGithub} className={`rounded-md px-2 py-1 text-xs ${githubConnected ? "bg-emerald-500/20 text-emerald-200" : "bg-amber-500/20 text-amber-200"}`}>
-                  {githubConnected ? "Connected" : "Connect"}
+                <button type="button" onClick={connectGithub} className={`rounded-md px-2 py-1 text-xs ${appState.githubConnected ? "bg-emerald-500/20 text-emerald-200" : "bg-amber-500/20 text-amber-200"}`}>
+                  {appState.githubConnected ? "Connected" : "Connect"}
                 </button>
               </li>
               <li className="flex items-center justify-between rounded-lg bg-slate-950/60 px-3 py-2">
@@ -346,11 +442,29 @@ export default function EmbedDemoPage() {
         </div>
       </section>
 
+      <FeatureCard
+        feature="onboarding-checklist"
+        title="Onboarding checklist"
+        description="Complete each setup milestone to launch quickly."
+        className="rounded-2xl border border-white/10 bg-slate-900 p-4"
+      >
+        <ul className="space-y-2 text-sm">
+          {checklist.map((item) => (
+            <li key={item.label} className="flex items-center gap-2">
+              <span className={`inline-flex h-5 w-5 items-center justify-center rounded-full text-xs ${item.done ? "bg-emerald-500/20 text-emerald-300" : "bg-slate-800 text-slate-400"}`}>
+                {item.done ? "✓" : "•"}
+              </span>
+              <span className={item.done ? "text-emerald-200" : "text-slate-300"}>{item.label}</span>
+            </li>
+          ))}
+        </ul>
+      </FeatureCard>
+
       {showIntegrationsPanel ? (
         <div className="fixed inset-0 z-[2147482998] flex items-center justify-center bg-black/50 p-4">
           <div className="w-full max-w-md rounded-xl border border-white/20 bg-slate-900 p-4 text-sm text-slate-100">
             <p className="font-semibold">Integration manager</p>
-            <p className="mt-1 text-xs text-slate-300">GitHub is {githubConnected ? "connected" : "not connected"}.</p>
+            <p className="mt-1 text-xs text-slate-300">GitHub is {appState.githubConnected ? "connected" : "not connected"}.</p>
             <button type="button" onClick={() => setShowIntegrationsPanel(false)} className="mt-3 rounded-md border border-white/20 px-3 py-1 text-xs">
               Close
             </button>
@@ -362,9 +476,9 @@ export default function EmbedDemoPage() {
         <div className="fixed inset-0 z-[2147482998] flex items-center justify-center bg-black/50 p-4">
           <div className="w-full max-w-md rounded-xl border border-white/20 bg-slate-900 p-4 text-sm text-slate-100">
             <p className="font-semibold">Create workflow</p>
-            <p className="mt-1 text-xs text-slate-300">Template selected and ready to customize.</p>
-            <button type="button" onClick={() => setShowWorkflowModal(false)} className="mt-3 rounded-md border border-white/20 px-3 py-1 text-xs">
-              Close
+            <p className="mt-1 text-xs text-slate-300">Create a GitHub {"->"} Deploy to staging workflow.</p>
+            <button type="button" onClick={createWorkflow} className="mt-3 rounded-md bg-indigo-500 px-3 py-1 text-xs font-semibold text-white">
+              Create workflow
             </button>
           </div>
         </div>
@@ -388,6 +502,7 @@ export default function EmbedDemoPage() {
           >
             <p className="font-semibold">{currentTourStep?.title}</p>
             <p className="mt-1 text-slate-300">{currentTourStep?.description}</p>
+            {tourFeedback ? <p className="mt-2 text-emerald-300">{tourFeedback}</p> : null}
             <div className="mt-3 flex justify-between">
               <button
                 type="button"
@@ -397,15 +512,16 @@ export default function EmbedDemoPage() {
               >
                 Back
               </button>
-              {tourStepIndex < TOUR_STEPS.length - 1 ? (
-                <button type="button" onClick={() => setTourStepIndex((s) => s + 1)} className="rounded-md bg-indigo-500 px-2 py-1">
-                  Next
-                </button>
-              ) : (
-                <button type="button" onClick={() => setTourActive(false)} className="rounded-md bg-emerald-500 px-2 py-1">
-                  Done
-                </button>
-              )}
+              <button
+                type="button"
+                disabled={!stepComplete}
+                className={`rounded-md px-2 py-1 ${stepComplete ? "bg-emerald-500 text-white" : "bg-slate-700 text-slate-300"}`}
+              >
+                {stepComplete ? "Action complete" : "Waiting for action..."}
+              </button>
+              <button type="button" onClick={() => setTourActive(false)} className="rounded-md border border-white/20 px-2 py-1">
+                {tourStepIndex === TOUR_STEPS.length - 1 ? "Done" : "Skip"}
+              </button>
             </div>
           </div>
         </>

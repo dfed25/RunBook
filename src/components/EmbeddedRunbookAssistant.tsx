@@ -249,6 +249,10 @@ export function EmbeddedRunbookAssistant({
             : "";
         const pageContext = pageContextOverride || pageBody;
         const activeFeature = externalFeature || hoveredFeatureRef.current;
+        const appState =
+          typeof window !== "undefined"
+            ? ((window as Window & { __runbookAppState?: Record<string, unknown> }).__runbookAppState ?? null)
+            : null;
         const res = await fetch(`${base}/api/embed/chat`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -259,6 +263,7 @@ export function EmbeddedRunbookAssistant({
             pageTitle: typeof document !== "undefined" ? document.title : "",
             pageUrl: typeof window !== "undefined" ? window.location.href : "",
             hoveredFeature: activeFeature,
+            appState,
             customSources,
             documents: effectiveImportedDocs
           })

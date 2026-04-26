@@ -65,6 +65,7 @@ type ChatBody = {
   /** Optional imported repository docs from Studio/embed demo. */
   documents?: unknown;
   hoveredFeature?: unknown;
+  appState?: unknown;
 };
 
 type StructuredChatPayload = {
@@ -107,6 +108,8 @@ function sanitizeDocuments(raw: unknown): { title: string; content: string }[] {
 
 function normalizePageContext(body: ChatBody): string {
   const hovered = sanitizeHoveredFeature(body.hoveredFeature);
+  const appState =
+    body.appState && typeof body.appState === "object" ? JSON.stringify(body.appState).slice(0, 400) : "(none)";
   const pageBody = typeof body.pageContext === "string" ? body.pageContext.trim() : "";
   const pageSection = [
     "Page context:",
@@ -115,10 +118,11 @@ function normalizePageContext(body: ChatBody): string {
     pageBody || "(none)"
   ].join("\n");
   const hoverSection = ["Hovered feature context:", hovered || "(none)"].join("\n");
+  const appStateSection = ["App state:", appState].join("\n");
   if (typeof body.pageContext === "string" && body.pageContext.trim()) {
-    return [pageSection, hoverSection].join("\n\n");
+    return [pageSection, appStateSection, hoverSection].join("\n\n");
   }
-  return [pageSection, hoverSection].join("\n\n");
+  return [pageSection, appStateSection, hoverSection].join("\n\n");
 }
 
 function sanitizeHoveredFeature(raw: unknown): string {
