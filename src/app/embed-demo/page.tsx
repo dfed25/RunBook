@@ -1,216 +1,156 @@
-"use client";
-
-import { useEffect, useState } from "react";
-import { EmbeddedRunbookAssistant } from "@/components/EmbeddedRunbookAssistant";
-import {
-  loadDemoBundle,
-  loadImportedDocs,
-  loadImportedRepo,
-  loadProjectId,
-  loadTestAgents,
-  saveDemoBundle,
-  saveImportedDocs,
-  saveImportedRepo,
-  saveProjectId,
-  type DemoBundle,
-  type ImportedDocument,
-  type ImportedRepoInfo,
-  type TestAgentProfile
-} from "@/lib/studioDemoStorage";
-
-function getInitialAgentFromUrl(): TestAgentProfile | null {
-  if (typeof window === "undefined") return null;
-  const agentId = new URLSearchParams(window.location.search).get("agent");
-  if (!agentId) return null;
-  return loadTestAgents().find((a) => a.projectId === agentId) || null;
-}
+import Link from "next/link";
+import { FeatureCard } from "@/components/demo/FeatureCard";
 
 export default function EmbedDemoPage() {
-  const [bundle, setBundle] = useState<DemoBundle>(() => {
-    const initialAgent = getInitialAgentFromUrl();
-    return initialAgent ? initialAgent.assistantConfig : loadDemoBundle();
-  });
-  const [projectId, setProjectId] = useState(() => {
-    const initialAgent = getInitialAgentFromUrl();
-    return initialAgent ? initialAgent.projectId : loadProjectId();
-  });
-  const [repoInfo, setRepoInfo] = useState<ImportedRepoInfo | null>(() => {
-    const initialAgent = getInitialAgentFromUrl();
-    return initialAgent ? initialAgent.repo : loadImportedRepo();
-  });
-  const [importedDocs, setImportedDocs] = useState<ImportedDocument[]>(() => {
-    const initialAgent = getInitialAgentFromUrl();
-    return initialAgent ? initialAgent.documents : loadImportedDocs();
-  });
-  const [savedAgents, setSavedAgents] = useState<TestAgentProfile[]>(() => loadTestAgents());
-
-  useEffect(() => {
-    const refresh = () => {
-      setBundle(loadDemoBundle());
-      setProjectId(loadProjectId());
-      setRepoInfo(loadImportedRepo());
-      setImportedDocs(loadImportedDocs());
-      setSavedAgents(loadTestAgents());
-    };
-    window.addEventListener("storage", refresh);
-    window.addEventListener("runbook-demo-update", refresh);
-    return () => {
-      window.removeEventListener("storage", refresh);
-      window.removeEventListener("runbook-demo-update", refresh);
-    };
-  }, []);
-
-  const switchAgent = (agent: TestAgentProfile) => {
-    saveProjectId(agent.projectId);
-    saveImportedRepo(agent.repo);
-    saveImportedDocs(agent.documents);
-    saveDemoBundle(agent.assistantConfig);
-    setProjectId(agent.projectId);
-    setRepoInfo(agent.repo);
-    setImportedDocs(agent.documents);
-    setBundle(agent.assistantConfig);
-  };
-
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900">
-      <header className="border-b border-slate-200 bg-white">
-        <div className="mx-auto flex max-w-5xl items-center justify-between gap-4 px-6 py-4">
-          <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-indigo-600 text-sm font-bold text-white">
-              N
-            </div>
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Northstar AI</p>
-              <h1 className="text-lg font-semibold text-slate-900">Developer Portal</h1>
-            </div>
+    <div className="space-y-5">
+      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <FeatureCard
+          feature="create-workflow"
+          title="Create Workflow"
+          description="Start a new automation by choosing a trigger and action."
+          className="rounded-2xl border border-indigo-400/25 bg-gradient-to-br from-indigo-500/25 to-slate-900 p-4"
+        >
+          <p className="text-xs uppercase tracking-wide text-indigo-200">Quick action</p>
+          <p className="mt-1 text-xl font-bold text-white">Create Workflow</p>
+          <Link href="/embed-demo/workflows" className="mt-3 inline-block rounded-lg bg-indigo-500 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-400">
+            New workflow
+          </Link>
+        </FeatureCard>
+
+        <FeatureCard
+          feature="workflow-health"
+          title="Workflow Health"
+          description="See active runs, failures, and latency before deploying changes."
+          className="rounded-2xl border border-white/10 bg-slate-900 p-4"
+        >
+          <p className="text-xs uppercase tracking-wide text-slate-400">Health</p>
+          <p className="mt-1 text-2xl font-bold">98.4%</p>
+          <p className="text-xs text-slate-400">7 active runs · 0 critical alerts</p>
+        </FeatureCard>
+
+        <FeatureCard
+          feature="deployment-status"
+          title="Deployment Status"
+          description="Track staging and production rollout states for your latest workflow version."
+          className="rounded-2xl border border-white/10 bg-slate-900 p-4"
+        >
+          <p className="text-xs uppercase tracking-wide text-slate-400">Deployments</p>
+          <p className="mt-1 text-2xl font-bold text-emerald-300">Staging healthy</p>
+          <p className="text-xs text-slate-400">Prod rollout queued · ETA 6m</p>
+        </FeatureCard>
+
+        <FeatureCard
+          feature="api-key-setup"
+          title="API Key Setup"
+          description="Create scoped keys for sandbox and production environments."
+          className="rounded-2xl border border-white/10 bg-slate-900 p-4"
+        >
+          <p className="text-xs uppercase tracking-wide text-slate-400">API Keys</p>
+          <p className="mt-1 text-2xl font-bold">2 active</p>
+          <Link href="/embed-demo/api-keys" className="mt-3 inline-block rounded-lg border border-white/20 px-3 py-1.5 text-xs font-semibold hover:border-white/40">
+            Manage keys
+          </Link>
+        </FeatureCard>
+      </section>
+
+      <section className="grid gap-5 lg:grid-cols-[1.2fr_1fr]">
+        <FeatureCard
+          feature="workflow-builder"
+          title="Workflow Builder"
+          description="Compose triggers and actions, then test before deployment."
+          className="rounded-2xl border border-white/10 bg-slate-900 p-4"
+        >
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-semibold">Workflow Builder</h2>
+            <Link href="/embed-demo/workflows" className="rounded-lg border border-indigo-400/40 bg-indigo-500/15 px-3 py-1 text-xs font-semibold text-indigo-100">
+              Open full builder
+            </Link>
           </div>
-          <nav className="hidden gap-6 text-sm font-medium text-slate-600 sm:flex">
-            <span className="text-indigo-600">Docs</span>
-            <span className="cursor-default hover:text-slate-900">API</span>
-            <span className="cursor-default hover:text-slate-900">Support</span>
-          </nav>
-        </div>
-      </header>
+          <div className="mt-4 grid gap-3 md:grid-cols-3">
+            {[
+              ["Trigger", "GitHub push event"],
+              ["Condition", "branch == main"],
+              ["Action", "Deploy to staging"]
+            ].map(([label, value], idx) => (
+              <FeatureCard
+                key={label}
+                feature={`workflow-step-${idx + 1}`}
+                title={String(label)}
+                description={`Configure the ${String(label).toLowerCase()} step for this workflow.`}
+                className="rounded-xl border border-white/10 bg-slate-950/70 p-3"
+              >
+                <p className="text-xs uppercase tracking-wide text-slate-500">{label}</p>
+                <p className="mt-1 text-sm text-slate-100">{value}</p>
+              </FeatureCard>
+            ))}
+          </div>
+        </FeatureCard>
 
-      <div className="mx-auto grid max-w-5xl gap-10 px-6 py-10 md:grid-cols-[220px_1fr]">
-        <aside className="hidden text-sm md:block">
-          <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-400">On this page</p>
-          <ul className="space-y-2 text-slate-600">
-            <li>
-              <a href="#getting-started" className="hover:text-indigo-600">
-                Getting Started
-              </a>
-            </li>
-            <li>
-              <a href="#api-keys" className="hover:text-indigo-600">
-                API Keys
-              </a>
-            </li>
-            <li>
-              <a href="#github" className="hover:text-indigo-600">
-                GitHub Setup
-              </a>
-            </li>
-            <li>
-              <a href="#deploy" className="hover:text-indigo-600">
-                Deploying Your First Workflow
-              </a>
-            </li>
-          </ul>
-        </aside>
-
-        <article className="prose prose-slate max-w-none">
-          <p className="rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs text-indigo-700">
-            Currently powered by:{" "}
-            <strong>{repoInfo ? `${repoInfo.owner}/${repoInfo.name}` : "Northstar demo docs"}</strong>
-            {repoInfo ? ` (${importedDocs.length} imported docs)` : ""}
-          </p>
-          {savedAgents.length > 0 ? (
-            <div className="mb-3 flex flex-wrap gap-2">
-              {savedAgents.slice(0, 8).map((agent) => (
-                <button
-                  key={agent.projectId}
-                  type="button"
-                  onClick={() => switchAgent(agent)}
-                  className={`rounded-full border px-3 py-1 text-xs font-medium ${
-                    agent.projectId === projectId
-                      ? "border-indigo-500 bg-indigo-100 text-indigo-700"
-                      : "border-slate-300 bg-white text-slate-600"
-                  }`}
-                >
-                  {agent.repo.name}
-                </button>
+        <div className="space-y-5">
+          <FeatureCard
+            feature="integrations-panel"
+            title="Integrations"
+            description="Connect external tools so workflows can trigger and notify automatically."
+            className="rounded-2xl border border-white/10 bg-slate-900 p-4"
+          >
+            <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-400">Integrations</h3>
+            <ul className="mt-3 space-y-2 text-sm">
+              {[
+                ["GitHub", "Connected"],
+                ["Slack", "Connected"],
+                ["PagerDuty", "Not connected"]
+              ].map(([name, status]) => (
+                <li key={name} className="flex items-center justify-between rounded-lg bg-slate-950/60 px-3 py-2">
+                  <span>{name}</span>
+                  <span className={status === "Connected" ? "text-emerald-300" : "text-amber-300"}>{status}</span>
+                </li>
               ))}
+            </ul>
+          </FeatureCard>
+
+          <FeatureCard
+            feature="settings-panel"
+            title="Customization"
+            description="Tune runtime settings and rollout preferences for your workspace."
+            className="rounded-2xl border border-white/10 bg-slate-900 p-4"
+          >
+            <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-400">Settings</h3>
+            <div className="mt-3 space-y-2 text-sm text-slate-300">
+              <label className="flex items-center justify-between rounded-lg bg-slate-950/60 px-3 py-2">
+                Enable safe mode
+                <input type="checkbox" defaultChecked />
+              </label>
+              <label className="flex items-center justify-between rounded-lg bg-slate-950/60 px-3 py-2">
+                Auto deploy to staging
+                <input type="checkbox" defaultChecked />
+              </label>
             </div>
-          ) : null}
-          <p className="text-sm text-slate-500">
-            This page mirrors a customer app. The assistant is the same <strong>React embed</strong> used in Studio
-            preview; production sites typically load <code className="rounded bg-slate-100 px-1">/runbook-embed.js</code>{" "}
-            instead. Config and manual sources sync from <strong>Studio</strong> via this browser&apos;s{" "}
-            <code className="rounded bg-slate-100 px-1">localStorage</code>.
-          </p>
+          </FeatureCard>
+        </div>
+      </section>
 
-          <section id="getting-started" className="scroll-mt-24">
-            <h2 className="mt-10 text-2xl font-bold text-slate-900">Getting Started</h2>
-            <p>
-              Welcome to the Northstar AI developer portal. Here you will connect your workspace, generate API keys, and
-              link GitHub so workflows can run against your repositories.
-            </p>
-            <p>
-              Most teams finish initial setup in under an hour. Follow the sections below in order — each builds on the
-              previous one.
-            </p>
-          </section>
-
-          <section id="api-keys" className="scroll-mt-24">
-            <h2 className="mt-10 text-2xl font-bold text-slate-900">API Keys</h2>
-            <p>
-              API keys authenticate requests from your apps and CI pipelines. Create a <strong>development</strong> key
-              first; promote to production only after you have validated your integration in staging.
-            </p>
-            <p>
-              Never commit keys to source control. Use environment variables or your platform secret manager. Rotate keys
-              immediately if they are exposed.
-            </p>
-          </section>
-
-          <section id="github" className="scroll-mt-24">
-            <h2 className="mt-10 text-2xl font-bold text-slate-900">GitHub Setup</h2>
-            <p>
-              Northstar syncs workflow definitions from GitHub. Install the GitHub app for your organization, select the
-              repositories you want to automate, and grant read access to workflow files in <code>.github/</code> paths.
-            </p>
-            <p>
-              If you are unsure which repos to connect, start with a single sandbox repository and expand once your first
-              workflow runs successfully.
-            </p>
-          </section>
-
-          <section id="deploy" className="scroll-mt-24">
-            <h2 className="mt-10 text-2xl font-bold text-slate-900">Deploying Your First Workflow</h2>
-            <p>
-              After GitHub is linked, pick a template workflow from the catalog or author YAML in your repo. Push to a
-              feature branch; Northstar validates the definition and offers a one-click deploy to your staging environment.
-            </p>
-            <p>
-              Use the Runbook assistant (bottom-right) to ask how access, keys, and rollout fit together — answers use
-              keyword retrieval over seeded docs plus any manual sources you added in Studio.
-            </p>
-          </section>
-        </article>
-      </div>
-
-      <EmbeddedRunbookAssistant
-        key={`${bundle.assistantName}-${bundle.primaryColor}-${projectId}-${importedDocs.length}-${bundle.manualSources.length}-${bundle.suggestedQuestions.join("|")}`}
-        projectId={projectId}
-        assistantName={bundle.assistantName}
-        welcomeMessage={bundle.welcome}
-        primaryColor={bundle.primaryColor}
-        suggestedQuestions={bundle.suggestedQuestions}
-        manualSources={bundle.manualSources}
-        importedDocuments={importedDocs}
-        position="page"
-      />
+      <FeatureCard
+        feature="workflow-templates"
+        title="Workflow Templates"
+        description="Pick a starter template to accelerate setup for common automation patterns."
+        className="rounded-2xl border border-white/10 bg-slate-900 p-4"
+      >
+        <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-400">Workflow Templates</h3>
+        <div className="mt-3 grid gap-3 md:grid-cols-3">
+          {["CI build + deploy", "Incident alert routing", "Issue triage assistant"].map((template) => (
+            <FeatureCard
+              key={template}
+              feature={`template-${template.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`}
+              title={template}
+              description="Use this template as a base, then customize trigger conditions and actions."
+              className="rounded-xl border border-white/10 bg-slate-950/70 px-3 py-3 text-left text-sm hover:border-indigo-400/40"
+            >
+              {template}
+            </FeatureCard>
+          ))}
+        </div>
+      </FeatureCard>
     </div>
   );
 }

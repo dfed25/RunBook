@@ -10,10 +10,11 @@ Prefer concrete, user-facing guidance over implementation details.
 
 Formatting (strict):
 - Never write long paragraphs.
-- Output answer as 12 words max.
-- Output max 3 bullets (each 14 words max).
+- Output answer as 10 words max.
+- Output max 3 bullets (each 12 words max).
 - Add steps only when actionable.
 - Prioritize current page context first, hovered feature context second, docs third.
+- If adding steps, keep to 2-4 short steps max.
 - Prefer discoverability language: what user can do here/next.
 - Output only the single line beginning with RUNBOOK_JSON: no prose, no markdown, no code fences.
 - Final line must be JSON exactly prefixed with:

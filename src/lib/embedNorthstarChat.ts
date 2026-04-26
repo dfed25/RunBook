@@ -83,8 +83,9 @@ export async function runNorthstarEmbedChat(input: {
     content: s.content.trim().slice(0, 12_000),
     sourceType: "text" as const
   }));
+  const hasImportedCodeContext = extraDocs.length > 0;
 
-  const allDocs: SourceDoc[] = [...demoDocs, ...extraDocs];
+  const allDocs: SourceDoc[] = hasImportedCodeContext ? extraDocs : [...demoDocs, ...extraDocs];
   const ranked = retrieveKeywordSources(input.message, allDocs, 4);
   const keywordSources = ranked.map((r) => ({
     title: r.doc.title,
@@ -100,14 +101,29 @@ export async function runNorthstarEmbedChat(input: {
               `### Excerpt ${i + 1}: ${r.doc.title}\n${r.doc.content.slice(0, 4_000)}${r.doc.content.length > 4_000 ? "\n…" : ""}`
           )
           .join("\n\n")
-      : demoDocs.map((d) => `### ${d.title}\n${d.content.slice(0, 1_500)}`).join("\n\n");
+      : allDocs.slice(0, 4).map((d) => `### ${d.title}\n${d.content.slice(0, 1_500)}`).join("\n\n");
 
   const fallback = buildNorthstarDemoResponse(input.message, input.pageContext, input.hoveredFeature);
+  const importedFallback: DemoChatResult = {
+    answer: clipWords("Using your imported code and current page context first.", MAX_ANSWER_WORDS),
+    bullets: normalizeBullets([
+      "I prioritize current page context and hovered feature details",
+      "I then use imported repository code to explain behavior",
+      "Ask about a specific button, flow, or API route for precision"
+    ]),
+    sources: keywordSources.slice(0, 6),
+    steps: normalizeSteps([
+      "Ask about the exact UI control or flow you are on.",
+      "Include the visible label so I can map it to code behavior.",
+      "Use follow-up questions for implementation-level detail."
+    ]),
+    suggestions: normalizeSuggestions(["Guide me step-by-step", "Explain this page", "What can I do next?"])
+  };
 
   if (!isServerLlmConfigured()) {
     return {
-      ...fallback,
-      sources: mergeSources(keywordSources, fallback.sources)
+      ...(hasImportedCodeContext ? importedFallback : fallback),
+      sources: hasImportedCodeContext ? keywordSources.slice(0, 6) : mergeSources(keywordSources, fallback.sources)
     };
   }
 
@@ -135,21 +151,23 @@ ${input.message}`;
     const finalSteps =
       steps.length > 0
         ? steps
-        : fallback.steps.length > 0
-          ? fallback.steps
-          : ["Review the sources below.", "Ask a more specific follow-up.", "Check with your team lead if unsure."];
+        : hasImportedCodeContext
+          ? importedFallback.steps
+          : fallback.steps.length > 0
+            ? fallback.steps
+            : ["Review the sources below.", "Ask a more specific follow-up.", "Check with your team lead if unsure."];
     return {
       answer,
-      bullets: bullets.length > 0 ? bullets : fallback.bullets,
-      sources: mergeSources(keywordSources, fallback.sources),
+      bullets: bullets.length > 0 ? bullets : hasImportedCodeContext ? importedFallback.bullets : fallback.bullets,
+      sources: hasImportedCodeContext ? keywordSources.slice(0, 6) : mergeSources(keywordSources, fallback.sources),
       steps: finalSteps,
-      suggestions: suggestions.length > 0 ? suggestions : fallback.suggestions
+      suggestions: suggestions.length > 0 ? suggestions : hasImportedCodeContext ? importedFallback.suggestions : fallback.suggestions
     };
   } catch (e) {
     console.warn("northstar LLM fallback:", e);
     return {
-      ...fallback,
-      sources: mergeSources(keywordSources, fallback.sources)
+      ...(hasImportedCodeContext ? importedFallback : fallback),
+      sources: hasImportedCodeContext ? keywordSources.slice(0, 6) : mergeSources(keywordSources, fallback.sources)
     };
   }
 }
