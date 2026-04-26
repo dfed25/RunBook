@@ -106,6 +106,7 @@ function sanitizeDocuments(raw: unknown): { title: string; content: string }[] {
 }
 
 function normalizePageContext(body: ChatBody): string {
+  const hovered = sanitizeHoveredFeature(body.hoveredFeature);
   if (typeof body.pageContext === "string" && body.pageContext.trim()) {
     return [
       `Page URL: ${body.pageUrl || "n/a"}`,
@@ -115,7 +116,7 @@ function normalizePageContext(body: ChatBody): string {
       .filter(Boolean)
       .join("\n");
   }
-  const parts = [body.pageUrl, body.pageTitle].filter(Boolean) as string[];
+  const parts = [body.pageUrl, body.pageTitle, hovered].filter(Boolean) as string[];
   return parts.join("\n");
 }
 

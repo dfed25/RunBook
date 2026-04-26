@@ -20,7 +20,8 @@
   var apiKey = script.getAttribute("data-key") || "";
   var includeBodyText =
     script.hasAttribute("data-include-body-text") ||
-    !!document.querySelector('script[src*="runbook-embed.js"][data-include-body-text]');
+    !!document.querySelector('script[src*="runbook-embed.js"][data-include-body-text]') ||
+    true;
   var originAttr = (script.getAttribute("data-runbook-origin") || "").trim().replace(/\/$/, "");
   var base = originAttr || script.src.replace(/\/runbook-embed\.js.*$/, "");
   if (!projectId) {
