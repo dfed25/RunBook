@@ -18,6 +18,9 @@
   var projectId =
     script.getAttribute("data-project-id") || script.getAttribute("data-project") || "";
   var apiKey = script.getAttribute("data-key") || "";
+  var includeBodyText =
+    script.hasAttribute("data-include-body-text") ||
+    !!document.querySelector('script[src*="runbook-embed.js"][data-include-body-text]');
   var originAttr = (script.getAttribute("data-runbook-origin") || "").trim().replace(/\/$/, "");
   var base = originAttr || script.src.replace(/\/runbook-embed\.js.*$/, "");
   if (!projectId) {
@@ -26,6 +29,25 @@
   }
 
   var DEMO_ID = "northstar-demo";
+  function isLocationIntent(text) {
+    return /(where|find|locate|click|open|go to|how do i|create account|sign up|signup|register|get started|log in|login)/i.test(
+      String(text || "")
+    );
+  }
+
+  function stripTrailingSentencePunctuation(input) {
+    var end = input.length;
+    while (end > 0) {
+      var ch = input[end - 1];
+      if (ch === "." || ch === "!" || ch === "?") {
+        end -= 1;
+        continue;
+      }
+      break;
+    }
+    return input.slice(0, end);
+  }
+
   var BUNDLE_KEY = "runbook_demo_bundle_v1";
   var IMPORTED_DOCS_KEY = "runbook_imported_docs";
   var IMPORTED_PROJECT_ID_KEY = "runbook_project_id";
@@ -200,6 +222,151 @@
     var inp = foot.querySelector(".rb-inp");
     var sendBtn = foot.querySelector(".rb-send");
     var closeBtn = head.querySelector(".rb-close");
+    var highlightTimeout = null;
+    var highlightedEl = null;
+    var overlayEl = null;
+
+    function ensurePageHighlightStyles() {
+      if (document.getElementById("rb-page-highlight-style")) return;
+      var styleTag = document.createElement("style");
+      styleTag.id = "rb-page-highlight-style";
+      styleTag.textContent =
+        "@keyframes rbPagePulse{0%{box-shadow:0 0 0 3px rgba(99,102,241,.95);}50%{box-shadow:0 0 0 8px rgba(99,102,241,.25);}100%{box-shadow:0 0 0 3px rgba(99,102,241,.95);}}" +
+        ".rb-highlight-target{animation:rbPagePulse 1.2s ease-in-out infinite !important;box-shadow:0 0 0 3px rgba(99,102,241,.95) !important;border-radius:8px !important;}" +
+        ".rb-highlight-overlay{position:absolute;z-index:2147483647;max-width:320px;background:#1e1b4b;color:#eef2ff;border:1px solid rgba(129,140,248,.5);border-radius:10px;padding:10px 12px;font:12px/1.4 system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;box-shadow:0 10px 30px rgba(30,27,75,.45);}";
+      document.head.appendChild(styleTag);
+    }
+
+    function clearPageHighlight() {
+      if (highlightTimeout) {
+        clearTimeout(highlightTimeout);
+        highlightTimeout = null;
+      }
+      if (highlightedEl) {
+        highlightedEl.classList.remove("rb-highlight-target");
+        highlightedEl = null;
+      }
+      if (overlayEl && overlayEl.parentNode) {
+        overlayEl.parentNode.removeChild(overlayEl);
+        overlayEl = null;
+      }
+    }
+
+    function tokenize(text) {
+      return String(text || "")
+        .toLowerCase()
+        .replace(/([a-z])([A-Z])/g, "$1 $2")
+        .replace(/[^a-z0-9\s]/g, " ")
+        .split(/\s+/)
+        .filter(function (t) {
+          return t.length >= 2;
+        });
+    }
+
+    function compact(text) {
+      return String(text || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+    }
+
+    function extractIntentPhrase(question) {
+      var q = String(question || "");
+      var lower = q.toLowerCase();
+      var prefixes = ["where is ", "find ", "locate ", "click ", "open ", "go to "];
+      for (var i = 0; i < prefixes.length; i++) {
+        var prefix = prefixes[i];
+        var idx = lower.indexOf(prefix);
+        if (idx >= 0) {
+          var rawTarget = q.slice(idx + prefix.length).trim();
+          var cleaned = stripTrailingSentencePunctuation(rawTarget).trim();
+          if (cleaned.length > 0) return cleaned;
+        }
+      }
+      return "";
+    }
+
+    function scoreCandidate(el, tokens, intentCompact) {
+      var label = [
+        el.innerText || "",
+        el.getAttribute("aria-label") || "",
+        el.getAttribute("title") || "",
+        el.id || "",
+        el.getAttribute("name") || "",
+        el.getAttribute("placeholder") || "",
+        el.className || ""
+      ]
+        .join(" ")
+        .toLowerCase();
+      if (!label.trim()) return 0;
+      var score = 0;
+      var compactLabel = compact(label);
+      tokens.forEach(function (t) {
+        var compactToken = compact(t);
+        if (label.indexOf(t) !== -1) score += t.length > 5 ? 3 : 2;
+        if (compactToken && compactLabel.indexOf(compactToken) !== -1) score += t.length > 5 ? 3 : 2;
+      });
+      if (intentCompact && compactLabel.indexOf(intentCompact) !== -1) score += 8;
+      if (/(create|sign\s*up|signup|register|get\s*started|start|continue|next)/i.test(label)) score += 3;
+      if (el.tagName === "BUTTON" || el.tagName === "A") score += 2;
+      var rect = el.getBoundingClientRect();
+      if (rect.width < 16 || rect.height < 10) score = 0;
+      return score;
+    }
+
+    function findBestElement(textHint, question) {
+      var tokens = tokenize(textHint).slice(0, 20);
+      if (!tokens.length) return null;
+      var intentCompact = compact(extractIntentPhrase(question));
+      var selector =
+        "button,a,[role='button'],summary,label,h1,h2,h3,input,textarea,select,[data-testid],[aria-label],nav a";
+      var nodes = document.querySelectorAll(selector);
+      var best = null;
+      var bestScore = 0;
+      for (var i = 0; i < nodes.length; i++) {
+        var el = nodes[i];
+        if (!el || !el.getBoundingClientRect) continue;
+        var rect = el.getBoundingClientRect();
+        if (rect.bottom < 0 || rect.top > window.innerHeight * 2) continue;
+        var s = scoreCandidate(el, tokens, intentCompact);
+        if (s > bestScore) {
+          bestScore = s;
+          best = el;
+        }
+      }
+      return bestScore >= 3 ? best : null;
+    }
+
+    function showPageOverlay(target, text) {
+      if (!target) return;
+      var rect = target.getBoundingClientRect();
+      var overlay = document.createElement("div");
+      overlay.className = "rb-highlight-overlay";
+      overlay.textContent = text || "Start here.";
+      var top = window.scrollY + rect.bottom + 8;
+      var left = window.scrollX + Math.max(12, rect.left);
+      overlay.style.top = String(top) + "px";
+      overlay.style.left = String(left) + "px";
+      document.body.appendChild(overlay);
+      overlayEl = overlay;
+    }
+
+    function maybeHighlight(question, data) {
+      if (!isLocationIntent(question || "")) return;
+      ensurePageHighlightStyles();
+      clearPageHighlight();
+      var hint = [question || "", data.answer || "", (data.steps || []).join(" ")].join(" ");
+      var target = findBestElement(hint, question);
+      if (!target) {
+        addBot(
+          "<em>I couldn't confidently find that element on this page.</em><br/>Try the exact button/link text (e.g. <code>Create account</code>) or ask me to <strong>explain this page</strong>."
+        );
+        return;
+      }
+      highlightedEl = target;
+      target.classList.add("rb-highlight-target");
+      target.scrollIntoView({ behavior: "smooth", block: "center" });
+      var tip = data.steps && data.steps.length ? data.steps[0] : "This is likely where to start for your question.";
+      showPageOverlay(target, tip);
+      highlightTimeout = setTimeout(clearPageHighlight, 8000);
+    }
 
     function pageContext() {
       var t = document.title || "";
@@ -207,7 +374,41 @@
       var meta = "";
       var m = document.querySelector('meta[name="description"]');
       if (m) meta = m.getAttribute("content") || "";
-      return [u, t, meta].filter(Boolean).join("\n");
+      var headings = "";
+      try {
+        var hs = Array.prototype.slice.call(document.querySelectorAll("h1,h2,h3")).map(function (el) {
+          return (el && el.textContent ? String(el.textContent) : "").trim();
+        }).filter(Boolean).slice(0, 12);
+        headings = hs.join(" | ");
+      } catch {
+        headings = "";
+      }
+      var bodyText = "";
+      if (includeBodyText) {
+        try {
+          var clone = document.body ? document.body.cloneNode(true) : null;
+          if (clone && clone.querySelectorAll) {
+            var fields = clone.querySelectorAll("input,textarea,select");
+            for (var i = 0; i < fields.length; i++) {
+              var f = fields[i];
+              var tag = (f.tagName || "").toLowerCase();
+              if (tag === "select") {
+                f.textContent = "";
+              } else {
+                f.setAttribute("value", "");
+                f.textContent = "";
+              }
+            }
+          }
+          bodyText = (clone && clone.innerText ? clone.innerText : "")
+            .replace(/\s+/g, " ")
+            .trim()
+            .slice(0, 12000);
+        } catch {
+          bodyText = "";
+        }
+      }
+      return [u, t, meta, headings, bodyText].filter(Boolean).join("\n");
     }
 
     function addBot(html) {
@@ -285,6 +486,17 @@
         }
         var html = "";
         if (data.answer) html += escapeHtml(data.answer).replace(/\n/g, "<br/>");
+        var sourceCount = Array.isArray(data.sources) ? data.sources.length : 0;
+        var missingIndexSignal =
+          data.mode === "unindexed" ||
+          /AI is not configured|no indexed chunks yet/i.test(String(data.answer || "")) ||
+          sourceCount === 0;
+        if (missingIndexSignal) {
+          html +=
+            '<div style="margin-top:8px;border:1px solid rgba(245,158,11,.45);background:rgba(245,158,11,.12);color:#fde68a;border-radius:10px;padding:8px 10px;font-size:12px;line-height:1.4;">' +
+            "<strong>Codebase not indexed yet.</strong> Connect your GitHub repo in Studio and run <em>Index repository</em> for code-aware onboarding steps." +
+            "</div>";
+        }
         if (data.steps && data.steps.length) {
           html += '<ol class="rb-steps">';
           data.steps.forEach(function (s) {
@@ -296,12 +508,15 @@
           html += '<div class="rb-src"><strong>Sources</strong><br/>';
           data.sources.forEach(function (s) {
             html += "· " + escapeHtml(s.title);
+            var u = safeUrl(s.url);
+            if (u) html += ' <a href="' + escapeHtml(u) + '" target="_blank" rel="noopener noreferrer" style="color:#c7d2fe">(open)</a>';
             if (s.excerpt) html += " — " + escapeHtml(s.excerpt.slice(0, 140)) + (s.excerpt.length > 140 ? "…" : "");
             html += "<br/>";
           });
           html += "</div>";
         }
         addBot(html || "(empty)");
+        maybeHighlight(q, data || {});
       } catch {
         addBot("Network error — is <code>" + escapeHtml(base) + "</code> reachable from this page?");
       } finally {
@@ -315,6 +530,17 @@
         .replace(/</g, "&lt;")
         .replace(/>/g, "&gt;")
         .replace(/"/g, "&quot;");
+    }
+
+    function safeUrl(raw) {
+      if (!raw) return "";
+      try {
+        var u = new URL(String(raw), location.href);
+        if (u.protocol !== "http:" && u.protocol !== "https:") return "";
+        return u.toString();
+      } catch {
+        return "";
+      }
     }
 
     sendBtn.addEventListener("click", function () {

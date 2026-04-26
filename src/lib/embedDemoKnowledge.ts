@@ -42,6 +42,46 @@ function createResult(input: {
     steps: normalizeSteps(input.steps),
     suggestions: normalizeSuggestions((input.suggestions || DEFAULT_SUGGESTIONS).slice(0, MAX_SUGGESTIONS))
   };
+function isLocationIntent(text: string): boolean {
+  const q = String(text || "").toLowerCase();
+  return (
+    /\b(where|locate|click|open)\b/.test(q) ||
+    /\bgo\s+to\b/.test(q) ||
+    /\b(where\s+is|where\s+can\s+i)\b/.test(q) ||
+    /\b(get\s+started|create\s+account|sign\s*up|signup|register|log\s*in|login)\b/.test(q)
+  );
+}
+
+function stripTrailingSentencePunctuation(input: string): string {
+  let end = input.length;
+  while (end > 0) {
+    const ch = input[end - 1];
+    if (ch === "." || ch === "!" || ch === "?") {
+      end -= 1;
+      continue;
+    }
+    break;
+  }
+  return input.slice(0, end);
+}
+
+function extractLocationTarget(text: string): string {
+  const lower = text.toLowerCase();
+  const prefixes = ["where is ", "find ", "locate ", "click ", "open ", "go to "];
+  for (const prefix of prefixes) {
+    const idx = lower.indexOf(prefix);
+    if (idx >= 0) {
+      const rawTarget = text.slice(idx + prefix.length).trim();
+      const cleaned = stripTrailingSentencePunctuation(rawTarget).trim();
+      if (cleaned.length > 0) return cleaned;
+    }
+  }
+  if (/create\s*account/i.test(text)) return "Create account";
+  if (/sign\s*up|signup/i.test(text)) return "Sign up";
+  if (/get\s*started/i.test(text)) return "Get started";
+  if (/log\s*in|login/i.test(text)) return "Log in";
+  if (/register/i.test(text)) return "Register";
+  return "the relevant action button";
 }
 
 /** Deterministic demo responses for hackathon reliability. */
@@ -54,6 +94,23 @@ export function buildNorthstarDemoResponse(message: string, pageContext: string)
   const sec = docById("security-policy");
   const product = docById("product-overview");
   const expense = docById("expense-policy");
+
+  if (isLocationIntent(m)) {
+    const target = extractLocationTarget(message);
+    return {
+      answer:
+        `I can help you locate **${target}** on this page. The exact workflow may not be fully documented in demo excerpts, so I will guide by visible UI labels.`,
+      sources: product
+        ? [{ title: product.title, excerpt: excerptFromContent(product.content), url: undefined }]
+        : [],
+      steps: [
+        `Look for a control labeled **${target}** on the current page.`,
+        "Use the highlighted element as your starting point if one appears.",
+        "If multiple matches exist, choose the most prominent primary CTA in the onboarding section.",
+        "If nothing is highlighted, ask with the exact visible label (for example: find Create account button)."
+      ]
+    };
+  }
 
   const explainPage =
     m.includes("explain this page") ||

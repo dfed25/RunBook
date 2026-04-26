@@ -36,7 +36,13 @@ function corsHeaders(originAllow: string | null): HeadersInit {
 
 function originAllowed(projectSite: string | undefined, origin: string | null): boolean {
   if (!projectSite || !origin) return true;
-  return origin.includes(projectSite) || projectSite.includes(origin.replace(/^https?:\/\//, ""));
+  try {
+    const allowed = new URL(projectSite.includes("://") ? projectSite : `https://${projectSite}`);
+    const actual = new URL(origin);
+    return actual.hostname === allowed.hostname || actual.hostname.endsWith(`.${allowed.hostname}`);
+  } catch {
+    return false;
+  }
 }
 
 export async function OPTIONS(req: NextRequest) {
