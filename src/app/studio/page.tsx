@@ -28,22 +28,19 @@ const SEEDED_SOURCES = [
 ] as const;
 
 export default function StudioPage() {
-  const origin = typeof window !== "undefined" ? window.location.origin : "";
-  const [assistantName, setAssistantName] = useState(() => loadDemoBundle().assistantName);
-  const [welcome, setWelcome] = useState(() => loadDemoBundle().welcome);
-  const [primaryColor, setPrimaryColor] = useState(() => loadDemoBundle().primaryColor);
-  const [suggestedRaw, setSuggestedRaw] = useState(() => {
-    const questions = loadDemoBundle().suggestedQuestions;
-    return questions.length ? questions.join("\n") : DEFAULT_DEMO_BUNDLE.suggestedQuestions.join("\n");
-  });
-  const [manualSources, setManualSources] = useState<DemoManualSource[]>(() => loadDemoBundle().manualSources);
-  const [projectId, setProjectId] = useState(() => loadProjectId());
-  const [repoInfo, setRepoInfo] = useState<ImportedRepoInfo | null>(() => loadImportedRepo());
-  const [importedDocs, setImportedDocs] = useState<ImportedDocument[]>(() => loadImportedDocs());
+  const [hydrated, setHydrated] = useState(false);
+  const [assistantName, setAssistantName] = useState(DEFAULT_DEMO_BUNDLE.assistantName);
+  const [welcome, setWelcome] = useState(DEFAULT_DEMO_BUNDLE.welcome);
+  const [primaryColor, setPrimaryColor] = useState(DEFAULT_DEMO_BUNDLE.primaryColor);
+  const [suggestedRaw, setSuggestedRaw] = useState(DEFAULT_DEMO_BUNDLE.suggestedQuestions.join("\n"));
+  const [manualSources, setManualSources] = useState<DemoManualSource[]>([]);
+  const [projectId, setProjectId] = useState("northstar-demo");
+  const [repoInfo, setRepoInfo] = useState<ImportedRepoInfo | null>(null);
+  const [importedDocs, setImportedDocs] = useState<ImportedDocument[]>([]);
   const [repoUrlInput, setRepoUrlInput] = useState("");
   const [isImporting, setIsImporting] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
-  const [savedAgents, setSavedAgents] = useState<TestAgentProfile[]>(() => loadTestAgents());
+  const [savedAgents, setSavedAgents] = useState<TestAgentProfile[]>([]);
   const [newTitle, setNewTitle] = useState("");
   const [newContent, setNewContent] = useState("");
 
@@ -87,6 +84,28 @@ export default function StudioPage() {
   );
 
   useEffect(() => {
+    const timer = window.setTimeout(() => {
+      const bundle = loadDemoBundle();
+      setAssistantName(bundle.assistantName);
+      setWelcome(bundle.welcome);
+      setPrimaryColor(bundle.primaryColor);
+      setSuggestedRaw(
+        bundle.suggestedQuestions.length ? bundle.suggestedQuestions.join("\n") : DEFAULT_DEMO_BUNDLE.suggestedQuestions.join("\n")
+      );
+      setManualSources(bundle.manualSources);
+      setProjectId(loadProjectId());
+      setRepoInfo(loadImportedRepo());
+      setImportedDocs(loadImportedDocs());
+      setSavedAgents(loadTestAgents());
+      setHydrated(true);
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  const origin = hydrated && typeof window !== "undefined" ? window.location.origin : "";
+
+  useEffect(() => {
+    if (!hydrated) return;
     saveDemoBundle({
       assistantName,
       welcome,
@@ -94,23 +113,27 @@ export default function StudioPage() {
       suggestedQuestions,
       manualSources
     });
-  }, [assistantName, welcome, primaryColor, suggestedQuestions, manualSources]);
+  }, [hydrated, assistantName, welcome, primaryColor, suggestedQuestions, manualSources]);
 
   useEffect(() => {
+    if (!hydrated) return;
     saveProjectId(projectId);
-  }, [projectId]);
+  }, [hydrated, projectId]);
 
   useEffect(() => {
+    if (!hydrated) return;
     saveImportedDocs(importedDocs);
-  }, [importedDocs]);
+  }, [hydrated, importedDocs]);
 
   useEffect(() => {
+    if (!hydrated) return;
     saveImportedRepo(repoInfo);
-  }, [repoInfo]);
+  }, [hydrated, repoInfo]);
 
   useEffect(() => {
+    if (!hydrated) return;
     saveTestAgents(savedAgents);
-  }, [savedAgents]);
+  }, [hydrated, savedAgents]);
 
   const embedSnippet = origin
     ? `<script src="${origin}/runbook-embed.js" data-project-id="${projectId}" async></script>`
