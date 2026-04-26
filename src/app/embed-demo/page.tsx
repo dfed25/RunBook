@@ -2,13 +2,56 @@
 
 import { useEffect, useState } from "react";
 import { EmbeddedRunbookAssistant } from "@/components/EmbeddedRunbookAssistant";
-import { loadDemoBundle, type DemoBundle } from "@/lib/studioDemoStorage";
+import {
+  loadDemoBundle,
+  loadImportedDocs,
+  loadImportedRepo,
+  loadProjectId,
+  loadTestAgents,
+  saveDemoBundle,
+  saveImportedDocs,
+  saveImportedRepo,
+  saveProjectId,
+  type DemoBundle,
+  type ImportedDocument,
+  type ImportedRepoInfo,
+  type TestAgentProfile
+} from "@/lib/studioDemoStorage";
+
+function getInitialAgentFromUrl(): TestAgentProfile | null {
+  if (typeof window === "undefined") return null;
+  const agentId = new URLSearchParams(window.location.search).get("agent");
+  if (!agentId) return null;
+  return loadTestAgents().find((a) => a.projectId === agentId) || null;
+}
 
 export default function EmbedDemoPage() {
-  const [bundle, setBundle] = useState<DemoBundle>(() => loadDemoBundle());
+  const [bundle, setBundle] = useState<DemoBundle>(() => {
+    const initialAgent = getInitialAgentFromUrl();
+    return initialAgent ? initialAgent.assistantConfig : loadDemoBundle();
+  });
+  const [projectId, setProjectId] = useState(() => {
+    const initialAgent = getInitialAgentFromUrl();
+    return initialAgent ? initialAgent.projectId : loadProjectId();
+  });
+  const [repoInfo, setRepoInfo] = useState<ImportedRepoInfo | null>(() => {
+    const initialAgent = getInitialAgentFromUrl();
+    return initialAgent ? initialAgent.repo : loadImportedRepo();
+  });
+  const [importedDocs, setImportedDocs] = useState<ImportedDocument[]>(() => {
+    const initialAgent = getInitialAgentFromUrl();
+    return initialAgent ? initialAgent.documents : loadImportedDocs();
+  });
+  const [savedAgents, setSavedAgents] = useState<TestAgentProfile[]>(() => loadTestAgents());
 
   useEffect(() => {
-    const refresh = () => setBundle(loadDemoBundle());
+    const refresh = () => {
+      setBundle(loadDemoBundle());
+      setProjectId(loadProjectId());
+      setRepoInfo(loadImportedRepo());
+      setImportedDocs(loadImportedDocs());
+      setSavedAgents(loadTestAgents());
+    };
     window.addEventListener("storage", refresh);
     window.addEventListener("runbook-demo-update", refresh);
     return () => {
@@ -16,6 +59,17 @@ export default function EmbedDemoPage() {
       window.removeEventListener("runbook-demo-update", refresh);
     };
   }, []);
+
+  const switchAgent = (agent: TestAgentProfile) => {
+    saveProjectId(agent.projectId);
+    saveImportedRepo(agent.repo);
+    saveImportedDocs(agent.documents);
+    saveDemoBundle(agent.assistantConfig);
+    setProjectId(agent.projectId);
+    setRepoInfo(agent.repo);
+    setImportedDocs(agent.documents);
+    setBundle(agent.assistantConfig);
+  };
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
@@ -66,6 +120,29 @@ export default function EmbedDemoPage() {
         </aside>
 
         <article className="prose prose-slate max-w-none">
+          <p className="rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-xs text-indigo-700">
+            Currently powered by:{" "}
+            <strong>{repoInfo ? `${repoInfo.owner}/${repoInfo.name}` : "Northstar demo docs"}</strong>
+            {repoInfo ? ` (${importedDocs.length} imported docs)` : ""}
+          </p>
+          {savedAgents.length > 0 ? (
+            <div className="mb-3 flex flex-wrap gap-2">
+              {savedAgents.slice(0, 8).map((agent) => (
+                <button
+                  key={agent.projectId}
+                  type="button"
+                  onClick={() => switchAgent(agent)}
+                  className={`rounded-full border px-3 py-1 text-xs font-medium ${
+                    agent.projectId === projectId
+                      ? "border-indigo-500 bg-indigo-100 text-indigo-700"
+                      : "border-slate-300 bg-white text-slate-600"
+                  }`}
+                >
+                  {agent.repo.name}
+                </button>
+              ))}
+            </div>
+          ) : null}
           <p className="text-sm text-slate-500">
             This page mirrors a customer app. The assistant is the same <strong>React embed</strong> used in Studio
             preview; production sites typically load <code className="rounded bg-slate-100 px-1">/runbook-embed.js</code>{" "}
@@ -124,12 +201,14 @@ export default function EmbedDemoPage() {
       </div>
 
       <EmbeddedRunbookAssistant
-        key={`${bundle.assistantName}-${bundle.primaryColor}-${bundle.manualSources.length}-${bundle.suggestedQuestions.join("|")}`}
+        key={`${bundle.assistantName}-${bundle.primaryColor}-${projectId}-${importedDocs.length}-${bundle.manualSources.length}-${bundle.suggestedQuestions.join("|")}`}
+        projectId={projectId}
         assistantName={bundle.assistantName}
         welcomeMessage={bundle.welcome}
         primaryColor={bundle.primaryColor}
         suggestedQuestions={bundle.suggestedQuestions}
         manualSources={bundle.manualSources}
+        importedDocuments={importedDocs}
         position="page"
       />
     </div>
