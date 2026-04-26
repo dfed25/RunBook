@@ -42,6 +42,8 @@ function createResult(input: {
     steps: normalizeSteps(input.steps),
     suggestions: normalizeSuggestions((input.suggestions || DEFAULT_SUGGESTIONS).slice(0, MAX_SUGGESTIONS))
   };
+}
+
 function isLocationIntent(text: string): boolean {
   const q = String(text || "").toLowerCase();
   return (
@@ -97,19 +99,19 @@ export function buildNorthstarDemoResponse(message: string, pageContext: string)
 
   if (isLocationIntent(m)) {
     const target = extractLocationTarget(message);
-    return {
-      answer:
-        `I can help you locate **${target}** on this page. The exact workflow may not be fully documented in demo excerpts, so I will guide by visible UI labels.`,
+    return createResult({
+      answer: `I can help you locate ${target} quickly on this page.`,
+      bullets: ["Look for matching label", "Use highlighted element first", "Try exact button text if needed"],
       sources: product
         ? [{ title: product.title, excerpt: excerptFromContent(product.content), url: undefined }]
         : [],
       steps: [
-        `Look for a control labeled **${target}** on the current page.`,
+        `Look for a control labeled ${target} on the current page.`,
         "Use the highlighted element as your starting point if one appears.",
         "If multiple matches exist, choose the most prominent primary CTA in the onboarding section.",
         "If nothing is highlighted, ask with the exact visible label (for example: find Create account button)."
       ]
-    };
+    });
   }
 
   const explainPage =
