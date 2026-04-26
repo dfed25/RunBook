@@ -69,23 +69,11 @@ function firstIncompleteTourStepIndex(state: AppState): number {
 }
 
 export default function EmbedDemoPage() {
-  const [appState, setAppState] = useState<AppState>(() => {
-    if (typeof window === "undefined") {
-      return { githubConnected: false, apiKeyCreated: false, workflowCreated: false, deployed: false };
-    }
-    try {
-      const raw = window.localStorage.getItem(APP_STATE_KEY);
-      if (!raw) return { githubConnected: false, apiKeyCreated: false, workflowCreated: false, deployed: false };
-      const parsed = JSON.parse(raw) as Partial<AppState>;
-      return {
-        githubConnected: Boolean(parsed.githubConnected),
-        apiKeyCreated: Boolean(parsed.apiKeyCreated),
-        workflowCreated: Boolean(parsed.workflowCreated),
-        deployed: Boolean(parsed.deployed)
-      };
-    } catch {
-      return { githubConnected: false, apiKeyCreated: false, workflowCreated: false, deployed: false };
-    }
+  const [appState, setAppState] = useState<AppState>({
+    githubConnected: false,
+    apiKeyCreated: false,
+    workflowCreated: false,
+    deployed: false
   });
   const [showIntegrationsPanel, setShowIntegrationsPanel] = useState(false);
   const [showWorkflowModal, setShowWorkflowModal] = useState(false);
@@ -99,6 +87,7 @@ export default function EmbedDemoPage() {
   const [hoveredFeature, setHoveredFeature] = useState<FeatureDetail | null>(null);
   const [tourFeedback, setTourFeedback] = useState<string | null>(null);
   const completedStepIdsRef = useRef<Record<string, boolean>>({});
+  const hydrationLoadedRef = useRef(false);
 
   const currentTourStep = tourActive ? TOUR_STEPS[tourStepIndex] : null;
   const viewportHeight = typeof window !== "undefined" ? window.innerHeight : 900;
@@ -169,6 +158,31 @@ export default function EmbedDemoPage() {
   );
 
   useEffect(() => {
+    const hydrationTimer = window.setTimeout(() => {
+      try {
+        const raw = window.localStorage.getItem(APP_STATE_KEY);
+        if (!raw) {
+          hydrationLoadedRef.current = true;
+          return;
+        }
+        const parsed = JSON.parse(raw) as Partial<AppState>;
+        setAppState({
+          githubConnected: Boolean(parsed.githubConnected),
+          apiKeyCreated: Boolean(parsed.apiKeyCreated),
+          workflowCreated: Boolean(parsed.workflowCreated),
+          deployed: Boolean(parsed.deployed)
+        });
+      } catch {
+        /* no-op */
+      } finally {
+        hydrationLoadedRef.current = true;
+      }
+    }, 0);
+    return () => window.clearTimeout(hydrationTimer);
+  }, []);
+
+  useEffect(() => {
+    if (!hydrationLoadedRef.current) return;
     try {
       window.localStorage.setItem(APP_STATE_KEY, JSON.stringify(appState));
     } catch {
@@ -294,6 +308,9 @@ export default function EmbedDemoPage() {
     setAppState((s) => ({ ...s, githubConnected: true }));
     setTourHighlightFeature("github-card");
     if (tourActive && currentTourStep?.id === "connect-github") advanceTourAfterSuccess(currentTourStep);
+    else if (tourActive && currentTourStep && stepComplete) {
+      advanceTourAfterSuccess(currentTourStep);
+    }
   };
 
   const createApiKey = () => {
@@ -302,6 +319,9 @@ export default function EmbedDemoPage() {
     setAppState((s) => ({ ...s, apiKeyCreated: true }));
     setTourHighlightFeature("api-keys");
     if (tourActive && currentTourStep?.id === "create-api-key") advanceTourAfterSuccess(currentTourStep);
+    else if (tourActive && currentTourStep && stepComplete) {
+      advanceTourAfterSuccess(currentTourStep);
+    }
   };
 
   const createWorkflow = () => {
@@ -309,6 +329,9 @@ export default function EmbedDemoPage() {
     setShowWorkflowModal(false);
     setTourHighlightFeature("workflow-builder");
     if (tourActive && currentTourStep?.id === "build-workflow") advanceTourAfterSuccess(currentTourStep);
+    else if (tourActive && currentTourStep && stepComplete) {
+      advanceTourAfterSuccess(currentTourStep);
+    }
   };
 
   const deployStaging = () => {
@@ -318,6 +341,9 @@ export default function EmbedDemoPage() {
       setAppState((s) => ({ ...s, deployed: true }));
       setTourHighlightFeature("deployments");
       if (tourActive && currentTourStep?.id === "deploy-staging") advanceTourAfterSuccess(currentTourStep);
+      else if (tourActive && currentTourStep && stepComplete) {
+        advanceTourAfterSuccess(currentTourStep);
+      }
     }, 900);
   };
 
@@ -541,9 +567,9 @@ export default function EmbedDemoPage() {
 
       {tourActive && tourRect ? (
         <>
-          <div className="pointer-events-none fixed inset-0 z-[2147482996] bg-black/12" />
+          <div className="pointer-events-none fixed inset-0 z-[2147482996] bg-black/8" />
           <div
-            className="pointer-events-none fixed z-[2147482997] rounded-xl border-2 border-indigo-300 ring-2 ring-indigo-300/40 animate-pulse"
+            className="pointer-events-none fixed z-[2147482997] rounded-xl border-2 border-indigo-300 ring-4 ring-indigo-300/30 animate-pulse shadow-[0_0_0_2px_rgba(255,255,255,0.75)]"
             style={{
               top: tourRect.top - 6,
               left: tourRect.left - 6,

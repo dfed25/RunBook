@@ -174,28 +174,45 @@ function buildFeatureExplanationMap(docs: ImportedDocument[]): Record<string, st
 
 export default function EmbedDemoLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const initialAgent = useMemo(() => getInitialAgentFromUrl(), []);
-  const [bundle, setBundle] = useState<DemoBundle>(() => (initialAgent ? initialAgent.assistantConfig : loadDemoBundle()));
-  const [projectId, setProjectId] = useState(() => (initialAgent ? initialAgent.projectId : loadProjectId()));
-  const [repoInfo, setRepoInfo] = useState<ImportedRepoInfo | null>(() => (initialAgent ? initialAgent.repo : loadImportedRepo()));
-  const [importedDocs, setImportedDocs] = useState<ImportedDocument[]>(() => (initialAgent ? initialAgent.documents : loadImportedDocs()));
-  const [savedAgents, setSavedAgents] = useState<TestAgentProfile[]>(() => loadTestAgents());
+  const [bundle, setBundle] = useState<DemoBundle>({
+    assistantName: "Runbook Assistant",
+    welcome: "I can help you get started quickly.",
+    primaryColor: "#6366f1",
+    suggestedQuestions: ["What can I do here?", "Guide me step-by-step", "What should I do next?"],
+    manualSources: []
+  });
+  const [projectId, setProjectId] = useState("northstar-demo");
+  const [repoInfo, setRepoInfo] = useState<ImportedRepoInfo | null>(null);
+  const [importedDocs, setImportedDocs] = useState<ImportedDocument[]>([]);
+  const [savedAgents, setSavedAgents] = useState<TestAgentProfile[]>([]);
   const [hoverInfo, setHoverInfo] = useState<HoverInfo | null>(null);
-  const [hintsEnabled, setHintsEnabled] = useState<boolean>(() => getStoredBoolean(HINTS_TOGGLE_KEY, true));
-  const [assistantEnabled, setAssistantEnabled] = useState<boolean>(() => getStoredBoolean(ASSISTANT_TOGGLE_KEY, true));
+  const [hintsEnabled, setHintsEnabled] = useState<boolean>(true);
+  const [assistantEnabled, setAssistantEnabled] = useState<boolean>(true);
   const hoverWrapRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     const refresh = () => {
-      setBundle(loadDemoBundle());
-      setProjectId(loadProjectId());
-      setRepoInfo(loadImportedRepo());
-      setImportedDocs(loadImportedDocs());
+      const initialAgent = getInitialAgentFromUrl();
+      if (initialAgent) {
+        setBundle(initialAgent.assistantConfig);
+        setProjectId(initialAgent.projectId);
+        setRepoInfo(initialAgent.repo);
+        setImportedDocs(initialAgent.documents);
+      } else {
+        setBundle(loadDemoBundle());
+        setProjectId(loadProjectId());
+        setRepoInfo(loadImportedRepo());
+        setImportedDocs(loadImportedDocs());
+      }
       setSavedAgents(loadTestAgents());
+      setHintsEnabled(getStoredBoolean(HINTS_TOGGLE_KEY, true));
+      setAssistantEnabled(getStoredBoolean(ASSISTANT_TOGGLE_KEY, true));
     };
+    const initTimer = window.setTimeout(refresh, 0);
     window.addEventListener("storage", refresh);
     window.addEventListener("runbook-demo-update", refresh);
     return () => {
+      window.clearTimeout(initTimer);
       window.removeEventListener("storage", refresh);
       window.removeEventListener("runbook-demo-update", refresh);
     };
