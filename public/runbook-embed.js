@@ -129,6 +129,307 @@
     }
   }
 
+  var RB_WATCH_IDX_KEY = "runbook_embed_watch_idx";
+
+  function rbEscapeHtml(s) {
+    return String(s)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+
+  function rbGetDemoSteps() {
+    try {
+      var steps = window.RUNBOOK_DEMO_STEPS;
+      if (Array.isArray(steps) && steps.length > 0) return steps;
+    } catch (err) {}
+    return [];
+  }
+
+  function rbQuery(sel) {
+    if (!sel || typeof sel !== "string") return null;
+    try {
+      return document.querySelector(sel);
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function rbApplyDemoEffect(effect) {
+    if (!effect || typeof effect !== "object") return;
+    var type = String(effect.type || "").toLowerCase();
+    var el = effect.selector ? rbQuery(effect.selector) : null;
+    if (type === "toast") {
+      rbPageToast(String(effect.message || "Done"));
+      return;
+    }
+    if (!el && type !== "toast") return;
+    if (type === "settext") el.textContent = String(effect.text != null ? effect.text : "");
+    else if (type === "addclass") el.classList.add(String(effect.className || ""));
+    else if (type === "removeclass") el.classList.remove(String(effect.className || ""));
+    else if (type === "setattribute") el.setAttribute(String(effect.name || ""), String(effect.value != null ? effect.value : ""));
+    else if (type === "show") {
+      el.style.removeProperty("display");
+      el.classList.remove("rb-watch-hidden");
+    } else if (type === "hide") {
+      el.style.display = "none";
+    } else if (type === "fillinput" && (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement)) {
+      el.value = String(effect.value != null ? effect.value : "");
+      el.dispatchEvent(new Event("input", { bubbles: true }));
+    }
+  }
+
+  function rbPageToast(message) {
+    var el = document.createElement("div");
+    el.setAttribute("data-runbook-watch-toast", "1");
+    el.textContent = message;
+    el.style.cssText =
+      "position:fixed;bottom:100px;left:50%;transform:translateX(-50%);z-index:2147483650;max-width:90vw;padding:10px 14px;border-radius:12px;background:#0f172a;color:#e2e8f0;border:1px solid rgba(129,140,248,.5);font:13px/1.4 system-ui;box-shadow:0 12px 40px rgba(0,0,0,.45);";
+    document.body.appendChild(el);
+    window.setTimeout(function () {
+      if (el.parentNode) el.parentNode.removeChild(el);
+    }, 2200);
+  }
+
+  function rbWaitMs(ms, isCancelled) {
+    return new Promise(function (resolve) {
+      var start = Date.now();
+      function tick() {
+        if (isCancelled()) return resolve();
+        if (Date.now() - start >= ms) return resolve();
+        window.setTimeout(tick, Math.min(48, ms));
+      }
+      tick();
+    });
+  }
+
+  /** Poll until selector matches a connected element (view transitions often need this). */
+  function rbWaitForSelector(sel, maxMs, isCancelled) {
+    return new Promise(function (resolve) {
+      if (!sel || typeof sel !== "string") return resolve(null);
+      var deadline = Date.now() + (maxMs != null ? Number(maxMs) : 2400);
+      function tick() {
+        if (isCancelled()) return resolve(null);
+        var el = null;
+        try {
+          el = document.querySelector(sel);
+        } catch (e) {
+          el = null;
+        }
+        if (el && el instanceof HTMLElement) return resolve(el);
+        if (Date.now() >= deadline) return resolve(null);
+        window.setTimeout(tick, 48);
+      }
+      tick();
+    });
+  }
+
+  function rbAnimateCursor(from, to, ms, onFrame, isCancelled) {
+    return new Promise(function (resolve) {
+      var t0 = performance.now();
+      function frame(now) {
+        if (isCancelled()) return resolve();
+        var t = Math.min(1, (now - t0) / ms);
+        var s = t * t * (3 - 2 * t);
+        onFrame(from.x + (to.x - from.x) * s, from.y + (to.y - from.y) * s);
+        if (t < 1) requestAnimationFrame(frame);
+        else resolve();
+      }
+      requestAnimationFrame(frame);
+    });
+  }
+
+  function rbCreateWatchUi() {
+    var dim = document.createElement("div");
+    dim.setAttribute("data-runbook-watch-dim", "1");
+    // Keep the page readable: no full-screen blackout (that read as a "pillar" / slab on demos).
+    dim.style.cssText =
+      "position:fixed;inset:0;z-index:2147483646;background:transparent;pointer-events:none;";
+    var ring = document.createElement("div");
+    ring.setAttribute("data-runbook-watch-ring", "1");
+    ring.style.cssText =
+      "position:fixed;z-index:2147483647;pointer-events:none;border:2px solid rgba(251,191,36,.95);border-radius:12px;box-shadow:0 0 0 4px rgba(251,191,36,.2);display:none;";
+    var cursor = document.createElement("div");
+    cursor.setAttribute("data-runbook-watch-cursor", "1");
+    cursor.style.cssText =
+      "position:fixed;z-index:2147483648;pointer-events:none;left:0;top:0;display:none;filter:drop-shadow(0 2px 4px rgba(0,0,0,.4));";
+    cursor.innerHTML =
+      '<svg width="28" height="28" viewBox="0 0 24 24" fill="none"><path d="M5.5 3.21V20.8c0 .45.54.67.85.35l4.86-4.86a.5.5 0 01.35-.15h6.87c.48 0 .72-.58.38-.92L6.35 2.85a.5.5 0 00-.85.36z" fill="white" stroke="#0f172a" stroke-width="1.2"/></svg>';
+    var cancel = document.createElement("button");
+    cancel.type = "button";
+    cancel.textContent = "Cancel";
+    cancel.setAttribute("data-runbook-watch-cancel", "1");
+    cancel.style.cssText =
+      "position:fixed;top:72px;right:16px;z-index:2147483649;padding:8px 12px;border-radius:10px;border:1px solid rgba(255,255,255,.25);background:#1e293b;color:#f8fafc;font:12px system-ui;cursor:pointer;";
+    var pulse = document.createElement("span");
+    pulse.setAttribute("data-runbook-watch-pulse", "1");
+    pulse.style.cssText =
+      "position:absolute;left:-4px;top:-4px;width:36px;height:36px;border-radius:50%;border:2px solid rgba(99,102,241,.9);display:none;animation:rbWatchPing .55s ease-out 1;";
+    cursor.appendChild(pulse);
+    document.body.appendChild(dim);
+    document.body.appendChild(ring);
+    document.body.appendChild(cursor);
+    document.body.appendChild(cancel);
+    if (!document.getElementById("rb-watch-keyframes")) {
+      var st = document.createElement("style");
+      st.id = "rb-watch-keyframes";
+      st.textContent = "@keyframes rbWatchPing{0%{transform:scale(.6);opacity:1}100%{transform:scale(1.4);opacity:0}}";
+      document.head.appendChild(st);
+    }
+    return { dim: dim, ring: ring, cursor: cursor, cancel: cancel, pulse: pulse };
+  }
+
+  function rbDestroyWatchUi(ui) {
+    ["dim", "ring", "cursor", "cancel"].forEach(function (k) {
+      if (ui[k] && ui[k].parentNode) ui[k].parentNode.removeChild(ui[k]);
+    });
+  }
+
+  function rbRunWatchMe(opts) {
+    opts = opts || {};
+    var full = Boolean(opts.full);
+    var addBot = opts.addBot;
+    var steps = rbGetDemoSteps();
+    if (!steps.length) {
+      if (addBot) addBot("<strong>Watch Me</strong><br/>This page has no Watch Me script yet. Ask your team to add <code>window.RUNBOOK_DEMO_STEPS</code>.");
+      return Promise.resolve();
+    }
+    var cancelled = false;
+    var ui = rbCreateWatchUi();
+    function isCancelled() {
+      return cancelled;
+    }
+    ui.cancel.addEventListener("click", function () {
+      cancelled = true;
+    });
+    try {
+      window.dispatchEvent(new CustomEvent("runbook-watch-me-start"));
+    } catch (eStart) {}
+    ui.cancel.style.pointerEvents = "auto";
+
+    var startIdx = 0;
+    if (!full) {
+      try {
+        startIdx = parseInt(sessionStorage.getItem(RB_WATCH_IDX_KEY) || "0", 10) || 0;
+        if (startIdx >= steps.length) startIdx = 0;
+      } catch (e) {
+        startIdx = 0;
+      }
+    } else {
+      try {
+        sessionStorage.removeItem(RB_WATCH_IDX_KEY);
+      } catch (e2) {}
+    }
+
+    var cursorPos = { x: window.innerWidth / 2, y: window.innerHeight / 2 };
+    ui.cursor.style.display = "block";
+    ui.cursor.style.left = cursorPos.x + "px";
+    ui.cursor.style.top = cursorPos.y + "px";
+    ui.cancel.style.display = "block";
+
+    return (async function () {
+      try {
+        var list = full ? steps : steps.slice(startIdx, startIdx + 1);
+        if (!full && !list.length) list = [steps[0]];
+        for (var i = 0; i < (full ? steps.length : list.length); i++) {
+          if (cancelled) break;
+          var step = full ? steps[i] : list[0];
+          var si = full ? i : startIdx;
+
+          var sel = step.target ? String(step.target) : "";
+          var selAlt = step.targetAlt ? String(step.targetAlt) : "";
+          var el = sel ? await rbWaitForSelector(sel, 3200, isCancelled) : null;
+          if ((!el || !(el instanceof HTMLElement)) && selAlt) {
+            el = await rbWaitForSelector(selAlt, 1200, isCancelled);
+          }
+          if (!el || !(el instanceof HTMLElement)) {
+            rbPageToast("Skipped: " + String(step.label || step.id || "target not found"));
+            await rbWaitMs(450, isCancelled);
+            continue;
+          }
+          el.scrollIntoView({ behavior: "smooth", block: "center" });
+          await rbWaitMs(full ? 520 : 420, isCancelled);
+          el = sel ? await rbWaitForSelector(sel, 2200, isCancelled) : null;
+          if ((!el || !(el instanceof HTMLElement)) && selAlt) {
+            el = await rbWaitForSelector(selAlt, 1200, isCancelled);
+          }
+          if (!el || !(el instanceof HTMLElement)) {
+            rbPageToast("Skipped after scroll: " + String(step.label || step.id || "target lost"));
+            await rbWaitMs(450, isCancelled);
+            continue;
+          }
+          var r = el.getBoundingClientRect();
+          var pad = 6;
+          var rw = r.width + pad * 2;
+          var rh = r.height + pad * 2;
+          var rx = r.left - pad;
+          var ry = r.top - pad;
+          var vh = window.innerHeight || 0;
+          var vw = window.innerWidth || 0;
+          if (vh > 0 && rh > vh * 0.62 && rw < vw * 0.45) {
+            var ch = Math.min(rh, 56);
+            ry = r.top + r.height / 2 - ch / 2;
+            rh = ch;
+          }
+          if (vw > 0 && rw > vw * 0.92) {
+            rw = Math.min(rw, vw * 0.88);
+            rx = Math.max(8, (vw - rw) / 2);
+          }
+          ui.ring.style.display = "block";
+          ui.ring.style.top = ry + "px";
+          ui.ring.style.left = rx + "px";
+          ui.ring.style.width = rw + "px";
+          ui.ring.style.height = rh + "px";
+          var target = { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+          await rbAnimateCursor(cursorPos, target, 560, function (x, y) {
+            cursorPos = { x: x, y: y };
+            ui.cursor.style.left = x + "px";
+            ui.cursor.style.top = y + "px";
+          }, isCancelled);
+          if (cancelled) break;
+          await rbWaitMs(420, isCancelled);
+          ui.pulse.style.display = "block";
+          await rbWaitMs(200, isCancelled);
+          ui.pulse.style.display = "none";
+          var doClick = step.click !== false;
+          if (doClick && typeof el.click === "function") {
+            try {
+              el.click();
+            } catch (e3) {}
+          }
+          var fxList = [];
+          if (step.effect) fxList.push(step.effect);
+          if (Array.isArray(step.effects)) fxList = fxList.concat(step.effects);
+          for (var fi = 0; fi < fxList.length; fi++) {
+            rbApplyDemoEffect(fxList[fi]);
+          }
+          if (step.successText) rbPageToast(String(step.successText));
+          var pauseMs = step.waitAfter != null ? Number(step.waitAfter) : full ? 920 : 720;
+          await rbWaitMs(pauseMs, isCancelled);
+          ui.ring.style.display = "none";
+          if (!full) {
+            try {
+              sessionStorage.setItem(RB_WATCH_IDX_KEY, String((si + 1) % steps.length));
+            } catch (e4) {}
+            break;
+          }
+        }
+        if (!cancelled) {
+          rbPageToast("Done — now you try.");
+          if (typeof addBot === "function") {
+            addBot("<strong>Watch Me</strong><br/>Done — now you try.");
+          }
+          try {
+            window.dispatchEvent(new CustomEvent("runbook-assistant-status", { detail: "Done — now you try." }));
+          } catch (e5) {}
+        }
+      } finally {
+        rbDestroyWatchUi(ui);
+      }
+    })();
+  }
+
   function mount() {
     if (!document.body) return;
 
@@ -205,6 +506,28 @@
     hoverCtx.className = "rb-hover";
     var body = document.createElement("div");
     body.className = "rb-body";
+    body.addEventListener("click", function (ev) {
+      var t = ev.target;
+      if (!(t instanceof Element)) return;
+      var btn = t.closest
+        ? t.closest("[data-rb-local-guide],[data-rb-local-watch],[data-rb-local-watch-full]")
+        : null;
+      if (!btn) return;
+      if (btn.getAttribute("data-rb-local-guide") === "1") {
+        ev.preventDefault();
+        try {
+          window.dispatchEvent(new CustomEvent("runbook-start-tour"));
+        } catch (e) {}
+      }
+      if (btn.getAttribute("data-rb-local-watch") === "1") {
+        ev.preventDefault();
+        void rbRunWatchMe({ full: false, addBot: addBot });
+      }
+      if (btn.getAttribute("data-rb-local-watch-full") === "1") {
+        ev.preventDefault();
+        void rbRunWatchMe({ full: true, addBot: addBot });
+      }
+    });
     var foot = document.createElement("div");
     foot.className = "rb-foot";
     foot.innerHTML =
@@ -535,9 +858,83 @@
     });
     chipsWrap.insertBefore(pageActions, chipsWrap.firstChild);
 
+    (function addWatchChips() {
+      var ds = rbGetDemoSteps();
+      if (!ds.length) return;
+      var guideChip = document.createElement("button");
+      guideChip.type = "button";
+      guideChip.className = "rb-chip";
+      guideChip.style.borderColor = "rgba(52,211,153,.45)";
+      guideChip.style.background = "rgba(16,185,129,.12)";
+      guideChip.style.color = "#a7f3d0";
+      guideChip.textContent = "Walkthrough";
+      guideChip.setAttribute("title", "Step-by-step coach on the page (you perform each action)");
+      guideChip.addEventListener("click", function () {
+        try {
+          window.dispatchEvent(new CustomEvent("runbook-start-tour"));
+        } catch (eG) {}
+      });
+      chipsWrap.appendChild(guideChip);
+      var wm = document.createElement("button");
+      wm.type = "button";
+      wm.className = "rb-chip";
+      wm.style.borderColor = "rgba(251,191,36,.5)";
+      wm.style.background = "rgba(245,158,11,.12)";
+      wm.style.color = "#fde68a";
+      wm.textContent = "Watch me";
+      wm.addEventListener("click", function () {
+        void rbRunWatchMe({ full: false, addBot: addBot });
+      });
+      chipsWrap.appendChild(wm);
+      var wf = document.createElement("button");
+      wf.type = "button";
+      wf.className = "rb-chip";
+      wf.style.borderColor = "rgba(251,191,36,.5)";
+      wf.style.background = "rgba(245,158,11,.12)";
+      wf.style.color = "#fde68a";
+      wf.textContent = "Watch full setup";
+      wf.addEventListener("click", function () {
+        void rbRunWatchMe({ full: true, addBot: addBot });
+      });
+      chipsWrap.appendChild(wf);
+    })();
+
     async function doSend() {
       var q = (inp.value || "").trim();
       if (!q) return;
+      if (/what\s*can\s*i\s*do\s*here\??/i.test(q)) {
+        var stLocal = rbGetDemoSteps();
+        if (stLocal.length > 0) {
+          inp.value = "";
+          addUser(q);
+          var feats = [];
+          try {
+            document.querySelectorAll("[data-runbook-title]").forEach(function (n) {
+              var tt = (n.getAttribute("data-runbook-title") || "").trim();
+              if (tt && feats.indexOf(tt) === -1) feats.push(tt);
+            });
+          } catch (e0) {}
+          var html = "<p><strong>Here is what you can do on this page:</strong></p><ul class=\"rb-steps\">";
+          stLocal.slice(0, 3).forEach(function (s) {
+            html += "<li>" + rbEscapeHtml(String(s.label || s.id || "Step")) + "</li>";
+          });
+          html += "</ul>";
+          if (feats.length)
+            html +=
+              '<p style="font-size:11px;color:#94a3b8;margin-top:8px;">Annotated areas: ' +
+              rbEscapeHtml(feats.slice(0, 5).join(", ")) +
+              "</p>";
+          html +=
+            '<p style="margin-top:12px;display:flex;flex-wrap:wrap;gap:8px;">' +
+            '<button type="button" class="rb-send" data-rb-local-guide="1">Walkthrough</button>' +
+            '<button type="button" class="rb-send" data-rb-local-watch="1">Watch me</button>' +
+            '<button type="button" class="rb-send" style="opacity:.9" data-rb-local-watch-full="1">Watch full setup</button>' +
+            "</p>";
+          addBot(html);
+          sendBtn.disabled = false;
+          return;
+        }
+      }
       inp.value = "";
       addUser(q);
       sendBtn.disabled = true;
