@@ -328,6 +328,7 @@
         { id: "nav-home", label: "Back to Home (see 14/14)", target: "[data-runbook-action='nav-home']", successText: "All onboarding milestones complete", waitAfter: 900 }
       ];
     </script>
+    <!-- One embed only: northstar-demo needs no API key. A second tag with another data-project-id (no data-key) triggers "Missing Bearer token" on /api/embed/chat. -->
     <script
       src="http://localhost:3000/runbook-embed.js"
       data-project-id="northstar-demo"
