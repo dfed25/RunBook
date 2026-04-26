@@ -3,6 +3,7 @@ import { demoDocs } from "./demoDocs";
 import type { SourceDoc } from "./types";
 import { buildNorthstarDemoResponse, type DemoChatResult } from "./embedDemoKnowledge";
 import { retrieveKeywordSources } from "./embedKeywordRetrieval";
+import { clipWords, MAX_ANSWER_WORDS, normalizeBullets, normalizeSuggestions, normalizeSteps } from "./embedStructured";
 
 const NORTHSTAR_SYSTEM = `You are Runbook, an embedded in-app onboarding assistant for the "Northstar AI" demo product.
 Use ONLY the knowledge excerpts provided in the user message. If something is not in the excerpts, say briefly that it is not documented and suggest where to look next.
@@ -35,23 +36,6 @@ function mergeSources(
   return out.slice(0, 6);
 }
 
-function clipWords(text: string, maxWords: number): string {
-  return text
-    .replace(/\s+/g, " ")
-    .trim()
-    .split(" ")
-    .filter(Boolean)
-    .slice(0, maxWords)
-    .join(" ");
-}
-
-function normalizeBullets(input: string[]): string[] {
-  return input
-    .map((b) => clipWords(String(b), 14))
-    .filter(Boolean)
-    .slice(0, 3);
-}
-
 function parseStructured(raw: string): { answer: string; bullets: string[]; steps: string[]; suggestions: string[] } {
   let answer = raw.trim();
   let bullets: string[] = [];
@@ -79,10 +63,10 @@ function parseStructured(raw: string): { answer: string; bullets: string[]; step
     }
   }
   return {
-    answer: clipWords(answer, 12),
+    answer: clipWords(answer, MAX_ANSWER_WORDS),
     bullets: normalizeBullets(bullets),
-    steps: steps.slice(0, 7),
-    suggestions: suggestions.slice(0, 3)
+    steps: normalizeSteps(steps),
+    suggestions: normalizeSuggestions(suggestions)
   };
 }
 

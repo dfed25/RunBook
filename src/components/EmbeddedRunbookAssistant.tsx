@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { memo, useCallback, useMemo, useState } from "react";
 import {
   loadImportedDocs,
   loadProjectId,
@@ -42,10 +42,71 @@ export type EmbeddedRunbookAssistantProps = {
   suggestedQuestions: string[];
   manualSources?: DemoManualSource[];
   importedDocuments?: ImportedDocument[];
+  hideQuickActions?: boolean;
   /** `page` = fixed to viewport; `embedded` = inside a positioned preview box */
   position?: "page" | "embedded";
   className?: string;
 };
+
+type StepModeProps = {
+  messageId: string;
+  steps: string[];
+  completedMap: Record<number, boolean>;
+  onToggle: (messageId: string, stepIndex: number) => void;
+};
+
+const StepMode = memo(function StepMode({ messageId, steps, completedMap, onToggle }: StepModeProps) {
+  const completeCount = Object.values(completedMap).filter(Boolean).length;
+  const firstIncomplete = steps.findIndex((_, i2) => !Boolean(completedMap[i2]));
+  return (
+    <div className="mt-2 rounded-lg border border-slate-700 bg-slate-900/60 p-2">
+      <div className="mb-1 flex items-center justify-between">
+        <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Step Mode</p>
+        <p className="text-[10px] text-emerald-300">
+          {completeCount}/{steps.length}
+        </p>
+      </div>
+      <ul className="space-y-1">
+        {steps.map((step, idx) => {
+          const checked = Boolean(completedMap[idx]);
+          return (
+            <li
+              key={`${messageId}-s-${idx}`}
+              className={`flex items-start gap-2 text-xs ${
+                idx === firstIncomplete && !checked ? "text-emerald-200" : "text-slate-300"
+              }`}
+            >
+              <button
+                type="button"
+                onClick={() => onToggle(messageId, idx)}
+                className={`mt-0.5 h-4 w-4 shrink-0 rounded border ${
+                  checked ? "border-emerald-400 bg-emerald-500/30" : "border-slate-500 bg-transparent"
+                }`}
+                aria-label={`Toggle step ${idx + 1}`}
+              />
+              <span className={checked ? "text-slate-500 line-through" : ""}>{step}</span>
+            </li>
+          );
+        })}
+      </ul>
+      <button
+        type="button"
+        disabled={firstIncomplete < 0}
+        onClick={() => {
+          if (firstIncomplete >= 0) onToggle(messageId, firstIncomplete);
+        }}
+        className="mt-2 rounded bg-emerald-600/20 px-2 py-1 text-[10px] font-semibold text-emerald-200 disabled:cursor-not-allowed disabled:opacity-40"
+      >
+        {firstIncomplete < 0 ? "All steps complete" : "Mark next step complete"}
+      </button>
+    </div>
+  );
+});
+
+function isExplainPageIntent(action: string): boolean {
+  const normalized = action.toLowerCase().replace(/[.!?]+$/g, "").trim();
+  return normalized === "explain this page" || normalized === "explain the current page";
+}
 
 export function EmbeddedRunbookAssistant({
   projectId = "northstar-demo",
@@ -56,6 +117,7 @@ export function EmbeddedRunbookAssistant({
   suggestedQuestions,
   manualSources = [],
   importedDocuments,
+  hideQuickActions = false,
   position = "page",
   className = ""
 }: EmbeddedRunbookAssistantProps) {
@@ -67,7 +129,6 @@ export function EmbeddedRunbookAssistant({
   const [messages, setMessages] = useState<Message[]>([]);
   const [completedStepsByMessage, setCompletedStepsByMessage] = useState<Record<string, Record<number, boolean>>>({});
   const [activeSource, setActiveSource] = useState<SourceItem | null>(null);
-  const [expandedByMessage, setExpandedByMessage] = useState<Record<string, boolean>>({});
 
   const posWrap = position === "embedded" ? "relative h-full min-h-[360px] w-full overflow-hidden bg-slate-50" : "";
   const fixedLaunch = position === "page" ? "fixed bottom-5 right-5 z-[2147483000]" : "absolute bottom-4 right-4 z-20";
@@ -125,7 +186,7 @@ export function EmbeddedRunbookAssistant({
           {
             role: "assistant",
             answer: data.answer,
-            bullets: (data.bullets || []).slice(0, 6),
+            bullets: (data.bullets || []).slice(0, 3),
             steps: data.steps || [],
             sources: (data.sources || []).slice(0, 6),
             suggestions: (data.suggestions || []).slice(0, 3),
@@ -219,7 +280,7 @@ export function EmbeddedRunbookAssistant({
               ×
             </button>
           </div>
-          {chips.length > 0 ? (
+          {!hideQuickActions && chips.length > 0 ? (
             <div className="grid grid-cols-2 gap-1.5 border-b border-slate-800 px-2 py-2">
               <button
                 type="button"
@@ -274,81 +335,13 @@ export function EmbeddedRunbookAssistant({
                       ))}
                     </ul>
                   ) : null}
-                  {msg.bullets && msg.bullets.length > 3 ? (
-                    <button
-                      type="button"
-                      onClick={() =>
-                        setExpandedByMessage((prev) => ({
-                          ...prev,
-                          [messageId]: !prev[messageId]
-                        }))
-                      }
-                      className="mb-1 text-[11px] font-medium text-indigo-300 underline"
-                    >
-                      {expandedByMessage[messageId] ? "Hide more" : "Show more"}
-                    </button>
-                  ) : null}
-                  {expandedByMessage[messageId] && msg.bullets && msg.bullets.length > 3 ? (
-                    <ul className="mb-2 space-y-1 text-xs text-slate-400">
-                      {msg.bullets.slice(3).map((bullet, idx) => (
-                        <li key={`${messageId}-bmore-${idx}`} className="flex gap-2">
-                          <span>•</span>
-                          <span>{bullet}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  ) : null}
                   {msg.steps && msg.steps.length > 0 ? (
-                    <div className="mt-2 rounded-lg border border-slate-700 bg-slate-900/60 p-2">
-                      {(() => {
-                        const stepItems = msg.steps || [];
-                        const completedMap = completedStepsByMessage[messageId] || {};
-                        const completeCount = Object.values(completedMap).filter(Boolean).length;
-                        const firstIncomplete = stepItems.findIndex((_, i2) => !Boolean(completedMap[i2]));
-                        return (
-                          <>
-                      <div className="mb-1 flex items-center justify-between">
-                        <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Step Mode</p>
-                        <p className="text-[10px] text-emerald-300">
-                          {completeCount}/{stepItems.length}
-                        </p>
-                      </div>
-                      <ul className="space-y-1">
-                        {stepItems.map((step, idx) => {
-                          const checked = Boolean(completedMap[idx]);
-                          return (
-                            <li
-                              key={`${messageId}-s-${idx}`}
-                              className={`flex items-start gap-2 text-xs ${
-                                idx === firstIncomplete && !checked ? "text-emerald-200" : "text-slate-300"
-                              }`}
-                            >
-                              <button
-                                type="button"
-                                onClick={() => toggleStep(messageId, idx)}
-                                className={`mt-0.5 h-4 w-4 shrink-0 rounded border ${
-                                  checked ? "border-emerald-400 bg-emerald-500/30" : "border-slate-500 bg-transparent"
-                                }`}
-                                aria-label={`Toggle step ${idx + 1}`}
-                              />
-                              <span className={checked ? "text-slate-500 line-through" : ""}>{step}</span>
-                            </li>
-                          );
-                        })}
-                      </ul>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (firstIncomplete >= 0) toggleStep(messageId, firstIncomplete);
-                        }}
-                        className="mt-2 rounded bg-emerald-600/20 px-2 py-1 text-[10px] font-semibold text-emerald-200"
-                      >
-                        Mark complete
-                      </button>
-                          </>
-                        );
-                      })()}
-                    </div>
+                    <StepMode
+                      messageId={messageId}
+                      steps={msg.steps || []}
+                      completedMap={completedStepsByMessage[messageId] || {}}
+                      onToggle={toggleStep}
+                    />
                   ) : null}
                   {msg.sources && msg.sources.length > 0 ? (
                     <div className="mt-3 border-t border-slate-700/80 pt-2">
@@ -375,12 +368,12 @@ export function EmbeddedRunbookAssistant({
                     {(msg.suggestions && msg.suggestions.length > 0
                       ? msg.suggestions
                       : ["Guide me step-by-step", "Explain this page", "What can I do next?"]
-                    ).map((action) => (
+                    ).map((action, actionIdx) => (
                       <button
-                        key={`${messageId}-q-${action}`}
+                        key={`${messageId}-q-${actionIdx}-${action}`}
                         type="button"
                         onClick={() => {
-                          if (action === "Explain this page") explainThisPage();
+                          if (isExplainPageIntent(action)) explainThisPage();
                           else void send(action);
                         }}
                         className="rounded-full border border-slate-500/50 px-2 py-1 text-[10px] font-medium text-slate-200 hover:bg-slate-700"

@@ -8,6 +8,7 @@ Formatting (strict):
 - Output max 3 bullets (each 14 words max).
 - Add steps only when actionable.
 - Prefer discoverability language: what user can do here/next.
+- Output only the single line beginning with RUNBOOK_JSON: no prose, no markdown, no code fences.
 - Final line must be JSON exactly prefixed with:
 RUNBOOK_JSON: {"answer":"...","bullets":["..."],"steps":["..."],"suggestions":["Guide me step-by-step","Explain this page","What can I do next?"]}`;
 

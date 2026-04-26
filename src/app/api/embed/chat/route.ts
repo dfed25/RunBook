@@ -6,6 +6,17 @@ import { resolveProjectFromApiKey } from "@/lib/embedStore";
 import { checkEmbedRateLimit } from "@/lib/embedRateLimit";
 import { NORTHSTAR_DEMO_PROJECT_ID } from "@/lib/embedDemoKnowledge";
 import { isServerLlmConfigured, runNorthstarEmbedChat } from "@/lib/embedNorthstarChat";
+import {
+  bulletsFromText,
+  clipWords,
+  DEFAULT_FALLBACK_BULLETS,
+  DEFAULT_SUGGESTIONS,
+  MAX_ANSWER_WORDS,
+  MAX_SOURCES,
+  normalizeBullets,
+  normalizeSteps,
+  normalizeSuggestions
+} from "@/lib/embedStructured";
 
 export const runtime = "nodejs";
 
@@ -95,47 +106,29 @@ function normalizePageContext(body: ChatBody): string {
   return parts.join("\n");
 }
 
-function clipWords(text: string, maxWords: number): string {
-  return text
-    .replace(/\s+/g, " ")
-    .trim()
-    .split(" ")
-    .filter(Boolean)
-    .slice(0, maxWords)
-    .join(" ");
-}
-
 function normalizeStructured(payload: Partial<StructuredChatPayload>): StructuredChatPayload {
-  const fallbackSuggestions = ["Guide me step-by-step", "Explain this page", "What can I do next?"];
-  const normalizedBullets = (payload.bullets || []).map((b) => clipWords(String(b), 14)).filter(Boolean).slice(0, 3);
-  const fallbackBullet = payload.answer ? [clipWords(String(payload.answer), 14)] : ["Explore key actions", "Follow guided steps", "Open trusted sources"];
+  const normalizedBullets = normalizeBullets(payload.bullets || []);
+  const fallbackBullets = payload.answer ? bulletsFromText(String(payload.answer)) : DEFAULT_FALLBACK_BULLETS;
   return {
-    answer: clipWords(payload.answer || "Here is what you can do next.", 12),
-    bullets: normalizedBullets.length > 0 ? normalizedBullets : fallbackBullet,
-    steps: (payload.steps || []).map((s) => String(s).trim()).filter(Boolean).slice(0, 7),
-    sources: (payload.sources || []).slice(0, 6),
-    suggestions: (payload.suggestions || fallbackSuggestions).map((s) => String(s).trim()).filter(Boolean).slice(0, 3)
+    answer: clipWords(payload.answer || "Here is what you can do next.", MAX_ANSWER_WORDS),
+    bullets: normalizedBullets.length > 0 ? normalizedBullets : normalizeBullets(fallbackBullets),
+    steps: normalizeSteps(payload.steps || []),
+    sources: (payload.sources || []).slice(0, MAX_SOURCES),
+    suggestions: normalizeSuggestions(payload.suggestions || DEFAULT_SUGGESTIONS)
   };
-}
-
-function bulletsFromText(text: string): string[] {
-  const lines = text
-    .split(/[.\n]/g)
-    .map((s) => s.trim())
-    .filter((s) => s.length > 0);
-  return lines.slice(0, 3).map((l) => clipWords(l, 14));
 }
 
 function parseStructuredFromRaw(raw: string): Partial<StructuredChatPayload> {
   const trimmed = raw.trim();
   const idx = trimmed.lastIndexOf("RUNBOOK_JSON:");
   if (idx >= 0) {
+    const prose = trimmed.slice(0, idx).trim();
     const jsonPart = trimmed.slice(idx + "RUNBOOK_JSON:".length).trim();
     try {
       const parsed = JSON.parse(jsonPart) as Partial<StructuredChatPayload>;
       return parsed;
     } catch {
-      /* ignore */
+      return { answer: prose, bullets: bulletsFromText(prose) };
     }
   }
   return { answer: trimmed, bullets: bulletsFromText(trimmed) };

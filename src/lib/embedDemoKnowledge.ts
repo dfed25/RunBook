@@ -1,4 +1,13 @@
 import { demoDocs } from "./demoDocs";
+import {
+  clipWords,
+  DEFAULT_SUGGESTIONS,
+  MAX_ANSWER_WORDS,
+  MAX_SUGGESTIONS,
+  normalizeBullets,
+  normalizeSteps,
+  normalizeSuggestions
+} from "./embedStructured";
 
 /** Public demo project — no API key required for `/api/embed/chat`. */
 export const NORTHSTAR_DEMO_PROJECT_ID = "northstar-demo";
@@ -19,11 +28,6 @@ function excerptFromContent(content: string, max = 180): string {
   return content.replace(/\s+/g, " ").trim().slice(0, max) + (content.length > max ? "…" : "");
 }
 
-function compact(text: string, words = 12): string {
-  const parts = text.replace(/\s+/g, " ").trim().split(" ").filter(Boolean);
-  return parts.slice(0, words).join(" ");
-}
-
 function createResult(input: {
   answer: string;
   bullets: string[];
@@ -32,11 +36,11 @@ function createResult(input: {
   suggestions?: string[];
 }): DemoChatResult {
   return {
-    answer: compact(input.answer, 12),
-    bullets: input.bullets.slice(0, 3).map((b) => compact(b, 14)),
+    answer: clipWords(input.answer, MAX_ANSWER_WORDS),
+    bullets: normalizeBullets(input.bullets),
     sources: input.sources,
-    steps: input.steps.slice(0, 7),
-    suggestions: (input.suggestions || ["Guide me step-by-step", "Explain this page", "What can I do next?"]).slice(0, 3)
+    steps: normalizeSteps(input.steps),
+    suggestions: normalizeSuggestions((input.suggestions || DEFAULT_SUGGESTIONS).slice(0, MAX_SUGGESTIONS))
   };
 }
 
