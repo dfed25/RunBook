@@ -3,17 +3,20 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FeatureCard } from "@/components/demo/FeatureCard";
+import { getNextAction, type DemoAppState } from "@/lib/embedDemoNextAction";
 
-type AppState = {
-  githubConnected: boolean;
-  apiKeyCreated: boolean;
-  workflowCreated: boolean;
-  deployed: boolean;
-};
+type AppState = DemoAppState;
 
 type FeatureDetail = { feature: string; title: string; description: string };
 type TourStep = FeatureDetail & { id: string; selector: string; success: string };
 type UiAction = { type: "start_tour" | "start_step" | "highlight"; stepId?: string; feature?: string };
+type InterruptState = {
+  type: "warning" | "hint";
+  message: string;
+  targetFeature: string | null;
+  primaryAction: "guide" | "dismiss";
+};
+type ActivityItem = { id: number; text: string };
 
 const NUDGE_DISMISSED_KEY = "runbook_alive_nudge_dismissed";
 const APP_STATE_KEY = "runbook_embed_demo_state";
@@ -87,8 +90,14 @@ export default function EmbedDemoPage() {
   const [tourHighlightFeature, setTourHighlightFeature] = useState<string | null>(null);
   const [hoveredFeature, setHoveredFeature] = useState<FeatureDetail | null>(null);
   const [tourFeedback, setTourFeedback] = useState<string | null>(null);
+  const [showCompletionBanner, setShowCompletionBanner] = useState(false);
+  const [interrupt, setInterrupt] = useState<InterruptState | null>(null);
+  const [activityFeed, setActivityFeed] = useState<ActivityItem[]>([]);
+  const [widgetStatus, setWidgetStatus] = useState("Ready to guide");
+  const [widgetPulse, setWidgetPulse] = useState(false);
   const completedStepIdsRef = useRef<Record<string, boolean>>({});
   const hydrationLoadedRef = useRef(false);
+  const activityIdRef = useRef(1);
 
   const currentTourStep = tourActive ? TOUR_STEPS[tourStepIndex] : null;
   const viewportHeight = typeof window !== "undefined" ? window.innerHeight : 900;
@@ -109,13 +118,24 @@ export default function EmbedDemoPage() {
     { label: "Deploy to staging", done: appState.deployed }
   ];
 
+  const nextAction = useMemo(() => getNextAction(appState), [appState]);
   const nextBest = useMemo(() => {
-    if (!appState.githubConnected) return TOUR_STEPS[0];
-    if (!appState.apiKeyCreated) return TOUR_STEPS[1];
-    if (!appState.workflowCreated) return TOUR_STEPS[2];
-    if (!appState.deployed) return TOUR_STEPS[3];
+    if (nextAction.id === "connect-github") return TOUR_STEPS[0];
+    if (nextAction.id === "create-api-key") return TOUR_STEPS[1];
+    if (nextAction.id === "build-workflow") return TOUR_STEPS[2];
+    if (nextAction.id === "deploy") return TOUR_STEPS[3];
     return null;
-  }, [appState]);
+  }, [nextAction]);
+
+  const addActivity = useCallback((text: string) => {
+    const next: ActivityItem = { id: activityIdRef.current++, text };
+    setActivityFeed((prev) => [next, ...prev].slice(0, 8));
+  }, []);
+
+  const setStatus = useCallback((text: string) => {
+    setWidgetStatus(text);
+    window.dispatchEvent(new CustomEvent("runbook-assistant-status", { detail: text }));
+  }, []);
 
   const updateTourTarget = useCallback(() => {
     if (!tourActive || !currentTourStep) {
@@ -132,13 +152,13 @@ export default function EmbedDemoPage() {
         setTourStepIndex((s) => s + 1);
       } else {
         setTourActive(false);
-        emitRunbookSuggestion("You are ready to launch.");
+        setStatus("Live in staging");
       }
       return;
     }
     el.scrollIntoView({ behavior: "smooth", block: "center" });
     setTourRect(el.getBoundingClientRect());
-  }, [currentTourStep, showWorkflowModal, tourActive, tourStepIndex]);
+  }, [currentTourStep, setStatus, showWorkflowModal, tourActive, tourStepIndex]);
 
   const advanceTourAfterSuccess = useCallback(
     (step: TourStep) => {
@@ -146,20 +166,22 @@ export default function EmbedDemoPage() {
       completedStepIdsRef.current[step.id] = true;
       setTourFeedback(step.success);
       emitRunbookSuggestion(step.success);
+      setStatus(step.success);
       window.setTimeout(() => {
         setTourFeedback(null);
         const nextIdx = TOUR_STEPS.findIndex((s) => s.id === step.id) + 1;
         if (nextIdx < TOUR_STEPS.length) {
           const next = TOUR_STEPS[nextIdx];
           setTourStepIndex(nextIdx);
-          emitRunbookSuggestion(`Next: ${next.title}.`);
+          setStatus(`Next: ${next.title}`);
         } else {
           setTourActive(false);
-          emitRunbookSuggestion("You are ready to launch.");
+          setShowCompletionBanner(true);
+          setStatus("Live in staging");
         }
       }, 700);
     },
-    []
+    [setStatus]
   );
 
   useEffect(() => {
@@ -247,6 +269,21 @@ export default function EmbedDemoPage() {
   }, [currentTourStep, hoveredFeature]);
 
   useEffect(() => {
+    if (hoveredFeature?.title) {
+      setStatus(`Looking at: ${hoveredFeature.title}`);
+    }
+  }, [hoveredFeature, setStatus]);
+
+  useEffect(() => {
+    if (hoveredFeature || interrupt) return;
+    if (nextAction.id === "complete") {
+      setStatus("Live in staging");
+      return;
+    }
+    setStatus(`Next: ${nextAction.title}`);
+  }, [hoveredFeature, interrupt, nextAction, setStatus]);
+
+  useEffect(() => {
     const runAction = (action: UiAction) => {
       if (!action) return;
       if (action.type === "start_tour") {
@@ -277,7 +314,7 @@ export default function EmbedDemoPage() {
       setShowNudge(false);
       completedStepIdsRef.current = {};
       const startStep = TOUR_STEPS[firstIncompleteTourStepIndex(appState)];
-      emitRunbookSuggestion(`Guiding: ${startStep.title}.`);
+      setStatus(`Guiding: ${startStep.title}`);
     };
     const onWhatNext = () => {
       const step = nextBest;
@@ -285,9 +322,9 @@ export default function EmbedDemoPage() {
       setTourActive(false);
       setTourHighlightFeature(nextFeature);
       if (step) {
-        emitRunbookSuggestion(`Next: ${step.title}.`);
+        setStatus(`Next: ${step.title}`);
       } else {
-        emitRunbookSuggestion("You are ready to launch.");
+        setStatus("Live in staging");
       }
     };
     const onUiAction = (evt: Event) => {
@@ -301,7 +338,7 @@ export default function EmbedDemoPage() {
       window.removeEventListener("runbook-what-next", onWhatNext as EventListener);
       window.removeEventListener("runbook-ui-action", onUiAction as EventListener);
     };
-  }, [appState, nextBest]);
+  }, [appState, nextBest, setStatus]);
 
   const dismissNudge = () => {
     window.localStorage.setItem(NUDGE_DISMISSED_KEY, "1");
@@ -325,6 +362,11 @@ export default function EmbedDemoPage() {
     setTourRect(null);
     setTourHighlightFeature(null);
     setTourFeedback(null);
+    setShowCompletionBanner(false);
+    setInterrupt(null);
+    setActivityFeed([]);
+    setWidgetStatus("Ready to guide");
+    setWidgetPulse(false);
     completedStepIdsRef.current = {};
     try {
       window.localStorage.removeItem(APP_STATE_KEY);
@@ -333,12 +375,30 @@ export default function EmbedDemoPage() {
       /* no-op */
     }
     setShowNudge(true);
-    emitRunbookSuggestion("Demo state reset. Ready to guide from step one.");
+    setStatus("Ready to guide");
+    addActivity("Demo reset");
   };
+
+  const highlightRecommended = useCallback((feature: string | null) => {
+    if (!feature) return;
+    setTourActive(false);
+    setTourHighlightFeature(feature === "create-workflow" ? "workflow-builder" : feature);
+  }, []);
+
+  const showInterrupt = useCallback(
+    (message: string, targetFeature: string | null) => {
+      setInterrupt({ type: "warning", message, targetFeature, primaryAction: "guide" });
+      setStatus(message);
+      highlightRecommended(targetFeature);
+    },
+    [highlightRecommended, setStatus]
+  );
 
   const connectGithub = () => {
     setAppState((s) => ({ ...s, githubConnected: true }));
     setTourHighlightFeature("github-card");
+    setStatus("Nice - GitHub connected. Next: create an API key.");
+    addActivity("GitHub connected");
     if (tourActive && currentTourStep?.id === "connect-github") advanceTourAfterSuccess(currentTourStep);
     else if (tourActive && currentTourStep && stepComplete) {
       advanceTourAfterSuccess(currentTourStep);
@@ -350,6 +410,8 @@ export default function EmbedDemoPage() {
     setApiKeyValue(token);
     setAppState((s) => ({ ...s, apiKeyCreated: true }));
     setTourHighlightFeature("api-keys");
+    setStatus("Key created. Next: build your first workflow.");
+    addActivity("API key generated");
     if (tourActive && currentTourStep?.id === "create-api-key") advanceTourAfterSuccess(currentTourStep);
     else if (tourActive && currentTourStep && stepComplete) {
       advanceTourAfterSuccess(currentTourStep);
@@ -360,6 +422,8 @@ export default function EmbedDemoPage() {
     setAppState((s) => ({ ...s, workflowCreated: true }));
     setShowWorkflowModal(false);
     setTourHighlightFeature("workflow-builder");
+    setStatus("Workflow created. Next: deploy to staging.");
+    addActivity("Workflow created");
     if (tourActive && currentTourStep?.id === "build-workflow") advanceTourAfterSuccess(currentTourStep);
     else if (tourActive && currentTourStep && stepComplete) {
       advanceTourAfterSuccess(currentTourStep);
@@ -368,15 +432,67 @@ export default function EmbedDemoPage() {
 
   const deployStaging = () => {
     setDeploymentStatus("deploying");
+    setStatus("Deploying...");
+    addActivity("Deploy started");
     window.setTimeout(() => {
       setDeploymentStatus("healthy");
       setAppState((s) => ({ ...s, deployed: true }));
       setTourHighlightFeature("deployments");
+      addActivity("Staging healthy");
+      addActivity("Assistant activated on staging");
+      addActivity("Workflow ready to guide users");
+      setWidgetPulse(true);
+      window.dispatchEvent(new CustomEvent("runbook-widget-pulse", { detail: true }));
+      setStatus("Your assistant is live. Ask what users can do here.");
       if (tourActive && currentTourStep?.id === "deploy-staging") advanceTourAfterSuccess(currentTourStep);
       else if (tourActive && currentTourStep && stepComplete) {
         advanceTourAfterSuccess(currentTourStep);
       }
     }, 900);
+  };
+
+  const handleUserIntent = (
+    intentId: "connect-github" | "create-api-key" | "new-workflow" | "deploy" | "open-builder" | "manage-integrations"
+  ): boolean => {
+    if (intentId === "connect-github") {
+      setInterrupt(null);
+      connectGithub();
+      return true;
+    }
+    if (intentId === "create-api-key") {
+      if (!appState.githubConnected) {
+        showInterrupt("Connect your source first, then create the key.", "integrations");
+        return false;
+      }
+      setInterrupt(null);
+      createApiKey();
+      return true;
+    }
+    if (intentId === "new-workflow" || intentId === "open-builder") {
+      if (!appState.githubConnected) {
+        showInterrupt("Connect GitHub first so your workflow has a trigger.", "integrations");
+        return false;
+      }
+      setInterrupt(null);
+      setShowWorkflowModal(true);
+      setStatus("Create the workflow");
+      return true;
+    }
+    if (intentId === "deploy") {
+      if (!appState.workflowCreated) {
+        showInterrupt("Almost — build a workflow before deploying.", "create-workflow");
+        return false;
+      }
+      setInterrupt(null);
+      deployStaging();
+      return true;
+    }
+    if (intentId === "manage-integrations") {
+      setInterrupt(null);
+      setShowIntegrationsPanel(true);
+      return true;
+    }
+    return true;
   };
 
   const outlinedFeature = useMemo(
@@ -398,7 +514,7 @@ export default function EmbedDemoPage() {
             <button
               type="button"
               onClick={() => {
-                emitRunbookSuggestion("You can connect tools, create keys, build, then deploy.");
+                setStatus(nextAction.message);
                 setShowNudge(false);
               }}
               className="rounded-md border border-indigo-400/50 px-2 py-1 text-xs text-indigo-100"
@@ -412,13 +528,72 @@ export default function EmbedDemoPage() {
                 setTourActive(true);
                 setShowNudge(false);
                 const startStep = TOUR_STEPS[firstIncompleteTourStepIndex(appState)];
-                emitRunbookSuggestion(`Guiding: ${startStep.title}.`);
+                setStatus(`Guiding: ${startStep.title}`);
               }}
               className="rounded-md bg-indigo-500 px-2 py-1 text-xs font-semibold text-white"
             >
               Start guided tour
             </button>
             <button type="button" onClick={dismissNudge} className="ml-auto text-xs text-slate-400 hover:text-slate-200">
+              Dismiss
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      {showCompletionBanner ? (
+        <div className="fixed bottom-24 right-6 z-[2147483000] w-[320px] rounded-xl border border-emerald-400/40 bg-slate-900/95 p-3 text-sm text-emerald-100 shadow-2xl">
+          <p className="font-semibold">You are ready to launch.</p>
+          <p className="mt-1 text-xs text-emerald-200/90">Workflow onboarding is complete and all checklist steps are done.</p>
+          <div className="mt-3 flex gap-2">
+            <button
+              type="button"
+              onClick={() => setShowCompletionBanner(false)}
+              className="rounded-md border border-emerald-300/40 px-2 py-1 text-xs"
+            >
+              Dismiss
+            </button>
+            <button
+              type="button"
+              onClick={resetDemoState}
+              className="rounded-md bg-emerald-500 px-2 py-1 text-xs font-semibold text-white"
+            >
+              Restart demo
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                window.dispatchEvent(new CustomEvent("runbook-open-widget"));
+                window.dispatchEvent(new CustomEvent("runbook-send-prompt", { detail: "What can I do here?" }));
+              }}
+              className={`rounded-md px-2 py-1 text-xs font-semibold text-white ${widgetPulse ? "bg-indigo-500 animate-pulse" : "bg-indigo-500"}`}
+            >
+              Try live assistant
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      {interrupt ? (
+        <div className="fixed bottom-24 left-6 z-[2147483000] w-[320px] rounded-xl border border-amber-400/40 bg-slate-900/95 p-3 text-sm text-amber-100 shadow-2xl">
+          <p className="font-semibold">{interrupt.message}</p>
+          <div className="mt-3 flex gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setTourStepIndex(firstIncompleteTourStepIndex(appState));
+                setTourActive(true);
+                setInterrupt(null);
+              }}
+              className="rounded-md bg-amber-500 px-2 py-1 text-xs font-semibold text-slate-900"
+            >
+              Guide me
+            </button>
+            <button
+              type="button"
+              onClick={() => setInterrupt(null)}
+              className="rounded-md border border-amber-300/40 px-2 py-1 text-xs"
+            >
               Dismiss
             </button>
           </div>
@@ -436,7 +611,7 @@ export default function EmbedDemoPage() {
           <p className="mt-1 text-xl font-bold text-white">Create Workflow</p>
           <button
             type="button"
-            onClick={() => setShowWorkflowModal(true)}
+            onClick={() => handleUserIntent("new-workflow")}
             data-tour-target="create-workflow-button"
             className="mt-3 inline-block rounded-lg bg-indigo-500 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-400"
           >
@@ -466,7 +641,7 @@ export default function EmbedDemoPage() {
           <p className="mt-1 text-2xl font-bold text-emerald-300">
             {deploymentStatus === "healthy" ? "Staging healthy" : deploymentStatus === "deploying" ? "Deploying..." : "Ready to deploy"}
           </p>
-          <button type="button" onClick={deployStaging} className="mt-2 rounded-lg border border-white/20 px-3 py-1 text-xs">
+          <button type="button" onClick={() => handleUserIntent("deploy")} className="mt-2 rounded-lg border border-white/20 px-3 py-1 text-xs">
             Deploy to staging
           </button>
         </FeatureCard>
@@ -480,7 +655,7 @@ export default function EmbedDemoPage() {
         >
           <p className="text-xs uppercase tracking-wide text-slate-400">API Keys</p>
           <p className="mt-1 text-xs text-slate-300">{apiKeyValue ? `Latest: ${apiKeyValue}` : "No key generated yet"}</p>
-          <button type="button" onClick={createApiKey} className="mt-3 inline-block rounded-lg border border-white/20 px-3 py-1.5 text-xs font-semibold hover:border-white/40">
+          <button type="button" onClick={() => handleUserIntent("create-api-key")} className="mt-3 inline-block rounded-lg border border-white/20 px-3 py-1.5 text-xs font-semibold hover:border-white/40">
             Generate key
           </button>
         </FeatureCard>
@@ -496,7 +671,14 @@ export default function EmbedDemoPage() {
         >
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold">Workflow Builder</h2>
-            <Link href="/embed-demo/workflows" className="rounded-lg border border-indigo-400/40 bg-indigo-500/15 px-3 py-1 text-xs font-semibold text-indigo-100">
+            <Link
+              href="/embed-demo/workflows"
+              onClick={(event) => {
+                const allowed = handleUserIntent("open-builder");
+                if (!allowed) event.preventDefault();
+              }}
+              className="rounded-lg border border-indigo-400/40 bg-indigo-500/15 px-3 py-1 text-xs font-semibold text-indigo-100"
+            >
               Open full builder
             </Link>
           </div>
@@ -529,14 +711,14 @@ export default function EmbedDemoPage() {
           >
             <div className="mb-2 flex items-center justify-between">
               <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-400">Integrations</h3>
-              <button type="button" onClick={() => setShowIntegrationsPanel(true)} className="rounded-md border border-white/20 px-2 py-1 text-xs">
+              <button type="button" onClick={() => handleUserIntent("manage-integrations")} className="rounded-md border border-white/20 px-2 py-1 text-xs">
                 Manage
               </button>
             </div>
             <ul className="mt-3 space-y-2 text-sm" data-runbook-feature="github-card" data-runbook-title="GitHub integration" data-runbook-description="Connect GitHub so workflows can trigger from commits and pull requests." data-tour-target="github-integration-card">
               <li className="flex items-center justify-between rounded-lg bg-slate-950/60 px-3 py-2">
                 <span>GitHub</span>
-                <button type="button" onClick={connectGithub} className={`rounded-md px-2 py-1 text-xs ${appState.githubConnected ? "bg-emerald-500/20 text-emerald-200" : "bg-amber-500/20 text-amber-200"}`}>
+                <button type="button" onClick={() => handleUserIntent("connect-github")} className={`rounded-md px-2 py-1 text-xs ${appState.githubConnected ? "bg-emerald-500/20 text-emerald-200" : "bg-amber-500/20 text-amber-200"}`}>
                   {appState.githubConnected ? "Connected" : "Connect"}
                 </button>
               </li>
@@ -572,6 +754,18 @@ export default function EmbedDemoPage() {
         >
           Reset demo state
         </button>
+      </FeatureCard>
+
+      <FeatureCard
+        feature="recent-activity"
+        title="Recent activity"
+        description="Live actions captured during setup."
+        className="rounded-2xl border border-white/10 bg-slate-900 p-4"
+      >
+        <p className="text-xs text-slate-400">{widgetStatus}</p>
+        <ul className="mt-2 space-y-1 text-xs text-slate-300">
+          {activityFeed.length === 0 ? <li>No activity yet.</li> : activityFeed.map((item) => <li key={item.id}>- {item.text}</li>)}
+        </ul>
       </FeatureCard>
 
       {showIntegrationsPanel ? (
@@ -639,7 +833,7 @@ export default function EmbedDemoPage() {
                 disabled={!stepComplete}
                 className={`rounded-md px-2 py-1 ${stepComplete ? "bg-emerald-500 text-white" : "bg-slate-700 text-slate-300"}`}
               >
-                {stepComplete ? "Continue" : "Waiting for action..."}
+                {stepComplete ? "Continue" : currentTourStep?.id === "connect-github" ? "Click Connect to continue" : currentTourStep?.id === "create-api-key" ? "Generate a key to move forward" : currentTourStep?.id === "build-workflow" ? "Create the workflow" : "Deploy when ready"}
               </button>
               <button type="button" onClick={() => setTourActive(false)} className="rounded-md border border-white/20 px-2 py-1">
                 {tourStepIndex === TOUR_STEPS.length - 1 ? "Done" : "Skip"}

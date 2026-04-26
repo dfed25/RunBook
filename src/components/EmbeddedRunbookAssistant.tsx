@@ -136,6 +136,8 @@ export function EmbeddedRunbookAssistant({
   const [activeSource, setActiveSource] = useState<SourceItem | null>(null);
   const [hoveredFeature, setHoveredFeature] = useState<HoveredFeatureContext | null>(null);
   const [externalFeature, setExternalFeature] = useState<ExternalFeatureContext | null>(null);
+  const [statusChip, setStatusChip] = useState("Ready to guide");
+  const [pulseLaunch, setPulseLaunch] = useState(false);
   const highlightCleanupRef = useRef<() => void>(() => undefined);
   const chatBodyRef = useRef<HTMLDivElement | null>(null);
   const hoveredFeatureRef = useRef<HoveredFeatureContext | null>(null);
@@ -162,11 +164,29 @@ export function EmbeddedRunbookAssistant({
       if (!text) return;
       setMessages((m) => [...m, { role: "assistant", text }]);
     };
+    const onStatus = (evt: Event) => {
+      const detail = String((evt as CustomEvent<string>).detail || "").trim();
+      if (detail) setStatusChip(detail);
+    };
+    const onOpen = () => setOpen(true);
+    const onPulse = (evt: Event) => {
+      const shouldPulse = Boolean((evt as CustomEvent<boolean>).detail);
+      setPulseLaunch(shouldPulse);
+      if (shouldPulse) {
+        window.setTimeout(() => setPulseLaunch(false), 3000);
+      }
+    };
     window.addEventListener("runbook-active-feature", onExternalFeature as EventListener);
     window.addEventListener("runbook-assistant-suggestion", onSuggestion as EventListener);
+    window.addEventListener("runbook-assistant-status", onStatus as EventListener);
+    window.addEventListener("runbook-open-widget", onOpen as EventListener);
+    window.addEventListener("runbook-widget-pulse", onPulse as EventListener);
     return () => {
       window.removeEventListener("runbook-active-feature", onExternalFeature as EventListener);
       window.removeEventListener("runbook-assistant-suggestion", onSuggestion as EventListener);
+      window.removeEventListener("runbook-assistant-status", onStatus as EventListener);
+      window.removeEventListener("runbook-open-widget", onOpen as EventListener);
+      window.removeEventListener("runbook-widget-pulse", onPulse as EventListener);
     };
   }, []);
 
@@ -332,21 +352,67 @@ export function EmbeddedRunbookAssistant({
           highlightCleanupRef.current = highlightAttempt.cleanup;
         }
       } catch {
-        setMessages((m) => [...m, { role: "assistant", text: "Network error — try again." }]);
+        const local = buildLocalFallback(q, externalFeature || hoveredFeatureRef.current);
+        setMessages((m) => [
+          ...m,
+          {
+            role: "assistant",
+            answer: local.answer,
+            bullets: local.bullets,
+            steps: local.steps,
+            suggestions: local.suggestions
+          }
+        ]);
       } finally {
         setLoading(false);
       }
     },
     [base, projectId, manualSources, effectiveImportedDocs, externalFeature]
   );
+
+  useEffect(() => {
+    const onPrompt = (evt: Event) => {
+      const detail = String((evt as CustomEvent<string>).detail || "").trim();
+      if (!detail) return;
+      setOpen(true);
+      void send(detail);
+    };
+    window.addEventListener("runbook-send-prompt", onPrompt as EventListener);
+    return () => window.removeEventListener("runbook-send-prompt", onPrompt as EventListener);
+  }, [send]);
   const triggerGuideMe = () => {
     window.dispatchEvent(new CustomEvent("runbook-start-tour"));
     setMessages((m) => [...m, { role: "assistant", text: "Starting a guided tour now." }]);
   };
 
   const triggerWhatNext = () => {
+    const appState =
+      typeof window !== "undefined"
+        ? ((window as Window & { __runbookAppState?: Record<string, unknown> }).__runbookAppState ?? {})
+        : {};
+    const githubConnected = Boolean(appState.githubConnected);
+    const apiKeyCreated = Boolean(appState.apiKeyCreated);
+    const workflowCreated = Boolean(appState.workflowCreated);
+    const deployed = Boolean(appState.deployed);
+    const answer = !githubConnected
+      ? "Connect GitHub next."
+      : !apiKeyCreated
+        ? "Create an API key next."
+        : !workflowCreated
+          ? "Build your first workflow next."
+          : !deployed
+            ? "Deploy to staging next."
+            : "You are ready to launch.";
     window.dispatchEvent(new CustomEvent("runbook-what-next"));
-    setMessages((m) => [...m, { role: "assistant", text: "I highlighted your best next step." }]);
+    setMessages((m) => [
+      ...m,
+      {
+        role: "assistant",
+        answer,
+        bullets: ["It moves setup forward", "It unlocks the next step", "I highlighted where to click"],
+        suggestions: ["Guide me", "What can I do here?"]
+      }
+    ]);
   };
 
 
@@ -396,7 +462,7 @@ export function EmbeddedRunbookAssistant({
       <button
         type="button"
         aria-label="Open Runbook assistant"
-        className={`flex h-14 w-14 items-center justify-center rounded-full text-sm font-bold text-white shadow-xl transition hover:brightness-110 ${fixedLaunch}`}
+        className={`flex h-14 w-14 items-center justify-center rounded-full text-sm font-bold text-white shadow-xl transition hover:brightness-110 ${fixedLaunch} ${pulseLaunch ? "animate-pulse ring-4 ring-indigo-300/40" : ""}`}
         style={launchStyle}
         onClick={() => {
           if (!open) {
@@ -427,18 +493,13 @@ export function EmbeddedRunbookAssistant({
               ×
             </button>
           </div>
-          {externalFeature || hoveredFeature ? (
-            <div className="border-b border-slate-800 px-3 py-1.5 text-[10px] text-slate-300">
-              Looking at:{" "}
-              <span className="font-semibold text-emerald-300">
-                {externalFeature?.title ||
-                  externalFeature?.feature ||
-                  hoveredFeature?.title ||
-                  hoveredFeature?.feature ||
-                  "Current feature"}
-              </span>
-            </div>
-          ) : null}
+          <div className="border-b border-slate-800 px-3 py-1.5 text-[10px] text-slate-300">
+            <span className="font-semibold text-emerald-300">
+              {externalFeature?.title || hoveredFeature?.title
+                ? `Looking at: ${externalFeature?.title || hoveredFeature?.title}`
+                : statusChip}
+            </span>
+          </div>
           {showQuickActions ? (
             <div className="grid grid-cols-2 gap-1.5 border-b border-slate-800 px-2 py-2">
               <button
@@ -611,6 +672,36 @@ export function EmbeddedRunbookAssistant({
   );
 }
 type HighlightAttempt = { cleanup: (() => void) | null; lowConfidence: boolean };
+
+function buildLocalFallback(
+  question: string,
+  hovered: HoveredFeatureContext | ExternalFeatureContext | null
+): { answer: string; bullets: string[]; steps: string[]; suggestions: string[] } {
+  const q = question.toLowerCase();
+  const hoverName = hovered?.title || hovered?.feature || "this feature";
+  if (q.includes("what is this") || q.includes("explain this")) {
+    return {
+      answer: `You are looking at ${hoverName}.`,
+      bullets: ["Use it to advance setup", "Follow the highlighted next action", "Ask for step-by-step guidance"],
+      steps: ["Click the highlighted section.", "Complete the visible action.", "Ask What should I do next?."],
+      suggestions: ["Guide me", "What should I do next?"]
+    };
+  }
+  if (q.includes("what can i do here")) {
+    return {
+      answer: "Here is what you can do here:",
+      bullets: ["Connect sources", "Build a workflow", "Deploy the assistant"],
+      steps: ["Connect GitHub.", "Create key and workflow.", "Deploy to staging."],
+      suggestions: ["Guide me", "What should I do next?"]
+    };
+  }
+  return {
+    answer: "I can still guide you even without AI.",
+    bullets: ["Guide setup step by step", "Highlight the next action", "Explain the current feature"],
+    steps: ["Ask What should I do next?.", "Click the highlighted action.", "Ask again after each completion."],
+    suggestions: ["Guide me", "What should I do next?", "What can I do here?"]
+  };
+}
 
 function maybeHighlightElementForQuestion(question: string, data: ChatResponse): HighlightAttempt {
   if (typeof document === "undefined") return { cleanup: () => undefined, lowConfidence: false };
