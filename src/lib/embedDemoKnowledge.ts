@@ -126,6 +126,36 @@ function inferActionsFromContext(ctx: string, hovered: string): { bullets: strin
   };
 }
 
+function inferNextActionFromContext(ctx: string): { answer: string; feature: string; step: string } {
+  const page = String(ctx || "");
+  if (!/github.*connected/i.test(page) && /github/i.test(page)) {
+    return {
+      answer: "Connect GitHub first, then continue with setup.",
+      feature: "integrations",
+      step: "Open Integrations and connect GitHub."
+    };
+  }
+  if (!/rk_live_|latest:/i.test(page) && /api key|api keys/i.test(page)) {
+    return {
+      answer: "Generate a development API key next.",
+      feature: "api-keys",
+      step: "Open API Keys and create a development key."
+    };
+  }
+  if (!/staging healthy/i.test(page) && /deploy|deployment/i.test(page)) {
+    return {
+      answer: "Deploy to staging to validate your flow.",
+      feature: "deployments",
+      step: "Open Deployments and run a staging deploy."
+    };
+  }
+  return {
+    answer: "Build your first workflow now.",
+    feature: "workflow-builder",
+    step: "Open Workflow Builder and create one trigger-action flow."
+  };
+}
+
 /** Deterministic demo responses for hackathon reliability. */
 export function buildNorthstarDemoResponse(message: string, pageContext: string, hoveredFeature?: string): DemoChatResult {
   const m = message.toLowerCase().trim();
@@ -246,17 +276,17 @@ export function buildNorthstarDemoResponse(message: string, pageContext: string,
     m.includes("start") ||
     m.includes("week one")
   ) {
+    const next = inferNextActionFromContext(ctx);
     return createResult({
-      answer: "Start with product setup milestones in this order.",
-      bullets: ["Connect integrations", "Create API key", "Build and deploy first workflow"],
+      answer: next.answer,
+      bullets: [`Focus on ${next.feature} first`, "Complete one action before moving on", "Ask again for the next step"],
       sources: product
         ? [{ title: product.title, excerpt: excerptFromContent(product.content), url: undefined }]
         : [],
       steps: [
-        "Open Integrations and connect GitHub or Slack first.",
-        "Go to API Keys and generate a development key.",
-        "Open Workflows, create your first workflow, and run a test event.",
-        "Deploy to staging, then review Settings for safe defaults and permissions."
+        next.step,
+        "Confirm the status updates successfully.",
+        "Ask What should I do next? to continue."
       ]
     });
   }

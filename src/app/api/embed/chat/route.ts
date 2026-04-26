@@ -107,17 +107,18 @@ function sanitizeDocuments(raw: unknown): { title: string; content: string }[] {
 
 function normalizePageContext(body: ChatBody): string {
   const hovered = sanitizeHoveredFeature(body.hoveredFeature);
+  const pageBody = typeof body.pageContext === "string" ? body.pageContext.trim() : "";
+  const pageSection = [
+    "Page context:",
+    `Page URL: ${body.pageUrl || "n/a"}`,
+    `Page title: ${body.pageTitle || "n/a"}`,
+    pageBody || "(none)"
+  ].join("\n");
+  const hoverSection = ["Hovered feature context:", hovered || "(none)"].join("\n");
   if (typeof body.pageContext === "string" && body.pageContext.trim()) {
-    return [
-      `Page URL: ${body.pageUrl || "n/a"}`,
-      `Page title: ${body.pageTitle || "n/a"}`,
-      body.pageContext.trim()
-    ]
-      .filter(Boolean)
-      .join("\n");
+    return [pageSection, hoverSection].join("\n\n");
   }
-  const parts = [body.pageUrl, body.pageTitle, hovered].filter(Boolean) as string[];
-  return parts.join("\n");
+  return [pageSection, hoverSection].join("\n\n");
 }
 
 function sanitizeHoveredFeature(raw: unknown): string {

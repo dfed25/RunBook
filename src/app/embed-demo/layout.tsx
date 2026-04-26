@@ -90,6 +90,12 @@ function compactSentence(text: string, max = 170): string {
   return text.replace(/\s+/g, " ").trim().slice(0, max);
 }
 
+function firstSentence(text: string): string {
+  const clean = String(text || "").replace(/\s+/g, " ").trim();
+  const match = clean.match(/^.*?[.!?](?:\s|$)/);
+  return (match ? match[0] : clean).trim();
+}
+
 function tokenize(text: string): string[] {
   return String(text)
     .toLowerCase()
@@ -160,8 +166,8 @@ function buildFeatureExplanationMap(docs: ImportedDocument[]): Record<string, st
     const bestSentence = extractPrimarySentence(sourceDoc.content || "", hints);
     if (!bestSentence) continue;
     const signals = extractCodeSignals(sourceDoc);
-    const signalText = signals.length > 0 ? ` ${signals.join(" · ")}.` : "";
-    out[feature] = `${compactSentence(bestSentence)}.${signalText}`.trim();
+    const signalText = signals.length > 0 ? ` (${signals.join(" · ")})` : "";
+    out[feature] = firstSentence(`${compactSentence(bestSentence)}${signalText}`);
   }
   return out;
 }

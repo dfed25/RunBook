@@ -21,6 +21,7 @@ type ChatResponse = {
 
 type SourceItem = { title: string; excerpt?: string; url?: string };
 type HoveredFeatureContext = { feature?: string; title?: string; description?: string };
+type ExternalFeatureContext = { feature?: string; title?: string; description?: string };
 
 type Message =
   | { role: "user"; text: string }
@@ -133,6 +134,7 @@ export function EmbeddedRunbookAssistant({
   const [completedStepsByMessage, setCompletedStepsByMessage] = useState<Record<string, Record<number, boolean>>>({});
   const [activeSource, setActiveSource] = useState<SourceItem | null>(null);
   const [hoveredFeature, setHoveredFeature] = useState<HoveredFeatureContext | null>(null);
+  const [externalFeature, setExternalFeature] = useState<ExternalFeatureContext | null>(null);
   const highlightCleanupRef = useRef<() => void>(() => undefined);
   const chatBodyRef = useRef<HTMLDivElement | null>(null);
   const hoveredFeatureRef = useRef<HoveredFeatureContext | null>(null);
@@ -143,6 +145,30 @@ export function EmbeddedRunbookAssistant({
       if (hoverDebounceRef.current) window.clearTimeout(hoverDebounceRef.current);
     };
   }, []);
+
+  useEffect(() => {
+    const onExternalFeature = (evt: Event) => {
+      const detail = (evt as CustomEvent<ExternalFeatureContext | null>).detail;
+      if (!detail || (!detail.feature && !detail.title && !detail.description)) {
+        setExternalFeature(null);
+        return;
+      }
+      setExternalFeature(detail);
+    };
+    const onSuggestion = (evt: Event) => {
+      const detail = (evt as CustomEvent<string>).detail;
+      const text = String(detail || "").trim();
+      if (!text) return;
+      setMessages((m) => [...m, { role: "assistant", text }]);
+      if (!open) setOpen(true);
+    };
+    window.addEventListener("runbook-active-feature", onExternalFeature as EventListener);
+    window.addEventListener("runbook-assistant-suggestion", onSuggestion as EventListener);
+    return () => {
+      window.removeEventListener("runbook-active-feature", onExternalFeature as EventListener);
+      window.removeEventListener("runbook-assistant-suggestion", onSuggestion as EventListener);
+    };
+  }, [open]);
 
   useEffect(() => {
     hoveredFeatureRef.current = hoveredFeature;
@@ -222,6 +248,7 @@ export function EmbeddedRunbookAssistant({
             ? document.body.innerText.replace(/\s+/g, " ").trim().slice(0, 10_000)
             : "";
         const pageContext = pageContextOverride || pageBody;
+        const activeFeature = externalFeature || hoveredFeatureRef.current;
         const res = await fetch(`${base}/api/embed/chat`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -231,7 +258,7 @@ export function EmbeddedRunbookAssistant({
             pageContext,
             pageTitle: typeof document !== "undefined" ? document.title : "",
             pageUrl: typeof window !== "undefined" ? window.location.href : "",
-            hoveredFeature: hoveredFeatureRef.current,
+            hoveredFeature: activeFeature,
             customSources,
             documents: effectiveImportedDocs
           })
@@ -302,8 +329,18 @@ export function EmbeddedRunbookAssistant({
         setLoading(false);
       }
     },
-    [base, projectId, manualSources, effectiveImportedDocs]
+    [base, projectId, manualSources, effectiveImportedDocs, externalFeature]
   );
+  const triggerGuideMe = () => {
+    window.dispatchEvent(new CustomEvent("runbook-start-tour"));
+    setMessages((m) => [...m, { role: "assistant", text: "Starting a guided tour now." }]);
+  };
+
+  const triggerWhatNext = () => {
+    window.dispatchEvent(new CustomEvent("runbook-what-next"));
+    setMessages((m) => [...m, { role: "assistant", text: "I highlighted your best next step." }]);
+  };
+
 
   const openPanel = useCallback(() => {
     setOpen(true);
@@ -382,11 +419,15 @@ export function EmbeddedRunbookAssistant({
               ×
             </button>
           </div>
-          {hoveredFeature ? (
+          {externalFeature || hoveredFeature ? (
             <div className="border-b border-slate-800 px-3 py-1.5 text-[10px] text-slate-300">
               Looking at:{" "}
               <span className="font-semibold text-emerald-300">
-                {hoveredFeature.title || hoveredFeature.feature || "Current feature"}
+                {externalFeature?.title ||
+                  externalFeature?.feature ||
+                  hoveredFeature?.title ||
+                  hoveredFeature?.feature ||
+                  "Current feature"}
               </span>
             </div>
           ) : null}
@@ -398,6 +439,20 @@ export function EmbeddedRunbookAssistant({
                 onClick={() => void send("What can I do here?")}
               >
                 What can I do here?
+              </button>
+              <button
+                type="button"
+                className="rounded-md border border-indigo-500/40 bg-indigo-950/50 px-2.5 py-1.5 text-[10px] font-medium text-indigo-100 hover:bg-indigo-900/70"
+                onClick={triggerGuideMe}
+              >
+                Guide me
+              </button>
+              <button
+                type="button"
+                className="rounded-md border border-indigo-500/40 bg-indigo-950/50 px-2.5 py-1.5 text-[10px] font-medium text-indigo-100 hover:bg-indigo-900/70"
+                onClick={triggerWhatNext}
+              >
+                What should I do next?
               </button>
               {chips.map((c) => (
                 <button
@@ -476,7 +531,9 @@ export function EmbeddedRunbookAssistant({
                         key={`${messageId}-q-${actionIdx}-${action}`}
                         type="button"
                         onClick={() => {
-                          if (isExplainPageIntent(action)) explainThisPage();
+                          if (/^guide me\b/i.test(action)) triggerGuideMe();
+                          else if (/what should i do next/i.test(action) || /what can i do next/i.test(action)) triggerWhatNext();
+                          else if (isExplainPageIntent(action)) explainThisPage();
                           else void send(action);
                         }}
                         className="rounded-full border border-slate-500/50 px-2 py-1 text-[10px] font-medium text-slate-200 hover:bg-slate-700"
