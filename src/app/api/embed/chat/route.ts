@@ -106,27 +106,31 @@ function sanitizeDocuments(raw: unknown): { title: string; content: string }[] {
 }
 
 function normalizePageContext(body: ChatBody): string {
-  const hovered = sanitizeHoveredFeature(body.hoveredFeature);
   if (typeof body.pageContext === "string" && body.pageContext.trim()) {
     return [
       `Page URL: ${body.pageUrl || "n/a"}`,
       `Page title: ${body.pageTitle || "n/a"}`,
-      hovered ? `Hovered feature: ${hovered}` : "",
       body.pageContext.trim()
     ]
       .filter(Boolean)
       .join("\n");
   }
-  const parts = [body.pageUrl, body.pageTitle, hovered].filter(Boolean) as string[];
+  const parts = [body.pageUrl, body.pageTitle].filter(Boolean) as string[];
   return parts.join("\n");
 }
 
 function sanitizeHoveredFeature(raw: unknown): string {
   if (!raw || typeof raw !== "object") return "";
   const obj = raw as Record<string, unknown>;
-  const feature = String(obj.feature || "").trim();
-  const title = String(obj.title || "").trim();
-  const description = String(obj.description || "").trim().slice(0, 400);
+  const asStr = (v: unknown, limit: number): string =>
+    (typeof v === "string" ? v : "")
+      .replace(/[\u0000-\u001f]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, limit);
+  const feature = asStr(obj.feature, 120);
+  const title = asStr(obj.title, 120);
+  const description = asStr(obj.description, 400);
   const joined = [title || feature, description].filter(Boolean).join(" — ");
   return joined.slice(0, 520);
 }

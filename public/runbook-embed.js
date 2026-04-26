@@ -20,8 +20,7 @@
   var apiKey = script.getAttribute("data-key") || "";
   var includeBodyText =
     script.hasAttribute("data-include-body-text") ||
-    !!document.querySelector('script[src*="runbook-embed.js"][data-include-body-text]') ||
-    true;
+    !!document.querySelector('script[src*="runbook-embed.js"][data-include-body-text]');
   var originAttr = (script.getAttribute("data-runbook-origin") || "").trim().replace(/\/$/, "");
   var base = originAttr || script.src.replace(/\/runbook-embed\.js.*$/, "");
   if (!projectId) {
@@ -252,7 +251,13 @@
           description: (el.getAttribute("data-runbook-description") || "").trim()
         });
       }
-      function handleOut() {
+      function handleOut(evt) {
+        var from = evt.target instanceof Element ? evt.target : null;
+        var to = evt.relatedTarget instanceof Element ? evt.relatedTarget : null;
+        if (!from) return;
+        var fromFeature = from.closest("[data-runbook-feature],[data-runbook-title],[data-runbook-description]");
+        if (!fromFeature) return;
+        if (to && fromFeature.contains(to)) return;
         updateHoveredFeature(null);
       }
       document.addEventListener("pointerover", handleOver, true);
@@ -406,8 +411,6 @@
     }
 
     function pageContext() {
-      var t = document.title || "";
-      var u = location.href || "";
       var meta = "";
       var m = document.querySelector('meta[name="description"]');
       if (m) meta = m.getAttribute("content") || "";
@@ -445,7 +448,7 @@
           bodyText = "";
         }
       }
-      return [u, t, meta, headings, bodyText].filter(Boolean).join("\n");
+      return [meta, headings, bodyText].filter(Boolean).join("\n");
     }
 
     function addBot(html) {

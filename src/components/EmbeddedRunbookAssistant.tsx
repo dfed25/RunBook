@@ -213,11 +213,7 @@ export function EmbeddedRunbookAssistant({
           typeof document !== "undefined"
             ? document.body.innerText.replace(/\s+/g, " ").trim().slice(0, 10_000)
             : "";
-        const pageContext =
-          pageContextOverride ||
-          (typeof window !== "undefined"
-            ? [window.location.href, document.title, pageBody].filter(Boolean).join("\n")
-            : pageBody);
+        const pageContext = pageContextOverride || pageBody;
         const res = await fetch(`${base}/api/embed/chat`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
