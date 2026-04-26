@@ -319,6 +319,7 @@
         { id: "d1-done", label: "Return to Overview", target: "[data-runbook-action='nav-overview']", successText: "Northstar tour complete" }
       ];
     </script>
+    <!-- One embed only: northstar-demo needs no API key. A second tag with another data-project-id (no data-key) triggers "Missing Bearer token" on /api/embed/chat. -->
     <script
       src="http://localhost:3000/runbook-embed.js"
       data-project-id="northstar-demo"
