@@ -72,6 +72,13 @@ function firstIncompleteTourStepIndex(state: AppState): number {
   return 0;
 }
 
+function createSecureTokenSuffix(length: number): string {
+  const bytes = new Uint8Array(Math.ceil(length / 2));
+  crypto.getRandomValues(bytes);
+  const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+  return hex.slice(0, length);
+}
+
 export default function EmbedDemoPage() {
   const [appState, setAppState] = useState<AppState>({
     githubConnected: false,
@@ -395,7 +402,7 @@ export default function EmbedDemoPage() {
   };
 
   const createApiKey = () => {
-    const token = `rk_live_${Math.random().toString(36).slice(2, 14)}`;
+    const token = `rk_live_${createSecureTokenSuffix(12)}`;
     setApiKeyValue(token);
     setAppState((s) => ({ ...s, apiKeyCreated: true }));
     setTourHighlightFeature("api-keys");

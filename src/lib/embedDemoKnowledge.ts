@@ -127,22 +127,28 @@ function inferActionsFromContext(ctx: string, hovered: string): { bullets: strin
 }
 
 function inferNextActionFromContext(ctx: string): { answer: string; feature: string; step: string } {
-  const page = String(ctx || "");
-  if (!/github.*connected/i.test(page) && /github/i.test(page)) {
+  const page = String(ctx || "").toLowerCase();
+  const hasGithub = page.includes("github");
+  const hasGithubConnected = hasGithub && page.includes("connected");
+  if (hasGithub && !hasGithubConnected) {
     return {
       answer: "Connect GitHub first, then continue with setup.",
       feature: "integrations",
       step: "Open Integrations and connect GitHub."
     };
   }
-  if (!/rk_live_|latest:/i.test(page) && /api key|api keys/i.test(page)) {
+  const hasApiKeyEvidence = page.includes("rk_live_") || page.includes("latest:");
+  const mentionsApiKeys = page.includes("api key") || page.includes("api keys");
+  if (!hasApiKeyEvidence && mentionsApiKeys) {
     return {
       answer: "Generate a development API key next.",
       feature: "api-keys",
       step: "Open API Keys and create a development key."
     };
   }
-  if (!/staging healthy/i.test(page) && /deploy|deployment/i.test(page)) {
+  const isStagingHealthy = page.includes("staging healthy");
+  const mentionsDeploy = page.includes("deploy") || page.includes("deployment");
+  if (!isStagingHealthy && mentionsDeploy) {
     return {
       answer: "Deploy to staging to validate your flow.",
       feature: "deployments",
