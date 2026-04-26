@@ -30,6 +30,9 @@
   }
 
   var DEMO_ID = "northstar-demo";
+  // Keep client caps aligned with server normalizeSteps/MAX_SOURCES in embedStructured.
+  var CLIENT_MAX_STEPS = 4;
+  var CLIENT_MAX_SOURCES = 3;
   function isLocationIntent(text) {
     return /(where|find|locate|click|open|go to|how do i|create account|sign up|signup|register|get started|log in|login)/i.test(
       String(text || "")
@@ -228,6 +231,7 @@
     var inp = foot.querySelector(".rb-inp");
     var sendBtn = foot.querySelector(".rb-send");
     var closeBtn = head.querySelector(".rb-close");
+    var hasStartedChat = false;
     var hoveredFeature = null;
     function updateHoveredFeature(next) {
       hoveredFeature = next;
@@ -334,7 +338,10 @@
         el.id || "",
         el.getAttribute("name") || "",
         el.getAttribute("placeholder") || "",
-        el.className || ""
+        el.getAttribute("class") || "",
+        el.getAttribute("data-runbook-feature") || "",
+        el.getAttribute("data-runbook-title") || "",
+        el.getAttribute("data-runbook-description") || ""
       ]
         .join(" ")
         .toLowerCase();
@@ -348,6 +355,8 @@
       });
       if (intentCompact && compactLabel.indexOf(intentCompact) !== -1) score += 8;
       if (/(create|sign\s*up|signup|register|get\s*started|start|continue|next)/i.test(label)) score += 3;
+      if (el.hasAttribute("data-runbook-feature")) score += 6;
+      if (el.hasAttribute("data-runbook-title")) score += 2;
       if (el.tagName === "BUTTON" || el.tagName === "A") score += 2;
       var rect = el.getBoundingClientRect();
       if (rect.width < 16 || rect.height < 10) score = 0;
@@ -359,10 +368,11 @@
       if (!tokens.length) return null;
       var intentCompact = compact(extractIntentPhrase(question));
       var selector =
-        "button,a,[role='button'],summary,label,h1,h2,h3,input,textarea,select,[data-testid],[aria-label],nav a";
+        "button,a,[role='button'],summary,label,h1,h2,h3,input,textarea,select,[data-testid],[aria-label],nav a,[data-runbook-feature]";
       var nodes = document.querySelectorAll(selector);
       var best = null;
       var bestScore = 0;
+      var secondBest = 0;
       for (var i = 0; i < nodes.length; i++) {
         var el = nodes[i];
         if (!el || !el.getBoundingClientRect) continue;
@@ -370,11 +380,15 @@
         if (rect.bottom < 0 || rect.top > window.innerHeight * 2) continue;
         var s = scoreCandidate(el, tokens, intentCompact);
         if (s > bestScore) {
+          secondBest = bestScore;
           bestScore = s;
           best = el;
+        } else if (s > secondBest) {
+          secondBest = s;
         }
       }
-      return bestScore >= 3 ? best : null;
+      if (bestScore < 3 || !best) return null;
+      return { element: best, highConfidence: bestScore >= 8 && bestScore - secondBest >= 2 };
     }
 
     function showPageOverlay(target, text) {
@@ -396,13 +410,20 @@
       ensurePageHighlightStyles();
       clearPageHighlight();
       var hint = [question || "", data.answer || "", (data.steps || []).join(" ")].join(" ");
-      var target = findBestElement(hint, question);
-      if (!target) {
+      var scored = findBestElement(hint, question);
+      if (!scored) {
         addBot(
           "<em>I couldn't confidently find that element on this page.</em><br/>Try the exact button/link text (e.g. <code>Create account</code>) or ask me to <strong>explain this page</strong>."
         );
         return;
       }
+      if (!scored.highConfidence) {
+        addBot(
+          "I found multiple possible matches. Tell me the exact button or link label (for example, <code>Create workflow</code> or <code>Connect Slack</code>) and I will highlight it."
+        );
+        return;
+      }
+      var target = scored.element;
       highlightedEl = target;
       target.classList.add("rb-highlight-target");
       target.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -465,22 +486,35 @@
       d.textContent = text;
       body.appendChild(d);
       body.scrollTop = body.scrollHeight;
+      if (!hasStartedChat) {
+        hasStartedChat = true;
+        chipsWrap.style.display = "none";
+      }
     }
 
     var open = false;
     function setOpen(v) {
       open = v;
-      if (v) panel.classList.add("open");
-      else panel.classList.remove("open");
+      if (v) {
+        panel.classList.add("open");
+        if (body.children.length <= 1) {
+          hasStartedChat = false;
+          chipsWrap.style.display = "";
+        }
+      } else {
+        panel.classList.remove("open");
+      }
     }
     btn.addEventListener("click", function () {
       setOpen(!open);
     });
     closeBtn.addEventListener("click", function () {
       setOpen(false);
+      hasStartedChat = false;
+      chipsWrap.style.display = "";
     });
 
-    suggested.forEach(function (label) {
+    suggested.slice(0, 3).forEach(function (label) {
       var c = document.createElement("button");
       c.type = "button";
       c.className = "rb-chip";
@@ -552,14 +586,14 @@
         }
         if (data.steps && data.steps.length) {
           html += '<ol class="rb-steps">';
-          data.steps.forEach(function (s) {
+          data.steps.slice(0, CLIENT_MAX_STEPS).forEach(function (s) {
             html += "<li>" + escapeHtml(s) + "</li>";
           });
           html += "</ol>";
         }
         if (data.sources && data.sources.length) {
           html += '<div class="rb-src"><strong>Sources</strong><br/>';
-          data.sources.forEach(function (s) {
+          data.sources.slice(0, CLIENT_MAX_SOURCES).forEach(function (s) {
             html += "· " + escapeHtml(s.title);
             var u = safeUrl(s.url);
             if (u) html += ' <a href="' + escapeHtml(u) + '" target="_blank" rel="noopener noreferrer" style="color:#c7d2fe">(open)</a>';

@@ -133,7 +133,6 @@ export function buildNorthstarDemoResponse(message: string, pageContext: string,
   const hovered = (hoveredFeature || "").trim();
 
   const eng = docById("engineering-setup");
-  const first = docById("first-week");
   const sec = docById("security-policy");
   const product = docById("product-overview");
   const expense = docById("expense-policy");
@@ -248,17 +247,16 @@ export function buildNorthstarDemoResponse(message: string, pageContext: string,
     m.includes("week one")
   ) {
     return createResult({
-      answer: "Start with first-week milestones in this order.",
-      bullets: ["Day 1 admin + intro", "Day 2 tooling setup", "Day 3-5 ship and review"],
-      sources: first
-        ? [{ title: first.title, excerpt: excerptFromContent(first.content), url: undefined }]
+      answer: "Start with product setup milestones in this order.",
+      bullets: ["Connect integrations", "Create API key", "Build and deploy first workflow"],
+      sources: product
+        ? [{ title: product.title, excerpt: excerptFromContent(product.content), url: undefined }]
         : [],
       steps: [
-        "Day 1: HR profile, Slack, manager intro, handbook (see First Week plan).",
-        "Day 2: Engineering environment + request GitHub access.",
-        "Day 3: Product overview + shadow a customer call recording.",
-        "Day 4: Small pull request + read the security policy.",
-        "Day 5: First-week retro with your manager and goals for week two."
+        "Open Integrations and connect GitHub or Slack first.",
+        "Go to API Keys and generate a development key.",
+        "Open Workflows, create your first workflow, and run a test event.",
+        "Deploy to staging, then review Settings for safe defaults and permissions."
       ]
     });
   }
@@ -317,19 +315,19 @@ export function buildNorthstarDemoResponse(message: string, pageContext: string,
     });
   }
 
-  // Default: blend product + first week
+  // Default: product onboarding journey
   const sources: { title: string; excerpt: string; url?: string }[] = [];
   if (product) sources.push({ title: product.title, excerpt: excerptFromContent(product.content) });
-  if (first) sources.push({ title: first.title, excerpt: excerptFromContent(first.content) });
 
   return createResult({
-    answer: "Here are the main things you can do right now.",
-    bullets: ["Set up local environment", "Get GitHub access", "Explore page capabilities"],
+    answer: "Here is the fastest way to get your onboarding flow live.",
+    bullets: ["Connect tools", "Generate API keys", "Publish first workflow"],
     sources,
     steps: [
-      "Check Getting Started for prerequisites.",
-      "Use Engineering Setup for tooling blockers.",
-      "Click Explain this page for guided discovery."
+      "Connect one source and one destination integration.",
+      "Generate a development API key and save it securely.",
+      "Create a workflow template and run a test event.",
+      "Deploy to staging and verify logs in Deployments."
     ]
   });
 }

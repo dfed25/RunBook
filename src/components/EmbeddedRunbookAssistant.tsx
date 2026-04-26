@@ -7,6 +7,7 @@ import {
   type DemoManualSource,
   type ImportedDocument
 } from "@/lib/studioDemoStorage";
+import { MAX_BULLETS, MAX_SOURCES, MAX_STEPS, MAX_SUGGESTIONS } from "@/lib/embedStructured";
 
 type ChatResponse = {
   answer?: string;
@@ -133,6 +134,7 @@ export function EmbeddedRunbookAssistant({
   const [activeSource, setActiveSource] = useState<SourceItem | null>(null);
   const [hoveredFeature, setHoveredFeature] = useState<HoveredFeatureContext | null>(null);
   const highlightCleanupRef = useRef<() => void>(() => undefined);
+  const chatBodyRef = useRef<HTMLDivElement | null>(null);
   const hoveredFeatureRef = useRef<HoveredFeatureContext | null>(null);
   const hoverDebounceRef = useRef<number | null>(null);
   useEffect(() => {
@@ -145,6 +147,12 @@ export function EmbeddedRunbookAssistant({
   useEffect(() => {
     hoveredFeatureRef.current = hoveredFeature;
   }, [hoveredFeature]);
+
+  useEffect(() => {
+    const node = chatBodyRef.current;
+    if (!node) return;
+    node.scrollTop = node.scrollHeight;
+  }, [messages, loading, open]);
 
   useEffect(() => {
     if (typeof document === "undefined") return;
@@ -252,22 +260,30 @@ export function EmbeddedRunbookAssistant({
           {
             role: "assistant",
             answer: data.answer,
-            bullets: (data.bullets || []).slice(0, 3),
-            steps: data.steps || [],
-            sources: (data.sources || []).slice(0, 6),
-            suggestions: (data.suggestions || []).slice(0, 3),
+            bullets: (data.bullets || []).slice(0, MAX_BULLETS),
+            steps: (data.steps || []).slice(0, MAX_STEPS),
+            sources: (data.sources || []).slice(0, MAX_SOURCES),
+            suggestions: (data.suggestions || []).slice(0, MAX_SUGGESTIONS),
             text: !data.answer ? "No content." : undefined
           }
         ]);
         highlightCleanupRef.current();
-        const cleanup = maybeHighlightElementForQuestion(q, data);
-        if (!cleanup) {
+        const highlightAttempt = maybeHighlightElementForQuestion(q, data);
+        if (!highlightAttempt.cleanup) {
           const answerText = String(data.answer || "");
           const looksLikeTargetedAnswer =
             /(look for|labeled|labelled|button|cta|click|create account|sign up|get started|log in|register)/i.test(
               answerText
             ) || (Array.isArray(data.steps) && data.steps.length > 0);
-          if (isLocationIntent(q) && !looksLikeTargetedAnswer) {
+          if (isLocationIntent(q) && highlightAttempt.lowConfidence) {
+            setMessages((m) => [
+              ...m,
+              {
+                role: "assistant",
+                text: "I found multiple possible matches on this page. Tell me the exact label you see (for example, Create workflow or Connect Slack) and I will highlight it."
+              }
+            ]);
+          } else if (isLocationIntent(q) && !looksLikeTargetedAnswer) {
             setMessages((m) => [
               ...m,
               {
@@ -278,7 +294,7 @@ export function EmbeddedRunbookAssistant({
           }
           highlightCleanupRef.current = () => undefined;
         } else {
-          highlightCleanupRef.current = cleanup;
+          highlightCleanupRef.current = highlightAttempt.cleanup;
         }
       } catch {
         setMessages((m) => [...m, { role: "assistant", text: "Network error — try again." }]);
@@ -318,10 +334,8 @@ export function EmbeddedRunbookAssistant({
   };
 
   const actionTiles = [
-    { label: "Get GitHub access", prompt: "Get GitHub access" },
     { label: "Set up first workflow", prompt: "Set up first workflow" },
-    { label: "Connect integrations", prompt: "Connect integrations" },
-    { label: "Explore features", prompt: "What features can I use here?" }
+    { label: "Connect integrations", prompt: "Connect integrations" }
   ];
 
   const mappedSuggestedActions = suggestedQuestions
@@ -329,7 +343,8 @@ export function EmbeddedRunbookAssistant({
     .slice(0, 4)
     .map((s) => ({ label: s.replace(/\?+$/, "").trim(), prompt: s }));
 
-  const chips = [...actionTiles, ...mappedSuggestedActions].slice(0, 8);
+  const chips = [...actionTiles, ...mappedSuggestedActions].slice(0, 4);
+  const showQuickActions = !hideQuickActions && chips.length > 0 && messages.length === 0;
 
   return (
     <div className={`${posWrap} ${className}`}>
@@ -375,7 +390,7 @@ export function EmbeddedRunbookAssistant({
               </span>
             </div>
           ) : null}
-          {!hideQuickActions && chips.length > 0 ? (
+          {showQuickActions ? (
             <div className="grid grid-cols-2 gap-1.5 border-b border-slate-800 px-2 py-2">
               <button
                 type="button"
@@ -383,13 +398,6 @@ export function EmbeddedRunbookAssistant({
                 onClick={() => void send("What can I do here?")}
               >
                 What can I do here?
-              </button>
-              <button
-                type="button"
-                className="col-span-2 rounded-md border border-amber-500/50 bg-amber-900/30 px-2.5 py-1.5 text-[10px] font-semibold text-amber-100 hover:bg-amber-800/50"
-                onClick={() => void send("What should I do next?")}
-              >
-                What should I do next?
               </button>
               {chips.map((c) => (
                 <button
@@ -403,7 +411,7 @@ export function EmbeddedRunbookAssistant({
               ))}
             </div>
           ) : null}
-          <div className="flex-1 space-y-3 overflow-y-auto px-3 py-3">
+          <div ref={chatBodyRef} className="flex-1 space-y-3 overflow-y-auto px-3 py-3">
             {messages.map((msg, i) => {
               const messageId = `m-${i}`;
               if (msg.role === "user") {
@@ -422,7 +430,7 @@ export function EmbeddedRunbookAssistant({
                   )}
                   {msg.bullets && msg.bullets.length > 0 ? (
                     <ul className="mb-2 mt-1 space-y-1 text-xs text-slate-300">
-                      {msg.bullets.slice(0, 3).map((bullet, idx) => (
+                      {msg.bullets.slice(0, MAX_BULLETS).map((bullet, idx) => (
                         <li key={`${messageId}-b-${idx}`} className="flex gap-2">
                           <span>•</span>
                           <span>{bullet}</span>
@@ -537,14 +545,18 @@ export function EmbeddedRunbookAssistant({
     </div>
   );
 }
-function maybeHighlightElementForQuestion(question: string, data: ChatResponse): (() => void) | null {
-  if (typeof document === "undefined") return () => undefined;
-  if (!isLocationIntent(question)) return () => undefined;
+type HighlightAttempt = { cleanup: (() => void) | null; lowConfidence: boolean };
+
+function maybeHighlightElementForQuestion(question: string, data: ChatResponse): HighlightAttempt {
+  if (typeof document === "undefined") return { cleanup: () => undefined, lowConfidence: false };
+  if (!isLocationIntent(question)) return { cleanup: () => undefined, lowConfidence: false };
 
   ensureHighlightStyleTag();
   const hint = [question, data.answer || "", (data.steps || []).join(" ")].join(" ");
-  const target = findBestTarget(hint, question);
-  if (!target) return null;
+  const scored = findBestTarget(hint, question);
+  if (!scored) return { cleanup: null, lowConfidence: false };
+  if (!scored.highConfidence) return { cleanup: null, lowConfidence: true };
+  const target = scored.element;
 
   target.classList.add("rb-highlight-target");
   target.scrollIntoView({ behavior: "smooth", block: "center" });
@@ -562,10 +574,13 @@ function maybeHighlightElementForQuestion(question: string, data: ChatResponse):
     overlay.remove();
   }, 8000);
 
-  return () => {
-    window.clearTimeout(timeout);
-    target.classList.remove("rb-highlight-target");
-    overlay.remove();
+  return {
+    cleanup: () => {
+      window.clearTimeout(timeout);
+      target.classList.remove("rb-highlight-target");
+      overlay.remove();
+    },
+    lowConfidence: false
   };
 }
 
@@ -580,17 +595,18 @@ function ensureHighlightStyleTag(): void {
   document.head.appendChild(styleTag);
 }
 
-function findBestTarget(hint: string, question: string): HTMLElement | null {
+function findBestTarget(hint: string, question: string): { element: HTMLElement; highConfidence: boolean } | null {
   const tokens = tokenize(hint).slice(0, 20);
   if (tokens.length === 0) return null;
   const intentCompact = compact(extractIntentPhrase(question));
   const nodes = Array.from(
     document.querySelectorAll<HTMLElement>(
-      "button,a,[role='button'],summary,label,h1,h2,h3,input,textarea,select,[data-testid],[aria-label],nav a"
+      "button,a,[role='button'],summary,label,h1,h2,h3,input,textarea,select,[data-testid],[aria-label],nav a,[data-runbook-feature]"
     )
   );
   let best: HTMLElement | null = null;
   let bestScore = 0;
+  let secondBest = 0;
 
   for (const node of nodes) {
     const rect = node.getBoundingClientRect();
@@ -602,7 +618,10 @@ function findBestTarget(hint: string, question: string): HTMLElement | null {
       node.id || "",
       node.getAttribute("name") || "",
       node.getAttribute("placeholder") || "",
-      node.className || ""
+      node.className || "",
+      node.getAttribute("data-runbook-feature") || "",
+      node.getAttribute("data-runbook-title") || "",
+      node.getAttribute("data-runbook-description") || ""
     ]
       .join(" ")
       .toLowerCase();
@@ -617,14 +636,21 @@ function findBestTarget(hint: string, question: string): HTMLElement | null {
     }
     if (intentCompact && compactText.includes(intentCompact)) score += 8;
     if (/(create|sign\s*up|signup|register|get\s*started|start|continue|next)/i.test(text)) score += 3;
+    if (node.hasAttribute("data-runbook-feature")) score += 6;
+    if (node.hasAttribute("data-runbook-title")) score += 2;
     if (node.tagName === "BUTTON" || node.tagName === "A") score += 2;
     if (score > bestScore) {
+      secondBest = bestScore;
       bestScore = score;
       best = node;
+    } else if (score > secondBest) {
+      secondBest = score;
     }
   }
 
-  return bestScore >= 3 ? best : null;
+  if (!best || bestScore < 3) return null;
+  const highConfidence = bestScore >= 8 && bestScore - secondBest >= 2;
+  return { element: best, highConfidence };
 }
 
 function tokenize(text: string): string[] {

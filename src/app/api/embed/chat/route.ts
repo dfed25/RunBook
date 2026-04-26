@@ -260,7 +260,7 @@ ${context || "(no indexed chunks yet)"}
 
 User question: ${message}
 Return compact JSON on one final line:
-RUNBOOK_JSON: {"answer":"<=12 words","bullets":["<=14 words"],"steps":["..."],"suggestions":["Guide me step-by-step","Explain this page","What can I do next?"]}`;
+RUNBOOK_JSON: {"answer":"<=10 words","bullets":["<=12 words"],"steps":["2-4 concise steps"],"suggestions":["Guide me step-by-step","Explain this page","What can I do next?"]}`;
 
   const baseSources = retrieved.map((r) => ({
     title: r.doc.title,

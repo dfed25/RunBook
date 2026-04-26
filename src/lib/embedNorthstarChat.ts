@@ -3,18 +3,18 @@ import { demoDocs } from "./demoDocs";
 import type { SourceDoc } from "./types";
 import { buildNorthstarDemoResponse, type DemoChatResult } from "./embedDemoKnowledge";
 import { retrieveKeywordSources } from "./embedKeywordRetrieval";
-import { clipWords, MAX_ANSWER_WORDS, normalizeBullets, normalizeSuggestions, normalizeSteps } from "./embedStructured";
+import { clipWords, MAX_ANSWER_WORDS, MAX_SOURCES, normalizeBullets, normalizeSuggestions, normalizeSteps } from "./embedStructured";
 
 const NORTHSTAR_SYSTEM = `You are Runbook, an embedded in-app onboarding assistant for the "Northstar AI" demo product.
 Use ONLY the knowledge excerpts provided in the user message. If something is not in the excerpts, say briefly that it is not documented and suggest where to look next.
 Never output long paragraphs.
 Prioritize page and hovered feature context first, and use docs as background.
 Return a short scannable structure as compact JSON on one final line:
-RUNBOOK_JSON: {"answer":"<=12 words","bullets":["<=14 words","..."],"steps":["..."],"suggestions":["Guide me step-by-step","Explain this page","What can I do next?"]}
+RUNBOOK_JSON: {"answer":"<=10 words","bullets":["<=12 words","..."],"steps":["3-4 short items"],"suggestions":["Guide me step-by-step","Explain this page","What can I do next?"]}
 Rules:
-- answer max 12 words
+- answer max 10 words
 - bullets max 3
-- steps 3-6 short imperative items when actionable
+- steps 3-4 short imperative items when actionable
 - suggestions max 3
 - no markdown code fences.`;
 
@@ -34,7 +34,7 @@ function mergeSources(
     seen.add(k);
     out.push(s);
   }
-  return out.slice(0, 6);
+  return out.slice(0, MAX_SOURCES);
 }
 
 function parseStructured(raw: string): { answer: string; bullets: string[]; steps: string[]; suggestions: string[] } {
@@ -83,8 +83,9 @@ export async function runNorthstarEmbedChat(input: {
     content: s.content.trim().slice(0, 12_000),
     sourceType: "text" as const
   }));
+  const hasImportedCodeContext = extraDocs.length > 0;
 
-  const allDocs: SourceDoc[] = [...demoDocs, ...extraDocs];
+  const allDocs: SourceDoc[] = hasImportedCodeContext ? extraDocs : [...demoDocs, ...extraDocs];
   const ranked = retrieveKeywordSources(input.message, allDocs, 4);
   const keywordSources = ranked.map((r) => ({
     title: r.doc.title,
@@ -100,14 +101,31 @@ export async function runNorthstarEmbedChat(input: {
               `### Excerpt ${i + 1}: ${r.doc.title}\n${r.doc.content.slice(0, 4_000)}${r.doc.content.length > 4_000 ? "\n…" : ""}`
           )
           .join("\n\n")
-      : demoDocs.map((d) => `### ${d.title}\n${d.content.slice(0, 1_500)}`).join("\n\n");
+      : allDocs.slice(0, 4).map((d) => `### ${d.title}\n${d.content.slice(0, 1_500)}`).join("\n\n");
 
   const fallback = buildNorthstarDemoResponse(input.message, input.pageContext, input.hoveredFeature);
+  const importedFallback: DemoChatResult = {
+    answer: clipWords("Using your imported code and current page context first.", MAX_ANSWER_WORDS),
+    bullets: normalizeBullets([
+      "I prioritize current page context and hovered feature details",
+      "I then use imported repository code to explain behavior",
+      "Ask about a specific button, flow, or API route for precision"
+    ]),
+    sources: keywordSources.slice(0, MAX_SOURCES),
+    steps: normalizeSteps([
+      "Ask about the exact UI control or flow you are on.",
+      "Include the visible label so I can map it to code behavior.",
+      "Use follow-up questions for implementation-level detail."
+    ]),
+    suggestions: normalizeSuggestions(["Guide me step-by-step", "Explain this page", "What can I do next?"])
+  };
+  const pickFallback = <K extends keyof DemoChatResult>(field: K): DemoChatResult[K] =>
+    hasImportedCodeContext ? importedFallback[field] : fallback[field];
 
   if (!isServerLlmConfigured()) {
     return {
-      ...fallback,
-      sources: mergeSources(keywordSources, fallback.sources)
+      ...(hasImportedCodeContext ? importedFallback : fallback),
+      sources: hasImportedCodeContext ? keywordSources.slice(0, MAX_SOURCES) : mergeSources(keywordSources, pickFallback("sources"))
     };
   }
 
@@ -135,21 +153,23 @@ ${input.message}`;
     const finalSteps =
       steps.length > 0
         ? steps
-        : fallback.steps.length > 0
-          ? fallback.steps
-          : ["Review the sources below.", "Ask a more specific follow-up.", "Check with your team lead if unsure."];
+        : hasImportedCodeContext
+          ? importedFallback.steps
+          : fallback.steps.length > 0
+            ? fallback.steps
+            : ["Review the sources below.", "Ask a more specific follow-up.", "Check with your team lead if unsure."];
     return {
       answer,
-      bullets: bullets.length > 0 ? bullets : fallback.bullets,
-      sources: mergeSources(keywordSources, fallback.sources),
+      bullets: bullets.length > 0 ? bullets : pickFallback("bullets"),
+      sources: hasImportedCodeContext ? keywordSources.slice(0, MAX_SOURCES) : mergeSources(keywordSources, pickFallback("sources")),
       steps: finalSteps,
-      suggestions: suggestions.length > 0 ? suggestions : fallback.suggestions
+      suggestions: suggestions.length > 0 ? suggestions : pickFallback("suggestions")
     };
   } catch (e) {
     console.warn("northstar LLM fallback:", e);
     return {
-      ...fallback,
-      sources: mergeSources(keywordSources, fallback.sources)
+      ...(hasImportedCodeContext ? importedFallback : fallback),
+      sources: hasImportedCodeContext ? keywordSources.slice(0, MAX_SOURCES) : mergeSources(keywordSources, pickFallback("sources"))
     };
   }
 }

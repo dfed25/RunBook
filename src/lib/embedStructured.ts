@@ -1,8 +1,8 @@
-export const MAX_ANSWER_WORDS = 12;
-export const MAX_BULLET_WORDS = 14;
+export const MAX_ANSWER_WORDS = 10;
+export const MAX_BULLET_WORDS = 12;
 export const MAX_BULLETS = 3;
-export const MAX_STEPS = 7;
-export const MAX_SOURCES = 6;
+export const MAX_STEPS = 4;
+export const MAX_SOURCES = 3;
 export const MAX_SUGGESTIONS = 3;
 
 export const DEFAULT_SUGGESTIONS = [
