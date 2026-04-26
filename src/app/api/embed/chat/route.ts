@@ -45,6 +45,8 @@ type ChatBody = {
   pageTitle?: string;
   /** Optional manual sources from Studio (demo only). */
   customSources?: unknown;
+  /** Optional imported repository docs from Studio/embed demo. */
+  documents?: unknown;
 };
 
 function sanitizeCustomSources(raw: unknown): { title: string; content: string }[] {
@@ -56,6 +58,22 @@ function sanitizeCustomSources(raw: unknown): { title: string; content: string }
     const title = String(o.title ?? "").trim().slice(0, 200);
     const content = String(o.content ?? "").trim().slice(0, 12_000);
     if (title.length === 0 || content.length === 0) continue;
+    out.push({ title, content });
+  }
+  return out;
+}
+
+function sanitizeDocuments(raw: unknown): { title: string; content: string }[] {
+  if (!Array.isArray(raw)) return [];
+  const out: { title: string; content: string }[] = [];
+  for (const item of raw.slice(0, 24)) {
+    if (!item || typeof item !== "object") continue;
+    const o = item as Record<string, unknown>;
+    const path = String(o.path ?? "").trim();
+    const titleFromPath = path.length > 0 ? path : "Imported document";
+    const title = String(o.title ?? titleFromPath).trim().slice(0, 260);
+    const content = String(o.content ?? "").trim().slice(0, 20_000);
+    if (!title || !content) continue;
     out.push({ title, content });
   }
   return out;
@@ -82,6 +100,7 @@ export async function POST(req: NextRequest) {
   const projectId = String(body.projectId || "").trim();
   const message = String(body.message || body.question || "").trim();
   const pageContext = normalizePageContext(body);
+  const requestDocs = sanitizeDocuments(body.documents);
 
   if (!projectId) {
     return NextResponse.json({ error: "projectId is required" }, { status: 400, headers: corsHeaders(origin) });
@@ -90,9 +109,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "message is required" }, { status: 400, headers: corsHeaders(origin) });
   }
 
-  /** Public demo — no Bearer key; rate limit by IP-ish bucket */
-  if (projectId === NORTHSTAR_DEMO_PROJECT_ID) {
-    const rl = checkEmbedRateLimit("northstar-demo-public");
+  /** Public demo/import path — no Bearer key; rate limit by project bucket */
+  if (projectId === NORTHSTAR_DEMO_PROJECT_ID || requestDocs.length > 0) {
+    const rl = checkEmbedRateLimit(`${projectId || "public"}-public`);
     if (!rl.ok) {
       return NextResponse.json(
         { error: "Rate limited", retryAfter: rl.retryAfter },
@@ -100,7 +119,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const customSources = sanitizeCustomSources(body.customSources);
+    const customSources = [...sanitizeCustomSources(body.customSources), ...requestDocs];
     const payload = await runNorthstarEmbedChat({ message, pageContext, customSources });
     return NextResponse.json(payload, { headers: corsHeaders(origin) });
   }

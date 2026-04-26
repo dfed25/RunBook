@@ -27,6 +27,8 @@
 
   var DEMO_ID = "northstar-demo";
   var BUNDLE_KEY = "runbook_demo_bundle_v1";
+  var IMPORTED_DOCS_KEY = "runbook_imported_docs";
+  var IMPORTED_PROJECT_ID_KEY = "runbook_project_id";
 
   function loadDemoBundle() {
     try {
@@ -69,6 +71,36 @@
       out.push({ title: t, content: c });
     }
     return out;
+  }
+
+  function loadImportedDocs() {
+    try {
+      var raw = localStorage.getItem(IMPORTED_DOCS_KEY);
+      if (!raw) return [];
+      var arr = JSON.parse(raw);
+      if (!Array.isArray(arr)) return [];
+      var out = [];
+      for (var i = 0; i < Math.min(24, arr.length); i++) {
+        var d = arr[i];
+        if (!d || typeof d !== "object") continue;
+        var title = String(d.title || d.path || "Imported document").trim().slice(0, 260);
+        var path = String(d.path || "").trim().slice(0, 260);
+        var content = String(d.content || "").trim().slice(0, 20000);
+        if (!title || !content) continue;
+        out.push({ title: title, path: path, content: content });
+      }
+      return out;
+    } catch {
+      return [];
+    }
+  }
+
+  function loadImportedProjectId() {
+    try {
+      return (localStorage.getItem(IMPORTED_PROJECT_ID_KEY) || "").trim();
+    } catch {
+      return "";
+    }
   }
 
   function mount() {
@@ -236,6 +268,9 @@
           var custom = manualSourcesFromBundle(bundle);
           if (custom.length) body.customSources = custom;
         }
+        var importedProjectId = loadImportedProjectId();
+        var importedDocs = importedProjectId === projectId ? loadImportedDocs() : [];
+        if (importedDocs.length) body.documents = importedDocs;
         var res = await fetch(base + "/api/embed/chat", {
           method: "POST",
           headers: headers,

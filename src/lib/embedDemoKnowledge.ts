@@ -92,6 +92,8 @@ export function buildNorthstarDemoResponse(message: string, pageContext: string)
     m.includes("first") ||
     m.includes("today") ||
     m.includes("onboarding") ||
+    m.includes("what should i do next") ||
+    (m.includes("do next") && (m.includes("what") || m.includes("should"))) ||
     m.includes("start") ||
     m.includes("week one")
   ) {

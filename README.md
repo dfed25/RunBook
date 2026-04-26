@@ -6,20 +6,22 @@
 
 ## What it does
 
-1. **Knowledge** — Curated demo docs (engineering setup, first week, security, product, expenses). In Studio you see seeded “connected” sources and can add **manual** title + content entries. Those merge into retrieval for `northstar-demo` chat when you use the same browser profile (`localStorage`).
+1. **Knowledge** — Curated demo docs (engineering setup, first week, security, product, expenses). In Studio you can also paste a **public GitHub repo URL** and import a broad repo snapshot (README + docs + common source files such as `src/**/*.{ts,tsx,js,py,go,...}` within demo limits).
 2. **Studio (`/studio`)** — Edit assistant name, welcome message, primary color, suggested questions, and manual sources. Changes persist to `localStorage` key `runbook_demo_bundle_v1` and update the **live preview** (same `EmbeddedRunbookAssistant` as embed-demo).
 3. **Embed** — Two options:
    - **React (recommended for Next apps):** import `EmbeddedRunbookAssistant` from `@/components/EmbeddedRunbookAssistant`.
    - **Script tag (any HTML page):** load `public/runbook-embed.js` with `data-project-id="northstar-demo"`. On the **same origin**, the script reads `runbook_demo_bundle_v1` for welcome, title, color, suggestions, and `customSources` on each chat request.
 
-4. **Chat API** — `POST /api/embed/chat` returns **answer**, **sources** (with excerpts), and **steps**. For `northstar-demo`, answers use **keyword retrieval** over seeded + manual docs, then **Gemini** (with **OpenAI** fallback if Gemini fails) when `GEMINI_API_KEY` and/or `OPENAI_API_KEY` is set. If no LLM is configured or the API errors, **deterministic fallbacks** still answer common onboarding questions.
+4. **Chat API** — `POST /api/embed/chat` returns **answer**, **sources** (with excerpts), and **steps**. If `documents` are provided in the request (Studio/embed demo flow), retrieval uses those imported docs. Otherwise it falls back to seeded demo docs. LLM uses **Gemini** (with **OpenAI** fallback) when keys are available.
 
 ## Demo flow (keep this working)
 
 1. Open **`/`** — marketing landing.
-2. Open **`/studio`** — knowledge sources (seeded + add manual), assistant config, embed snippet, live preview.
-3. Open **`/embed-demo`** — sample “Northstar” docs page with the **React** assistant (reads the same `localStorage` bundle as Studio).
-4. Click the **Runbook** bubble → ask **“How do I get GitHub access?”** → receive steps + sources (LLM when configured, otherwise curated fallback).
+2. Open **`/studio`** — paste `https://github.com/owner/repo` and click **Connect GitHub repo**.
+3. Confirm imported docs are listed + embed code updates with project id (`owner-repo`).
+4. Open **`/embed-demo`** — banner shows which repo currently powers answers.
+5. Ask a docs-related question in the assistant and verify steps + sources reference imported docs.
+6. Optional: in Studio save multiple repo imports as **test agent profiles**, then switch between them in `/embed-demo` to simulate different customer apps/AI agents.
 
 ## Routes
 
@@ -30,6 +32,7 @@
 | `/embed-demo` | Sample customer page + embedded assistant |
 | `/runbook-embed.js` | Static embed script (`public/runbook-embed.js`) |
 | `POST /api/embed/chat` | Body: `projectId`, `message`, optional `pageContext`, optional `customSources` (demo) |
+| `POST /api/github/import` | Body: `repoUrl`; imports readable docs from a public GitHub repository |
 
 Bearer-authenticated `projectId` (non-demo) uses indexed project retrieval when Supabase is wired; see route implementation.
 
@@ -67,7 +70,16 @@ See `.env.example`. The app **must not crash** if keys are missing.
 
 ## Persistence note
 
-Studio and embed-demo share **`localStorage`** (`runbook_demo_bundle_v1`) in the same browser. The vanilla **`/runbook-embed.js`** widget reads that bundle only on the **same origin** as Runbook (the script uses `localStorage`). Cross-origin embeds get built-in defaults unless you add a future config mechanism.
+Studio and embed-demo share browser `localStorage` in the same origin:
+
+- `runbook_assistant_config`
+- `runbook_project_id`
+- `runbook_imported_docs`
+- `runbook_imported_repo`
+
+The vanilla **`/runbook-embed.js`** widget can also read these same-origin keys.
+
+Project scoping note: imported docs are only attached to chat when the current widget/assistant `projectId` matches `runbook_project_id`, so different repos produce different embed snippets and different AI context.
 
 ## TODOs / extensions
 
