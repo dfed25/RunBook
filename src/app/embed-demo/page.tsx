@@ -60,6 +60,14 @@ function emitRunbookSuggestion(text: string): void {
   window.dispatchEvent(new CustomEvent("runbook-assistant-suggestion", { detail: text }));
 }
 
+function firstIncompleteTourStepIndex(state: AppState): number {
+  if (!state.githubConnected) return 0;
+  if (!state.apiKeyCreated) return 1;
+  if (!state.workflowCreated) return 2;
+  if (!state.deployed) return 3;
+  return 0;
+}
+
 export default function EmbedDemoPage() {
   const [appState, setAppState] = useState<AppState>(() => {
     if (typeof window === "undefined") {
@@ -223,11 +231,12 @@ export default function EmbedDemoPage() {
     const onGuideMe = () => {
       setTourHighlightFeature(null);
       setTourFeedback(null);
-      setTourStepIndex(0);
+      setTourStepIndex(firstIncompleteTourStepIndex(appState));
       setTourActive(true);
       setShowNudge(false);
       completedStepIdsRef.current = {};
-      emitRunbookSuggestion("Guiding: Connect integrations.");
+      const startStep = TOUR_STEPS[firstIncompleteTourStepIndex(appState)];
+      emitRunbookSuggestion(`Guiding: ${startStep.title}.`);
     };
     const onWhatNext = () => {
       const step = nextBest;
@@ -246,11 +255,39 @@ export default function EmbedDemoPage() {
       window.removeEventListener("runbook-start-tour", onGuideMe as EventListener);
       window.removeEventListener("runbook-what-next", onWhatNext as EventListener);
     };
-  }, [nextBest]);
+  }, [appState, nextBest]);
 
   const dismissNudge = () => {
     window.localStorage.setItem(NUDGE_DISMISSED_KEY, "1");
     setShowNudge(false);
+  };
+
+  const resetDemoState = () => {
+    const reset: AppState = {
+      githubConnected: false,
+      apiKeyCreated: false,
+      workflowCreated: false,
+      deployed: false
+    };
+    setAppState(reset);
+    setApiKeyValue(null);
+    setDeploymentStatus("queued");
+    setShowIntegrationsPanel(false);
+    setShowWorkflowModal(false);
+    setTourActive(false);
+    setTourStepIndex(0);
+    setTourRect(null);
+    setTourHighlightFeature(null);
+    setTourFeedback(null);
+    completedStepIdsRef.current = {};
+    try {
+      window.localStorage.removeItem(APP_STATE_KEY);
+      window.localStorage.removeItem(NUDGE_DISMISSED_KEY);
+    } catch {
+      /* no-op */
+    }
+    setShowNudge(true);
+    emitRunbookSuggestion("Demo state reset. Ready to guide from step one.");
   };
 
   const connectGithub = () => {
@@ -288,6 +325,11 @@ export default function EmbedDemoPage() {
     () => (tourHighlightFeature && !tourActive ? tourHighlightFeature : currentTourStep?.feature || null),
     [currentTourStep?.feature, tourActive, tourHighlightFeature]
   );
+  const outlinedSelector = useMemo(() => {
+    if (!outlinedFeature) return null;
+    const tourMatch = TOUR_STEPS.find((s) => s.feature === outlinedFeature);
+    return tourMatch ? tourMatch.selector : `[data-runbook-feature='${outlinedFeature}']`;
+  }, [outlinedFeature]);
 
   return (
     <div className="relative space-y-5 pb-28">
@@ -308,9 +350,11 @@ export default function EmbedDemoPage() {
             <button
               type="button"
               onClick={() => {
-                setTourStepIndex(0);
+                setTourStepIndex(firstIncompleteTourStepIndex(appState));
                 setTourActive(true);
                 setShowNudge(false);
+                const startStep = TOUR_STEPS[firstIncompleteTourStepIndex(appState)];
+                emitRunbookSuggestion(`Guiding: ${startStep.title}.`);
               }}
               className="rounded-md bg-indigo-500 px-2 py-1 text-xs font-semibold text-white"
             >
@@ -462,6 +506,13 @@ export default function EmbedDemoPage() {
             </li>
           ))}
         </ul>
+        <button
+          type="button"
+          onClick={resetDemoState}
+          className="mt-3 rounded-md border border-white/20 px-3 py-1 text-xs text-slate-200 hover:border-white/40"
+        >
+          Reset demo state
+        </button>
       </FeatureCard>
 
       {showIntegrationsPanel ? (
@@ -490,7 +541,7 @@ export default function EmbedDemoPage() {
 
       {tourActive && tourRect ? (
         <>
-          <div className="pointer-events-none fixed inset-0 z-[2147482996] bg-black/28" />
+          <div className="pointer-events-none fixed inset-0 z-[2147482996] bg-black/12" />
           <div
             className="pointer-events-none fixed z-[2147482997] rounded-xl border-2 border-indigo-300 ring-2 ring-indigo-300/40 animate-pulse"
             style={{
@@ -518,10 +569,13 @@ export default function EmbedDemoPage() {
               </button>
               <button
                 type="button"
+                onClick={() => {
+                  if (currentTourStep && stepComplete) advanceTourAfterSuccess(currentTourStep);
+                }}
                 disabled={!stepComplete}
                 className={`rounded-md px-2 py-1 ${stepComplete ? "bg-emerald-500 text-white" : "bg-slate-700 text-slate-300"}`}
               >
-                {stepComplete ? "Action complete" : "Waiting for action..."}
+                {stepComplete ? "Continue" : "Waiting for action..."}
               </button>
               <button type="button" onClick={() => setTourActive(false)} className="rounded-md border border-white/20 px-2 py-1">
                 {tourStepIndex === TOUR_STEPS.length - 1 ? "Done" : "Skip"}
@@ -531,8 +585,8 @@ export default function EmbedDemoPage() {
         </>
       ) : null}
 
-      {outlinedFeature ? (
-        <style>{`[data-runbook-feature='${outlinedFeature}']{outline:2px solid rgba(129,140,248,0.95);outline-offset:2px;border-radius:12px;}`}</style>
+      {outlinedSelector ? (
+        <style>{`${outlinedSelector}{outline:2px solid rgba(129,140,248,0.95);outline-offset:2px;border-radius:12px;}`}</style>
       ) : null}
     </div>
   );

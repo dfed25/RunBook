@@ -302,7 +302,7 @@ export default function EmbedDemoLayout({ children }: { children: React.ReactNod
               }}
               className="rounded-lg border border-white/20 px-2.5 py-1 text-[11px] text-slate-200 hover:border-white/40"
             >
-              {hintsEnabled ? "Hints on" : "Hints off"}
+              <span suppressHydrationWarning>{hintsEnabled ? "Hints on" : "Hints off"}</span>
             </button>
           </div>
         </div>
@@ -401,7 +401,7 @@ export default function EmbedDemoLayout({ children }: { children: React.ReactNod
           }}
           className="rounded-full border border-white/25 bg-slate-900/90 px-3 py-1.5 text-xs font-semibold text-slate-100 shadow-lg hover:border-white/50"
         >
-          {hintsEnabled ? "Hints: on" : "Hints: off"}
+          <span suppressHydrationWarning>{hintsEnabled ? "Hints: on" : "Hints: off"}</span>
         </button>
         <button
           type="button"
@@ -412,7 +412,7 @@ export default function EmbedDemoLayout({ children }: { children: React.ReactNod
           }}
           className="rounded-full border border-white/25 bg-slate-900/90 px-3 py-1.5 text-xs font-semibold text-slate-100 shadow-lg hover:border-white/50"
         >
-          {assistantEnabled ? "Widget: on" : "Widget: off"}
+          <span suppressHydrationWarning>{assistantEnabled ? "Widget: on" : "Widget: off"}</span>
         </button>
       </div>
 

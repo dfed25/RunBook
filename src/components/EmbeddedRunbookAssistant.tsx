@@ -160,7 +160,6 @@ export function EmbeddedRunbookAssistant({
       const text = String(detail || "").trim();
       if (!text) return;
       setMessages((m) => [...m, { role: "assistant", text }]);
-      if (!open) setOpen(true);
     };
     window.addEventListener("runbook-active-feature", onExternalFeature as EventListener);
     window.addEventListener("runbook-assistant-suggestion", onSuggestion as EventListener);
@@ -168,7 +167,7 @@ export function EmbeddedRunbookAssistant({
       window.removeEventListener("runbook-active-feature", onExternalFeature as EventListener);
       window.removeEventListener("runbook-assistant-suggestion", onSuggestion as EventListener);
     };
-  }, [open]);
+  }, []);
 
   useEffect(() => {
     hoveredFeatureRef.current = hoveredFeature;
