@@ -26,51 +26,26 @@ export type EmbedRetrievedDoc = {
   score: number;
 };
 
-function buildEmbedQueries(question: string): string[] {
-  const q = question.trim();
-  if (!q) return [];
-  const lower = q.toLowerCase();
-  const queries = [q];
-  const flowIntent = /(steps|how do i|how to|start using|onboard|register|sign up|signup|create account|login|log in)/i;
-  if (flowIntent.test(lower)) {
-    queries.push(
-      `${q}\nFocus on user onboarding flow from code: routes, controllers, API handlers, UI forms, submit actions, redirects, and required verification steps.`,
-      `${q}\nFind entrypoint screens and sequence: sign up, email verification, first login, workspace setup, and first successful action.`
-    );
-  }
-  return queries;
-}
-
 export async function retrieveDocsForEmbed(question: string, projectId: string): Promise<EmbedRetrievedDoc[]> {
   const TOP_K = 6;
   const marker = embedScopeLine(projectId);
-  const queries = buildEmbedQueries(question);
-  const merged = new Map<string, MatchedDocument>();
+  const embedding = await generateEmbedding(question);
+  if (!embedding) return [];
 
-  for (const query of queries) {
-    const embedding = await generateEmbedding(query);
-    if (!embedding) continue;
+  const { data: documents, error } = await supabaseAdmin.rpc("match_documents", {
+    query_embedding: `[${embedding.join(",")}]`,
+    match_threshold: DEFAULT_MATCH_THRESHOLD,
+    match_count: TOP_K * 8
+  });
 
-    const { data: documents, error } = await supabaseAdmin.rpc("match_documents", {
-      query_embedding: `[${embedding.join(",")}]`,
-      match_threshold: DEFAULT_MATCH_THRESHOLD,
-      match_count: TOP_K * 8
-    });
-
-    if (error) {
-      console.error("Embed vector search error:", error);
-      continue;
-    }
-
-    const batch = (documents || []) as MatchedDocument[];
-    for (const doc of batch) {
-      if (!matchesEmbedScope(doc.content, projectId)) continue;
-      const prev = merged.get(doc.id);
-      if (!prev || doc.similarity > prev.similarity) merged.set(doc.id, doc);
-    }
+  if (error) {
+    console.error("Embed vector search error:", error);
+    return [];
   }
 
-  return Array.from(merged.values())
+  const batch = (documents || []) as MatchedDocument[];
+  const scoped = batch.filter((d) => matchesEmbedScope(d.content, projectId));
+  return scoped
     .sort((a, b) => b.similarity - a.similarity)
     .slice(0, TOP_K)
     .map((doc) => ({
