@@ -20,6 +20,15 @@ import {
 } from "@/lib/embedStructured";
 
 export const runtime = "nodejs";
+const PUBLIC_DEMO_PROJECT_IDS = new Set<string>([
+  NORTHSTAR_DEMO_PROJECT_ID,
+  "zhubryan-runbook-demo",
+  "zhubryan-runbook-demo2",
+  ...String(process.env.PUBLIC_EMBED_PROJECT_IDS || "")
+    .split(",")
+    .map((id) => id.trim())
+    .filter(Boolean)
+]);
 
 function corsHeaders(originAllow: string | null): HeadersInit {
   const headers: Record<string, string> = {
@@ -171,7 +180,7 @@ function nextStepFromAppState(appState: unknown): { feature: string; stepId: str
 
 function deriveUiAction(message: string, appState: unknown): StructuredChatPayload["uiAction"] {
   const m = String(message || "").toLowerCase();
-  if (/start guided tour|guide me|step by step/.test(m)) {
+  if (/start guided tour|guide me|step by step|walk me through|walkthrough/.test(m)) {
     const next = nextStepFromAppState(appState);
     return { type: "start_step", stepId: next.stepId, feature: next.feature };
   }
@@ -230,7 +239,7 @@ export async function POST(req: NextRequest) {
   }
 
   /** Public demo/import path — no Bearer key; rate limit by project bucket */
-  if (projectId === NORTHSTAR_DEMO_PROJECT_ID || requestDocs.length > 0) {
+  if (PUBLIC_DEMO_PROJECT_IDS.has(projectId) || requestDocs.length > 0) {
     const rl = checkEmbedRateLimit(`${projectId || "public"}-public`);
     if (!rl.ok) {
       return NextResponse.json(
