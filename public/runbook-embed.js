@@ -29,7 +29,12 @@
     return;
   }
 
-  var DEMO_ID = "northstar-demo";
+  var DEMO_IDS = {
+    "northstar-demo": true,
+    "zhubryan-runbook-demo": true,
+    "zhubryan-runbook-demo2": true
+  };
+  var isDemoProject = Boolean(DEMO_IDS[projectId]);
   // Keep client caps aligned with server normalizeSteps/MAX_SOURCES in embedStructured.
   var CLIENT_MAX_STEPS = 4;
   var CLIENT_MAX_SOURCES = 3;
@@ -55,6 +60,8 @@
   var BUNDLE_KEY = "runbook_demo_bundle_v1";
   var IMPORTED_DOCS_KEY = "runbook_imported_docs";
   var IMPORTED_PROJECT_ID_KEY = "runbook_project_id";
+  var WIDGET_TOGGLE_KEY = "runbook_widget_enabled";
+  var HOVER_TOGGLE_KEY = "runbook_hover_enabled";
 
   function loadDemoBundle() {
     try {
@@ -127,6 +134,22 @@
     } catch {
       return "";
     }
+  }
+
+  function getStoredBool(key, fallback) {
+    try {
+      var v = localStorage.getItem(key);
+      if (v === "1") return true;
+      if (v === "0") return false;
+      return fallback;
+    } catch {
+      return fallback;
+    }
+  }
+  function setStoredBool(key, value) {
+    try {
+      localStorage.setItem(key, value ? "1" : "0");
+    } catch {}
   }
 
   function mount() {
@@ -232,16 +255,45 @@
     var sendBtn = foot.querySelector(".rb-send");
     var closeBtn = head.querySelector(".rb-close");
     var hasStartedChat = false;
+    var widgetEnabled = getStoredBool(WIDGET_TOGGLE_KEY, true);
+    var hoverEnabled = getStoredBool(HOVER_TOGGLE_KEY, true);
     var hoveredFeature = null;
     function updateHoveredFeature(next) {
+      if (!hoverEnabled) return;
       hoveredFeature = next;
       if (next && (next.title || next.feature)) {
         hoverCtx.style.display = "block";
-        hoverCtx.innerHTML = "Looking at: <strong>" + escapeHtml(next.title || next.feature) + "</strong>";
+        var desc = next.description ? "<br/><span style='color:#a5b4fc'>" + escapeHtml(next.description) + "</span>" : "";
+        hoverCtx.innerHTML = "Looking at: <strong>" + escapeHtml(next.title || next.feature) + "</strong>" + desc;
       } else {
         hoverCtx.style.display = "none";
         hoverCtx.innerHTML = "";
       }
+    }
+
+    var hoverTooltipEl = null;
+    function showHoverTooltip(el, text) {
+      if (!hoverEnabled) return;
+      if (!el || !text) return;
+      ensurePageHighlightStyles();
+      if (!hoverTooltipEl) {
+        hoverTooltipEl = document.createElement("div");
+        hoverTooltipEl.className = "rb-hover-tooltip";
+        document.body.appendChild(hoverTooltipEl);
+      }
+      hoverTooltipEl.textContent = text;
+      var rect = el.getBoundingClientRect();
+      var top = window.scrollY + rect.top + rect.height / 2 - 18;
+      var left = window.scrollX + rect.right + 10;
+      var maxLeft = window.scrollX + window.innerWidth - 312;
+      if (left > maxLeft) left = maxLeft;
+      if (left < window.scrollX + 12) left = window.scrollX + 12;
+      hoverTooltipEl.style.top = String(top) + "px";
+      hoverTooltipEl.style.left = String(left) + "px";
+      hoverTooltipEl.style.display = "block";
+    }
+    function hideHoverTooltip() {
+      if (hoverTooltipEl) hoverTooltipEl.style.display = "none";
     }
 
     function trackHoverEvents() {
@@ -250,6 +302,8 @@
         if (!target) return;
         var el = target.closest("[data-runbook-feature],[data-runbook-title],[data-runbook-description]");
         if (!el) return;
+        var hoverDescription = (el.getAttribute("data-runbook-description") || "").trim();
+        if (hoverDescription) showHoverTooltip(el, hoverDescription);
         updateHoveredFeature({
           feature: (el.getAttribute("data-runbook-feature") || "").trim(),
           title: (el.getAttribute("data-runbook-title") || "").trim(),
@@ -263,6 +317,8 @@
         var fromFeature = from.closest("[data-runbook-feature],[data-runbook-title],[data-runbook-description]");
         if (!fromFeature) return;
         if (to && fromFeature.contains(to)) return;
+        hideHoverTooltip();
+        hoveredFeature = null;
         updateHoveredFeature(null);
       }
       document.addEventListener("pointerover", handleOver, true);
@@ -272,6 +328,11 @@
     var highlightTimeout = null;
     var highlightedEl = null;
     var overlayEl = null;
+    var tourStepSequence = ["integrations", "api-keys", "workflow-builder", "deployments"];
+    var localAppState =
+      typeof window !== "undefined" && window.__runbookAppState && typeof window.__runbookAppState === "object"
+        ? window.__runbookAppState
+        : { githubConnected: false, apiKeyCreated: false, workflowCreated: false, deployed: false };
 
     function ensurePageHighlightStyles() {
       if (document.getElementById("rb-page-highlight-style")) return;
@@ -280,7 +341,8 @@
       styleTag.textContent =
         "@keyframes rbPagePulse{0%{box-shadow:0 0 0 3px rgba(99,102,241,.95);}50%{box-shadow:0 0 0 8px rgba(99,102,241,.25);}100%{box-shadow:0 0 0 3px rgba(99,102,241,.95);}}" +
         ".rb-highlight-target{animation:rbPagePulse 1.2s ease-in-out infinite !important;box-shadow:0 0 0 3px rgba(99,102,241,.95) !important;border-radius:8px !important;}" +
-        ".rb-highlight-overlay{position:absolute;z-index:2147483647;max-width:320px;background:#1e1b4b;color:#eef2ff;border:1px solid rgba(129,140,248,.5);border-radius:10px;padding:10px 12px;font:12px/1.4 system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;box-shadow:0 10px 30px rgba(30,27,75,.45);}";
+        ".rb-highlight-overlay{position:absolute;z-index:2147483647;max-width:320px;background:#1e1b4b;color:#eef2ff;border:1px solid rgba(129,140,248,.5);border-radius:10px;padding:10px 12px;font:12px/1.4 system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;box-shadow:0 10px 30px rgba(30,27,75,.45);}" +
+        ".rb-hover-tooltip{position:absolute;z-index:2147483646;max-width:300px;background:#0f172a;color:#e2e8f0;border:1px solid rgba(129,140,248,.5);border-radius:10px;padding:8px 10px;font:12px/1.35 system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;box-shadow:0 8px 28px rgba(2,6,23,.55);pointer-events:none;}";
       document.head.appendChild(styleTag);
     }
 
@@ -397,12 +459,43 @@
       var overlay = document.createElement("div");
       overlay.className = "rb-highlight-overlay";
       overlay.textContent = text || "Start here.";
-      var top = window.scrollY + rect.bottom + 8;
-      var left = window.scrollX + Math.max(12, rect.left);
+      var overlayWidth = 320;
+      var overlayHeight = 64;
+      var placeRight = rect.right + overlayWidth + 20 <= window.innerWidth;
+      var top = window.scrollY + rect.top;
+      var left = placeRight ? window.scrollX + rect.right + 10 : window.scrollX + Math.max(12, rect.left);
+      if (!placeRight) {
+        top = window.scrollY + rect.bottom + 8;
+      }
+      var maxLeft = window.scrollX + window.innerWidth - overlayWidth - 12;
+      var maxTop = window.scrollY + window.innerHeight - overlayHeight - 12;
+      if (left > maxLeft) left = maxLeft;
+      if (left < window.scrollX + 12) left = window.scrollX + 12;
+      if (top > maxTop) top = maxTop;
+      if (top < window.scrollY + 12) top = window.scrollY + 12;
       overlay.style.top = String(top) + "px";
       overlay.style.left = String(left) + "px";
       document.body.appendChild(overlay);
       overlayEl = overlay;
+    }
+
+    function isVisibleTarget(el) {
+      if (!(el instanceof HTMLElement)) return false;
+      var rect = el.getBoundingClientRect();
+      if (rect.width < 8 || rect.height < 8) return false;
+      var st = window.getComputedStyle(el);
+      if (!st || st.display === "none" || st.visibility === "hidden" || Number(st.opacity || "1") < 0.05) return false;
+      return true;
+    }
+
+    function firstVisibleElement(selectors) {
+      for (var i = 0; i < selectors.length; i++) {
+        var list = document.querySelectorAll(selectors[i]);
+        for (var j = 0; j < list.length; j++) {
+          if (isVisibleTarget(list[j])) return list[j];
+        }
+      }
+      return null;
     }
 
     function maybeHighlight(question, data) {
@@ -430,6 +523,149 @@
       var tip = data.steps && data.steps.length ? data.steps[0] : "This is likely where to start for your question.";
       showPageOverlay(target, tip);
       highlightTimeout = setTimeout(clearPageHighlight, 8000);
+    }
+
+    function normalizeFeatureForHighlight(feature) {
+      if (!feature) return "";
+      var f = String(feature).trim().toLowerCase();
+      if (f === "integrations-panel" || f === "integration-panel") return "integrations";
+      if (f === "api-key-setup" || f === "api-key-list") return "api-keys";
+      if (f === "create-workflow" || f === "workflow-canvas") return "workflow-builder";
+      if (f === "deployment-status" || f === "launch-flow" || f === "launch-readiness") return "deployments";
+      return f;
+    }
+
+    function highlightByFeature(feature, overlayText) {
+      if (!feature) return false;
+      ensurePageHighlightStyles();
+      clearPageHighlight();
+      var normalized = normalizeFeatureForHighlight(feature);
+      var escapedNorm = String(normalized).replace(/'/g, "\\'");
+      var escapedRaw = String(feature).replace(/'/g, "\\'");
+      var target = firstVisibleElement([
+        "[data-tour-target='" + escapedNorm + "']",
+        "[data-runbook-feature='" + escapedNorm + "'] button",
+        "[data-runbook-feature='" + escapedNorm + "']",
+        "[data-tour-target='" + escapedRaw + "']",
+        "[data-runbook-feature='" + escapedRaw + "'] button",
+        "[data-runbook-feature='" + escapedRaw + "']"
+      ]);
+      if (!(target instanceof HTMLElement) && normalized === "workflow-builder") {
+        target = firstVisibleElement(["[data-tour-target='new-workflow']", "[data-action='start-blank-workflow']", "[data-action='go-workflows']"]);
+      }
+      if (!(target instanceof HTMLElement) && normalized === "api-keys") {
+        target = firstVisibleElement(["[data-tour-target='generate-api-key']", "[data-action='go-api-keys']"]);
+      }
+      if (!(target instanceof HTMLElement) && normalized === "integrations") {
+        target = firstVisibleElement(["[data-tour-target='github-manage']", "[data-action='manage-github']", "[data-view='integrations']"]);
+      }
+      if (!(target instanceof HTMLElement) && normalized === "deployments") {
+        target = firstVisibleElement(["[data-tour-target='deployment-card']", "[data-action='pause-rollout']", "[data-view='deployments']"]);
+      }
+      if (!(target instanceof HTMLElement)) return false;
+      highlightedEl = target;
+      target.classList.add("rb-highlight-target");
+      target.scrollIntoView({ behavior: "smooth", block: "center" });
+      showPageOverlay(target, overlayText || "Start here.");
+      highlightTimeout = setTimeout(clearPageHighlight, 8000);
+      return true;
+    }
+
+    function inferNextFeatureFromState() {
+      var s = localAppState || {};
+      if (!s.githubConnected) return "integrations";
+      if (!s.apiKeyCreated) return "api-keys";
+      if (!s.workflowCreated) return "workflow-builder";
+      if (!s.deployed) return "deployments";
+      return "deployments";
+    }
+
+    function startGuidedTourInternal() {
+      var feature = inferNextFeatureFromState();
+      var labels = {
+        integrations: "Open integrations and connect GitHub first.",
+        "api-keys": "Create an API key next.",
+        "workflow-builder": "Build your first workflow next.",
+        deployments: "Deploy to staging to complete onboarding."
+      };
+      var highlighted = highlightByFeature(feature, labels[feature] || "Start here.");
+      if (highlighted) {
+        addBot("Guided step ready: " + labels[feature]);
+      } else {
+        addBot("I could not find that step target yet. Try 'What should I do next?' and I will retry.");
+      }
+      window.dispatchEvent(
+        new CustomEvent("runbook-active-feature", {
+          detail: { feature: feature, title: "Guided step", description: labels[feature] || "Start here." }
+        })
+      );
+    }
+
+    function runUiAction(action, fallbackText) {
+      if (!action || typeof action !== "object") return;
+      if (action.type === "start_tour") {
+        window.dispatchEvent(new CustomEvent("runbook-start-tour"));
+        return;
+      }
+      if (action.type === "highlight" || action.type === "start_step") {
+        var featureHint = action.feature || "";
+        if (!featureHint && action.stepId) {
+          if (String(action.stepId).indexOf("github") !== -1 || String(action.stepId).indexOf("integration") !== -1) featureHint = "integrations";
+          else if (String(action.stepId).indexOf("api") !== -1 || String(action.stepId).indexOf("key") !== -1) featureHint = "api-keys";
+          else if (String(action.stepId).indexOf("workflow") !== -1) featureHint = "workflow-builder";
+          else if (String(action.stepId).indexOf("deploy") !== -1 || String(action.stepId).indexOf("launch") !== -1) featureHint = "deployments";
+        }
+        var didHighlight = highlightByFeature(featureHint, fallbackText);
+        if (!didHighlight) {
+          window.dispatchEvent(new CustomEvent("runbook-ui-action", { detail: action }));
+        }
+        return;
+      }
+      window.dispatchEvent(new CustomEvent("runbook-ui-action", { detail: action }));
+    }
+
+    function requestGuidedTour() {
+      if (!widgetEnabled) return;
+      startGuidedTourInternal();
+      window.dispatchEvent(new CustomEvent("runbook-start-tour"));
+      window.setTimeout(function () {
+        if (!highlightedEl) {
+          window.dispatchEvent(new CustomEvent("runbook-what-next"));
+          startGuidedTourInternal();
+        }
+      }, 650);
+    }
+
+    function addSuggestionButtons(suggestions) {
+      if (!Array.isArray(suggestions) || !suggestions.length) return;
+      var wrap = document.createElement("div");
+      wrap.style.cssText = "display:flex;flex-wrap:wrap;gap:6px;margin-top:8px;";
+      suggestions.slice(0, 3).forEach(function (label) {
+        var text = String(label || "").trim();
+        if (!text) return;
+        var b = document.createElement("button");
+        b.type = "button";
+        b.className = "rb-chip";
+        b.style.fontSize = "10px";
+        b.textContent = text;
+        b.addEventListener("click", function () {
+          if (/^guide me\b/i.test(text) || /step-by-step/i.test(text)) {
+            requestGuidedTour();
+            addBot("Requested guided tour. Highlighting the first incomplete step.");
+            return;
+          }
+          if (/what should i do next|what can i do next|next step/i.test(text)) {
+            window.dispatchEvent(new CustomEvent("runbook-what-next"));
+            addBot("Highlighting your next best step.");
+            return;
+          }
+          inp.value = text;
+          void doSend();
+        });
+        wrap.appendChild(b);
+      });
+      body.appendChild(wrap);
+      body.scrollTop = body.scrollHeight;
     }
 
     function pageContext() {
@@ -494,6 +730,7 @@
 
     var open = false;
     function setOpen(v) {
+      if (!widgetEnabled) return;
       open = v;
       if (v) {
         panel.classList.add("open");
@@ -534,6 +771,38 @@
       void doSend();
     });
     chipsWrap.insertBefore(pageActions, chipsWrap.firstChild);
+    var guideChip = document.createElement("button");
+    guideChip.type = "button";
+    guideChip.className = "rb-chip";
+    guideChip.textContent = "Guide me";
+    guideChip.addEventListener("click", function () {
+      requestGuidedTour();
+      addBot("Requested guided tour. Highlighting the first incomplete step.");
+    });
+    chipsWrap.insertBefore(guideChip, chipsWrap.firstChild);
+    var nextChip = document.createElement("button");
+    nextChip.type = "button";
+    nextChip.className = "rb-chip";
+    nextChip.textContent = "What should I do next?";
+    nextChip.addEventListener("click", function () {
+      window.dispatchEvent(new CustomEvent("runbook-what-next"));
+      addBot("Highlighting your next best step.");
+    });
+    chipsWrap.insertBefore(nextChip, chipsWrap.firstChild);
+    var hoverToggleChip = document.createElement("button");
+    hoverToggleChip.type = "button";
+    hoverToggleChip.className = "rb-chip";
+    hoverToggleChip.textContent = hoverEnabled ? "Hover notes: on" : "Hover notes: off";
+    hoverToggleChip.addEventListener("click", function () {
+      hoverEnabled = !hoverEnabled;
+      hoverToggleChip.textContent = hoverEnabled ? "Hover notes: on" : "Hover notes: off";
+      setStoredBool(HOVER_TOGGLE_KEY, hoverEnabled);
+      if (!hoverEnabled) {
+        hideHoverTooltip();
+        updateHoveredFeature(null);
+      }
+    });
+    chipsWrap.appendChild(hoverToggleChip);
 
     async function doSend() {
       var q = (inp.value || "").trim();
@@ -550,15 +819,16 @@
           pageContext: pageContext(),
           pageTitle: document.title || "",
           pageUrl: location.href || "",
-          hoveredFeature: hoveredFeature
+          hoveredFeature: hoveredFeature,
+          appState:
+            typeof window !== "undefined" && window.__runbookAppState && typeof window.__runbookAppState === "object"
+              ? window.__runbookAppState
+              : null
         };
-        if (projectId === DEMO_ID) {
-          var custom = manualSourcesFromBundle(bundle);
-          if (custom.length) body.customSources = custom;
+        if (isDemoProject) {
+          // Keep demo deterministic and avoid incorrect source-document references in UI.
+          body.customSources = [];
         }
-        var importedProjectId = loadImportedProjectId();
-        var importedDocs = importedProjectId === projectId ? loadImportedDocs() : [];
-        if (importedDocs.length) body.documents = importedDocs;
         var res = await fetch(base + "/api/embed/chat", {
           method: "POST",
           headers: headers,
@@ -574,10 +844,7 @@
         var html = "";
         if (data.answer) html += escapeHtml(data.answer).replace(/\n/g, "<br/>");
         var sourceCount = Array.isArray(data.sources) ? data.sources.length : 0;
-        var missingIndexSignal =
-          data.mode === "unindexed" ||
-          /AI is not configured|no indexed chunks yet/i.test(String(data.answer || "")) ||
-          sourceCount === 0;
+        var missingIndexSignal = false;
         if (missingIndexSignal) {
           html +=
             '<div style="margin-top:8px;border:1px solid rgba(245,158,11,.45);background:rgba(245,158,11,.12);color:#fde68a;border-radius:10px;padding:8px 10px;font-size:12px;line-height:1.4;">' +
@@ -591,18 +858,12 @@
           });
           html += "</ol>";
         }
-        if (data.sources && data.sources.length) {
-          html += '<div class="rb-src"><strong>Sources</strong><br/>';
-          data.sources.slice(0, CLIENT_MAX_SOURCES).forEach(function (s) {
-            html += "· " + escapeHtml(s.title);
-            var u = safeUrl(s.url);
-            if (u) html += ' <a href="' + escapeHtml(u) + '" target="_blank" rel="noopener noreferrer" style="color:#c7d2fe">(open)</a>';
-            if (s.excerpt) html += " — " + escapeHtml(s.excerpt.slice(0, 140)) + (s.excerpt.length > 140 ? "…" : "");
-            html += "<br/>";
-          });
-          html += "</div>";
-        }
+        // Source documents intentionally hidden in demos per product direction.
         addBot(html || "(empty)");
+        if (data && data.uiAction) {
+          runUiAction(data.uiAction, (data.steps && data.steps[0]) || "Start here.");
+        }
+        addSuggestionButtons(data && data.suggestions ? data.suggestions : []);
         maybeHighlight(q, data || {});
       } catch {
         addBot("Network error — is <code>" + escapeHtml(base) + "</code> reachable from this page?");
@@ -640,7 +901,7 @@
       }
     });
 
-    if (projectId === DEMO_ID) {
+    if (isDemoProject) {
       addBot(
         "<strong>" +
           escapeHtml(assistantName) +
@@ -650,6 +911,39 @@
     } else {
       addBot("<strong>Runbook</strong><br/>Ask a question. Answers use your indexed knowledge.");
     }
+    function applyWidgetEnabled() {
+      root.style.display = widgetEnabled ? "" : "none";
+      if (!widgetEnabled) {
+        open = false;
+        panel.classList.remove("open");
+      }
+    }
+    applyWidgetEnabled();
+    window.addEventListener("runbook-widget-toggle", function (evt) {
+      var detail = evt && typeof evt.detail === "boolean" ? evt.detail : !widgetEnabled;
+      widgetEnabled = Boolean(detail);
+      setStoredBool(WIDGET_TOGGLE_KEY, widgetEnabled);
+      applyWidgetEnabled();
+    });
+    window.addEventListener("runbook-hover-toggle", function (evt) {
+      hoverEnabled = evt && typeof evt.detail === "boolean" ? evt.detail : !hoverEnabled;
+      setStoredBool(HOVER_TOGGLE_KEY, hoverEnabled);
+      if (!hoverEnabled) {
+        hideHoverTooltip();
+        updateHoveredFeature(null);
+      }
+    });
+    window.addEventListener("runbook-app-state", function (evt) {
+      if (evt && evt.detail && typeof evt.detail === "object") {
+        localAppState = evt.detail;
+      }
+    });
+    window.addEventListener("runbook-what-next", function () {
+      startGuidedTourInternal();
+    });
+    window.addEventListener("runbook-start-tour", function () {
+      startGuidedTourInternal();
+    });
     trackHoverEvents();
   }
 
