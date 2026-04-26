@@ -86,6 +86,46 @@ function extractLocationTarget(text: string): string {
   return "the relevant action button";
 }
 
+function pageLooksLikeDashboard(ctx: string): boolean {
+  return /(workflow|integration|api key|deployment|settings|onboarding|template|dashboard)/i.test(ctx);
+}
+
+function inferActionsFromContext(ctx: string, hovered: string): { bullets: string[]; steps: string[] } {
+  if (hovered) {
+    const hoverTitle = hovered.split("—")[0]?.trim() || hovered;
+    return {
+      bullets: [
+        `Explore ${hoverTitle}`,
+        "Use the highlighted feature first",
+        "Follow page prompts for next action"
+      ],
+      steps: [
+        "Start with the hovered feature on this page.",
+        "Complete one action in that section.",
+        "Ask What next? for step-by-step guidance."
+      ]
+    };
+  }
+  if (pageLooksLikeDashboard(ctx)) {
+    return {
+      bullets: ["Create a workflow", "Connect integrations", "Set up API keys"],
+      steps: [
+        "Start with the primary CTA on this page.",
+        "Complete one setup action.",
+        "Ask What next? for guided progression."
+      ]
+    };
+  }
+  return {
+    bullets: ["Use the primary CTA", "Open navigation to key sections", "Follow visible setup hints"],
+    steps: [
+      "Look for the most prominent action button.",
+      "Open the related section from page navigation.",
+      "Complete one visible setup task, then ask for next steps."
+    ]
+  };
+}
+
 /** Deterministic demo responses for hackathon reliability. */
 export function buildNorthstarDemoResponse(message: string, pageContext: string, hoveredFeature?: string): DemoChatResult {
   const m = message.toLowerCase().trim();
@@ -112,11 +152,12 @@ export function buildNorthstarDemoResponse(message: string, pageContext: string,
   }
 
   if (m.includes("what can i do here")) {
+    const inferred = inferActionsFromContext(ctx, hovered);
     return createResult({
       answer: "Here are the key actions available on this page.",
-      bullets: ["Create a workflow", "Connect integrations", "Set up API keys"],
+      bullets: inferred.bullets,
       sources: product ? [{ title: product.title, excerpt: excerptFromContent(product.content), url: undefined }] : [],
-      steps: ["Start with the primary CTA on this page.", "Complete one setup action.", "Ask What next? for guided progression."]
+      steps: inferred.steps
     });
   }
 
