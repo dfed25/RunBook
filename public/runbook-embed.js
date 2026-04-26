@@ -143,7 +143,9 @@
     try {
       var steps = window.RUNBOOK_DEMO_STEPS;
       if (Array.isArray(steps) && steps.length > 0) return steps;
-    } catch (err) {}
+    } catch {
+      /* ignore */
+    }
     return [];
   }
 
@@ -151,7 +153,7 @@
     if (!sel || typeof sel !== "string") return null;
     try {
       return document.querySelector(sel);
-    } catch (e) {
+    } catch {
       return null;
     }
   }
@@ -214,7 +216,7 @@
         var el = null;
         try {
           el = document.querySelector(sel);
-        } catch (e) {
+        } catch {
           el = null;
         }
         if (el && el instanceof HTMLElement) return resolve(el);
@@ -305,7 +307,9 @@
     });
     try {
       window.dispatchEvent(new CustomEvent("runbook-watch-me-start"));
-    } catch (eStart) {}
+    } catch {
+      /* ignore */
+    }
     ui.cancel.style.pointerEvents = "auto";
 
     var startIdx = 0;
@@ -313,13 +317,15 @@
       try {
         startIdx = parseInt(sessionStorage.getItem(RB_WATCH_IDX_KEY) || "0", 10) || 0;
         if (startIdx >= steps.length) startIdx = 0;
-      } catch (e) {
+      } catch {
         startIdx = 0;
       }
     } else {
       try {
         sessionStorage.removeItem(RB_WATCH_IDX_KEY);
-      } catch (e2) {}
+      } catch {
+        /* ignore */
+      }
     }
 
     var cursorPos = { x: window.innerWidth / 2, y: window.innerHeight / 2 };
@@ -396,7 +402,9 @@
           if (doClick && typeof el.click === "function") {
             try {
               el.click();
-            } catch (e3) {}
+            } catch {
+              /* ignore */
+            }
           }
           var fxList = [];
           if (step.effect) fxList.push(step.effect);
@@ -411,7 +419,9 @@
           if (!full) {
             try {
               sessionStorage.setItem(RB_WATCH_IDX_KEY, String((si + 1) % steps.length));
-            } catch (e4) {}
+            } catch {
+              /* ignore */
+            }
             break;
           }
         }
@@ -422,7 +432,9 @@
           }
           try {
             window.dispatchEvent(new CustomEvent("runbook-assistant-status", { detail: "Done — now you try." }));
-          } catch (e5) {}
+          } catch {
+            /* ignore */
+          }
         }
       } finally {
         rbDestroyWatchUi(ui);
@@ -517,7 +529,9 @@
         ev.preventDefault();
         try {
           window.dispatchEvent(new CustomEvent("runbook-start-tour"));
-        } catch (e) {}
+        } catch {
+          /* ignore */
+        }
       }
       if (btn.getAttribute("data-rb-local-watch") === "1") {
         ev.preventDefault();
@@ -872,7 +886,9 @@
       guideChip.addEventListener("click", function () {
         try {
           window.dispatchEvent(new CustomEvent("runbook-start-tour"));
-        } catch (eG) {}
+        } catch {
+          /* ignore */
+        }
       });
       chipsWrap.appendChild(guideChip);
       var wm = document.createElement("button");
@@ -913,7 +929,9 @@
               var tt = (n.getAttribute("data-runbook-title") || "").trim();
               if (tt && feats.indexOf(tt) === -1) feats.push(tt);
             });
-          } catch (e0) {}
+          } catch {
+            /* ignore */
+          }
           var html = "<p><strong>Here is what you can do on this page:</strong></p><ul class=\"rb-steps\">";
           stLocal.slice(0, 3).forEach(function (s) {
             html += "<li>" + rbEscapeHtml(String(s.label || s.id || "Step")) + "</li>";

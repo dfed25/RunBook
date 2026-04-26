@@ -524,7 +524,12 @@ if (apiKeyForm instanceof HTMLFormElement) {
     const masked = `rb_${Math.random().toString(36).slice(2, 8)}****`;
     const item = document.createElement("li");
     item.className = "flex items-center justify-between rounded-lg bg-slate-950/70 px-3 py-2";
-    item.innerHTML = `<span>${keyName} (${keyEnv})</span><span class="text-slate-400">${masked}</span>`;
+    const nameSpan = document.createElement("span");
+    nameSpan.textContent = `${keyName} (${keyEnv})`;
+    const maskedSpan = document.createElement("span");
+    maskedSpan.className = "text-slate-400";
+    maskedSpan.textContent = masked;
+    item.append(nameSpan, maskedSpan);
     if (apiKeyList instanceof HTMLUListElement) apiKeyList.prepend(item);
 
     keyNameInput.value = "";

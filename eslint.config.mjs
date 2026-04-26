@@ -5,6 +5,12 @@ import nextTs from "eslint-config-next/typescript";
 const eslintConfig = defineConfig([
   ...nextVitals,
   ...nextTs,
+  {
+    files: ["runbook-demo/RunBook-Demo/demo-3/Demo-3/server.js", "runbook-demo/RunBook-Demo/demo-3/Demo-3/stop.js"],
+    rules: {
+      "@typescript-eslint/no-require-imports": "off"
+    }
+  },
   // Override default ignores of eslint-config-next.
   globalIgnores([
     // Default ignores of eslint-config-next:

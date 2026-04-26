@@ -386,7 +386,122 @@ export default function EmbedDemoPage() {
     setShowNudge(false);
   };
 
-  const resetDemoState = () => {
+  const highlightRecommended = useCallback((feature: string | null) => {
+    if (!feature) return;
+    setTourActive(false);
+    setTourHighlightFeature(feature === "create-workflow" ? "workflow-builder" : feature);
+  }, []);
+
+  const showInterrupt = useCallback(
+    (message: string, targetFeature: string | null) => {
+      setInterrupt({ type: "warning", message, targetFeature, primaryAction: "guide" });
+      setStatus(message);
+      highlightRecommended(targetFeature);
+    },
+    [highlightRecommended, setStatus]
+  );
+
+  const connectGithub = useCallback(() => {
+    setAppState((s) => ({ ...s, githubConnected: true }));
+    setTourHighlightFeature("github-card");
+    setStatus("Nice - GitHub connected. Next: create an API key.");
+    addActivity("GitHub connected");
+    if (tourActive && currentTourStep?.id === "connect-github") advanceTourAfterSuccess(currentTourStep);
+  }, [addActivity, advanceTourAfterSuccess, currentTourStep, setStatus, tourActive]);
+
+  const createApiKey = useCallback(() => {
+    const token = `rk_live_${createSecureTokenSuffix(12)}`;
+    setApiKeyValue(token);
+    setAppState((s) => ({ ...s, apiKeyCreated: true }));
+    setTourHighlightFeature("api-keys");
+    setStatus("Key created. Next: build your first workflow.");
+    addActivity("API key generated");
+    if (tourActive && currentTourStep?.id === "create-api-key") advanceTourAfterSuccess(currentTourStep);
+  }, [addActivity, advanceTourAfterSuccess, currentTourStep, setStatus, tourActive]);
+
+  const createWorkflow = useCallback(() => {
+    setAppState((s) => ({ ...s, workflowCreated: true }));
+    setShowWorkflowModal(false);
+    setTourHighlightFeature("workflow-builder");
+    setStatus("Workflow created. Next: deploy to staging.");
+    addActivity("Workflow created");
+    if (tourActive && currentTourStep?.id === "build-workflow") advanceTourAfterSuccess(currentTourStep);
+  }, [addActivity, advanceTourAfterSuccess, currentTourStep, setStatus, tourActive]);
+
+  const deployStaging = useCallback(() => {
+    setDeploymentStatus("deploying");
+    setStatus("Deploying...");
+    addActivity("Deploy started");
+    window.setTimeout(() => {
+      setDeploymentStatus("healthy");
+      setAppState((s) => ({ ...s, deployed: true }));
+      setTourHighlightFeature("deployments");
+      addActivity("Staging healthy");
+      addActivity("Assistant activated on staging");
+      addActivity("Workflow ready to guide users");
+      setWidgetPulse(true);
+      window.dispatchEvent(new CustomEvent("runbook-widget-pulse", { detail: true }));
+      setStatus("Your assistant is live. Ask what users can do here.");
+      if (tourActive && currentTourStep?.id === "deploy-staging") advanceTourAfterSuccess(currentTourStep);
+    }, 900);
+  }, [addActivity, advanceTourAfterSuccess, currentTourStep, setStatus, tourActive]);
+
+  const handleUserIntent = useCallback(
+    (
+      intentId: "connect-github" | "create-api-key" | "new-workflow" | "deploy" | "open-builder" | "manage-integrations"
+    ): boolean => {
+      if (intentId === "connect-github") {
+        setInterrupt(null);
+        connectGithub();
+        return true;
+      }
+      if (intentId === "create-api-key") {
+        if (!appState.githubConnected) {
+          showInterrupt("Connect your source first, then create the key.", "integrations");
+          return false;
+        }
+        setInterrupt(null);
+        createApiKey();
+        return true;
+      }
+      if (intentId === "new-workflow" || intentId === "open-builder") {
+        if (!appState.githubConnected) {
+          showInterrupt("Connect GitHub first so your workflow has a trigger.", "integrations");
+          return false;
+        }
+        setInterrupt(null);
+        setShowWorkflowModal(true);
+        setStatus("Create the workflow");
+        return true;
+      }
+      if (intentId === "deploy") {
+        if (!appState.workflowCreated) {
+          showInterrupt("Almost — build a workflow before deploying.", "create-workflow");
+          return false;
+        }
+        setInterrupt(null);
+        deployStaging();
+        return true;
+      }
+      if (intentId === "manage-integrations") {
+        setInterrupt(null);
+        setShowIntegrationsPanel(true);
+        return true;
+      }
+      return true;
+    },
+    [
+      appState.githubConnected,
+      appState.workflowCreated,
+      connectGithub,
+      createApiKey,
+      deployStaging,
+      setStatus,
+      showInterrupt
+    ]
+  );
+
+  const resetDemoState = useCallback(() => {
     const reset: AppState = {
       githubConnected: false,
       apiKeyCreated: false,
@@ -417,111 +532,7 @@ export default function EmbedDemoPage() {
     setShowNudge(true);
     setStatus("Ready to guide");
     addActivity("Demo reset");
-  };
-
-  const highlightRecommended = useCallback((feature: string | null) => {
-    if (!feature) return;
-    setTourActive(false);
-    setTourHighlightFeature(feature === "create-workflow" ? "workflow-builder" : feature);
-  }, []);
-
-  const showInterrupt = useCallback(
-    (message: string, targetFeature: string | null) => {
-      setInterrupt({ type: "warning", message, targetFeature, primaryAction: "guide" });
-      setStatus(message);
-      highlightRecommended(targetFeature);
-    },
-    [highlightRecommended, setStatus]
-  );
-
-  const connectGithub = () => {
-    setAppState((s) => ({ ...s, githubConnected: true }));
-    setTourHighlightFeature("github-card");
-    setStatus("Nice - GitHub connected. Next: create an API key.");
-    addActivity("GitHub connected");
-    if (tourActive && currentTourStep?.id === "connect-github") advanceTourAfterSuccess(currentTourStep);
-  };
-
-  const createApiKey = () => {
-    const token = `rk_live_${createSecureTokenSuffix(12)}`;
-    setApiKeyValue(token);
-    setAppState((s) => ({ ...s, apiKeyCreated: true }));
-    setTourHighlightFeature("api-keys");
-    setStatus("Key created. Next: build your first workflow.");
-    addActivity("API key generated");
-    if (tourActive && currentTourStep?.id === "create-api-key") advanceTourAfterSuccess(currentTourStep);
-  };
-
-  const createWorkflow = () => {
-    setAppState((s) => ({ ...s, workflowCreated: true }));
-    setShowWorkflowModal(false);
-    setTourHighlightFeature("workflow-builder");
-    setStatus("Workflow created. Next: deploy to staging.");
-    addActivity("Workflow created");
-    if (tourActive && currentTourStep?.id === "build-workflow") advanceTourAfterSuccess(currentTourStep);
-  };
-
-  const deployStaging = () => {
-    setDeploymentStatus("deploying");
-    setStatus("Deploying...");
-    addActivity("Deploy started");
-    window.setTimeout(() => {
-      setDeploymentStatus("healthy");
-      setAppState((s) => ({ ...s, deployed: true }));
-      setTourHighlightFeature("deployments");
-      addActivity("Staging healthy");
-      addActivity("Assistant activated on staging");
-      addActivity("Workflow ready to guide users");
-      setWidgetPulse(true);
-      window.dispatchEvent(new CustomEvent("runbook-widget-pulse", { detail: true }));
-      setStatus("Your assistant is live. Ask what users can do here.");
-      if (tourActive && currentTourStep?.id === "deploy-staging") advanceTourAfterSuccess(currentTourStep);
-    }, 900);
-  };
-
-  const handleUserIntent = (
-    intentId: "connect-github" | "create-api-key" | "new-workflow" | "deploy" | "open-builder" | "manage-integrations"
-  ): boolean => {
-    if (intentId === "connect-github") {
-      setInterrupt(null);
-      connectGithub();
-      return true;
-    }
-    if (intentId === "create-api-key") {
-      if (!appState.githubConnected) {
-        showInterrupt("Connect your source first, then create the key.", "integrations");
-        return false;
-      }
-      setInterrupt(null);
-      createApiKey();
-      return true;
-    }
-    if (intentId === "new-workflow" || intentId === "open-builder") {
-      if (!appState.githubConnected) {
-        showInterrupt("Connect GitHub first so your workflow has a trigger.", "integrations");
-        return false;
-      }
-      setInterrupt(null);
-      setShowWorkflowModal(true);
-      setStatus("Create the workflow");
-      return true;
-    }
-    if (intentId === "deploy") {
-      if (!appState.workflowCreated) {
-        showInterrupt("Almost — build a workflow before deploying.", "create-workflow");
-        return false;
-      }
-      setInterrupt(null);
-      deployStaging();
-      return true;
-    }
-    if (intentId === "manage-integrations") {
-      setInterrupt(null);
-      setShowIntegrationsPanel(true);
-      return true;
-    }
-    return true;
-  };
+  }, [addActivity, setStatus]);
 
   const watchMeHandlersRef = useRef({
     connectGithub: () => {},
