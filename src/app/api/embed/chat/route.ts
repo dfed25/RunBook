@@ -64,6 +64,7 @@ type ChatBody = {
   customSources?: unknown;
   /** Optional imported repository docs from Studio/embed demo. */
   documents?: unknown;
+  hoveredFeature?: unknown;
 };
 
 type StructuredChatPayload = {
@@ -105,11 +106,29 @@ function sanitizeDocuments(raw: unknown): { title: string; content: string }[] {
 }
 
 function normalizePageContext(body: ChatBody): string {
+  const hovered = sanitizeHoveredFeature(body.hoveredFeature);
   if (typeof body.pageContext === "string" && body.pageContext.trim()) {
-    return body.pageContext.trim();
+    return [
+      `Page URL: ${body.pageUrl || "n/a"}`,
+      `Page title: ${body.pageTitle || "n/a"}`,
+      hovered ? `Hovered feature: ${hovered}` : "",
+      body.pageContext.trim()
+    ]
+      .filter(Boolean)
+      .join("\n");
   }
-  const parts = [body.pageUrl, body.pageTitle].filter(Boolean) as string[];
+  const parts = [body.pageUrl, body.pageTitle, hovered].filter(Boolean) as string[];
   return parts.join("\n");
+}
+
+function sanitizeHoveredFeature(raw: unknown): string {
+  if (!raw || typeof raw !== "object") return "";
+  const obj = raw as Record<string, unknown>;
+  const feature = String(obj.feature || "").trim();
+  const title = String(obj.title || "").trim();
+  const description = String(obj.description || "").trim().slice(0, 400);
+  const joined = [title || feature, description].filter(Boolean).join(" — ");
+  return joined.slice(0, 520);
 }
 
 function normalizeStructured(payload: Partial<StructuredChatPayload>): StructuredChatPayload {
@@ -173,7 +192,12 @@ export async function POST(req: NextRequest) {
     }
 
     const customSources = [...sanitizeCustomSources(body.customSources), ...requestDocs];
-    const payload = await runNorthstarEmbedChat({ message, pageContext, customSources });
+    const payload = await runNorthstarEmbedChat({
+      message,
+      pageContext,
+      hoveredFeature: sanitizeHoveredFeature(body.hoveredFeature),
+      customSources
+    });
     return NextResponse.json(normalizeStructured(payload), { headers: corsHeaders(origin) });
   }
 
@@ -213,9 +237,18 @@ export async function POST(req: NextRequest) {
     )
     .join("\n\n");
 
+  const hoveredFeature = sanitizeHoveredFeature(body.hoveredFeature);
   const userPrompt = `Repository: ${project.githubRepoFullName} (default branch hint: ${project.defaultBranch})
+Answer priority:
+1) Current page context
+2) Hovered feature details
+3) Repository sources
+Only use repository context for deeper explanation.
+
 Page context:
 ${pageContext || "(not provided)"}
+Hovered feature context:
+${hoveredFeature || "(none)"}
 
 Indexed sources:
 ${context || "(no indexed chunks yet)"}

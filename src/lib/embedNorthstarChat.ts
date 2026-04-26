@@ -8,6 +8,7 @@ import { clipWords, MAX_ANSWER_WORDS, normalizeBullets, normalizeSuggestions, no
 const NORTHSTAR_SYSTEM = `You are Runbook, an embedded in-app onboarding assistant for the "Northstar AI" demo product.
 Use ONLY the knowledge excerpts provided in the user message. If something is not in the excerpts, say briefly that it is not documented and suggest where to look next.
 Never output long paragraphs.
+Prioritize page and hovered feature context first, and use docs as background.
 Return a short scannable structure as compact JSON on one final line:
 RUNBOOK_JSON: {"answer":"<=12 words","bullets":["<=14 words","..."],"steps":["..."],"suggestions":["Guide me step-by-step","Explain this page","What can I do next?"]}
 Rules:
@@ -73,6 +74,7 @@ function parseStructured(raw: string): { answer: string; bullets: string[]; step
 export async function runNorthstarEmbedChat(input: {
   message: string;
   pageContext: string;
+  hoveredFeature?: string;
   customSources: { title: string; content: string }[];
 }): Promise<DemoChatResult> {
   const extraDocs: SourceDoc[] = input.customSources.map((s, i) => ({
@@ -100,7 +102,7 @@ export async function runNorthstarEmbedChat(input: {
           .join("\n\n")
       : demoDocs.map((d) => `### ${d.title}\n${d.content.slice(0, 1_500)}`).join("\n\n");
 
-  const fallback = buildNorthstarDemoResponse(input.message, input.pageContext);
+  const fallback = buildNorthstarDemoResponse(input.message, input.pageContext, input.hoveredFeature);
 
   if (!isServerLlmConfigured()) {
     return {
@@ -109,7 +111,22 @@ export async function runNorthstarEmbedChat(input: {
     };
   }
 
-  const userBlock = `Page context:\n${input.pageContext || "(none)"}\n\nKnowledge excerpts (cite only from here):\n${contextBlock}\n\nUser question:\n${input.message}`;
+  const userBlock = `Priority order:
+1) Current page context
+2) Hovered feature context
+3) Knowledge excerpts
+
+Page context:
+${input.pageContext || "(none)"}
+
+Hovered feature context:
+${input.hoveredFeature || "(none)"}
+
+Knowledge excerpts (cite only from here):
+${contextBlock}
+
+User question:
+${input.message}`;
 
   try {
     const raw = await generateFromGemini(NORTHSTAR_SYSTEM, userBlock);
