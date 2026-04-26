@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState, type MouseEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import { usePathname } from "next/navigation";
 import { EmbeddedRunbookAssistant } from "@/components/EmbeddedRunbookAssistant";
 import {
@@ -32,7 +32,7 @@ function getInitialAgentFromUrl(): TestAgentProfile | null {
 }
 
 const NAV_ITEMS = [
-  { href: "/embed-demo/overview", label: "Overview", feature: "overview-dashboard" },
+  { href: "/embed-demo/overview", activePaths: ["/embed-demo", "/embed-demo/overview"], label: "Overview", feature: "overview-dashboard" },
   { href: "/embed-demo/workflows", label: "Workflows", feature: "workflow-builder" },
   { href: "/embed-demo/integrations", label: "Integrations", feature: "integrations-panel" },
   { href: "/embed-demo/api-keys", label: "API Keys", feature: "api-key-setup" },
@@ -168,26 +168,16 @@ function buildFeatureExplanationMap(docs: ImportedDocument[]): Record<string, st
 
 export default function EmbedDemoLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const [bundle, setBundle] = useState<DemoBundle>(() => {
-    const initialAgent = getInitialAgentFromUrl();
-    return initialAgent ? initialAgent.assistantConfig : loadDemoBundle();
-  });
-  const [projectId, setProjectId] = useState(() => {
-    const initialAgent = getInitialAgentFromUrl();
-    return initialAgent ? initialAgent.projectId : loadProjectId();
-  });
-  const [repoInfo, setRepoInfo] = useState<ImportedRepoInfo | null>(() => {
-    const initialAgent = getInitialAgentFromUrl();
-    return initialAgent ? initialAgent.repo : loadImportedRepo();
-  });
-  const [importedDocs, setImportedDocs] = useState<ImportedDocument[]>(() => {
-    const initialAgent = getInitialAgentFromUrl();
-    return initialAgent ? initialAgent.documents : loadImportedDocs();
-  });
+  const initialAgent = useMemo(() => getInitialAgentFromUrl(), []);
+  const [bundle, setBundle] = useState<DemoBundle>(() => (initialAgent ? initialAgent.assistantConfig : loadDemoBundle()));
+  const [projectId, setProjectId] = useState(() => (initialAgent ? initialAgent.projectId : loadProjectId()));
+  const [repoInfo, setRepoInfo] = useState<ImportedRepoInfo | null>(() => (initialAgent ? initialAgent.repo : loadImportedRepo()));
+  const [importedDocs, setImportedDocs] = useState<ImportedDocument[]>(() => (initialAgent ? initialAgent.documents : loadImportedDocs()));
   const [savedAgents, setSavedAgents] = useState<TestAgentProfile[]>(() => loadTestAgents());
   const [hoverInfo, setHoverInfo] = useState<HoverInfo | null>(null);
   const [hintsEnabled, setHintsEnabled] = useState<boolean>(() => getStoredBoolean(HINTS_TOGGLE_KEY, true));
   const [assistantEnabled, setAssistantEnabled] = useState<boolean>(() => getStoredBoolean(ASSISTANT_TOGGLE_KEY, true));
+  const hoverWrapRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     const refresh = () => {
@@ -223,13 +213,13 @@ export default function EmbedDemoLayout({ children }: { children: React.ReactNod
 
   const featureExplanationMap = useMemo(() => buildFeatureExplanationMap(importedDocs), [importedDocs]);
 
-  const resolveFeatureDescription = (target: HTMLElement, fallbackDescription: string): string => {
+  const resolveFeatureDescription = useCallback((target: HTMLElement, fallbackDescription: string): string => {
     const feature = target.getAttribute("data-runbook-feature") || "";
     if (!feature) return fallbackDescription;
     return featureExplanationMap[feature] || DEMO_FEATURE_EXPLANATIONS[feature] || fallbackDescription;
-  };
+  }, [featureExplanationMap]);
 
-  const showFeatureTooltip = (event: MouseEvent<HTMLElement>) => {
+  const showFeatureTooltip = useCallback((event: MouseEvent<HTMLElement>) => {
     if (!hintsEnabled) return;
     const target = (event.target as HTMLElement).closest<HTMLElement>("[data-runbook-feature]");
     if (!target) return;
@@ -248,7 +238,36 @@ export default function EmbedDemoLayout({ children }: { children: React.ReactNod
     if (top + estimatedHeight > maxBottom) top = maxBottom - estimatedHeight;
     if (top < window.scrollY + 8) top = window.scrollY + 8;
     setHoverInfo({ title, description, top, left });
-  };
+  }, [hintsEnabled, resolveFeatureDescription]);
+
+  useEffect(() => {
+    const root = hoverWrapRef.current;
+    if (!root) return;
+    let raf = 0;
+    const onPointerMove = (evt: PointerEvent) => {
+      if (!hintsEnabled) return;
+      if (raf) cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => {
+        const target = evt.target as HTMLElement | null;
+        if (!target) return;
+        if (!root.contains(target)) return;
+        const featureEl = target.closest<HTMLElement>("[data-runbook-feature]");
+        if (!featureEl) {
+          setHoverInfo(null);
+          return;
+        }
+        showFeatureTooltip({ target: featureEl } as unknown as MouseEvent<HTMLElement>);
+      });
+    };
+    const onPointerLeave = () => setHoverInfo(null);
+    root.addEventListener("pointermove", onPointerMove);
+    root.addEventListener("pointerleave", onPointerLeave);
+    return () => {
+      if (raf) cancelAnimationFrame(raf);
+      root.removeEventListener("pointermove", onPointerMove);
+      root.removeEventListener("pointerleave", onPointerLeave);
+    };
+  }, [hintsEnabled, featureExplanationMap, showFeatureTooltip]);
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
@@ -283,7 +302,12 @@ export default function EmbedDemoLayout({ children }: { children: React.ReactNod
         </div>
       </header>
 
-      <div className="mx-auto grid max-w-7xl gap-5 px-5 py-5 md:grid-cols-[240px_1fr]" onMouseOver={showFeatureTooltip} onMouseOut={() => setHoverInfo(null)}>
+      <div
+        ref={(el) => {
+          hoverWrapRef.current = el;
+        }}
+        className="mx-auto grid max-w-7xl gap-5 px-5 py-5 md:grid-cols-[240px_1fr]"
+      >
         <aside className="rounded-2xl border border-white/10 bg-slate-900/80 p-4">
           <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Navigation</p>
           <ul className="space-y-1 text-sm">
@@ -292,7 +316,9 @@ export default function EmbedDemoLayout({ children }: { children: React.ReactNod
                 <Link
                   href={item.href}
                   className={`block rounded-lg px-3 py-2 ${
-                    pathname === item.href ? "bg-indigo-500/20 text-indigo-100" : "text-slate-300 hover:bg-white/5 hover:text-white"
+                    ((item.activePaths && item.activePaths.includes(pathname)) || pathname === item.href)
+                      ? "bg-indigo-500/20 text-indigo-100"
+                      : "text-slate-300 hover:bg-white/5 hover:text-white"
                   }`}
                   data-runbook-feature={item.feature}
                   data-runbook-title={item.label}
@@ -386,7 +412,7 @@ export default function EmbedDemoLayout({ children }: { children: React.ReactNod
 
       {assistantEnabled ? (
         <EmbeddedRunbookAssistant
-          key={`${bundle.assistantName}-${bundle.primaryColor}-${projectId}-${importedDocs.length}-${bundle.manualSources.length}-${bundle.suggestedQuestions.join("|")}`}
+          key={`${projectId}-${importedDocs.length}`}
           projectId={projectId}
           assistantName={bundle.assistantName}
           welcomeMessage={bundle.welcome}

@@ -30,6 +30,9 @@
   }
 
   var DEMO_ID = "northstar-demo";
+  // Keep client caps aligned with server normalizeSteps/MAX_SOURCES in embedStructured.
+  var CLIENT_MAX_STEPS = 4;
+  var CLIENT_MAX_SOURCES = 3;
   function isLocationIntent(text) {
     return /(where|find|locate|click|open|go to|how do i|create account|sign up|signup|register|get started|log in|login)/i.test(
       String(text || "")
@@ -335,7 +338,7 @@
         el.id || "",
         el.getAttribute("name") || "",
         el.getAttribute("placeholder") || "",
-        el.className || "",
+        el.getAttribute("class") || "",
         el.getAttribute("data-runbook-feature") || "",
         el.getAttribute("data-runbook-title") || "",
         el.getAttribute("data-runbook-description") || ""
@@ -492,14 +495,23 @@
     var open = false;
     function setOpen(v) {
       open = v;
-      if (v) panel.classList.add("open");
-      else panel.classList.remove("open");
+      if (v) {
+        panel.classList.add("open");
+        if (body.children.length <= 1) {
+          hasStartedChat = false;
+          chipsWrap.style.display = "";
+        }
+      } else {
+        panel.classList.remove("open");
+      }
     }
     btn.addEventListener("click", function () {
       setOpen(!open);
     });
     closeBtn.addEventListener("click", function () {
       setOpen(false);
+      hasStartedChat = false;
+      chipsWrap.style.display = "";
     });
 
     suggested.slice(0, 3).forEach(function (label) {
@@ -574,14 +586,14 @@
         }
         if (data.steps && data.steps.length) {
           html += '<ol class="rb-steps">';
-          data.steps.slice(0, 4).forEach(function (s) {
+          data.steps.slice(0, CLIENT_MAX_STEPS).forEach(function (s) {
             html += "<li>" + escapeHtml(s) + "</li>";
           });
           html += "</ol>";
         }
         if (data.sources && data.sources.length) {
           html += '<div class="rb-src"><strong>Sources</strong><br/>';
-          data.sources.slice(0, 3).forEach(function (s) {
+          data.sources.slice(0, CLIENT_MAX_SOURCES).forEach(function (s) {
             html += "· " + escapeHtml(s.title);
             var u = safeUrl(s.url);
             if (u) html += ' <a href="' + escapeHtml(u) + '" target="_blank" rel="noopener noreferrer" style="color:#c7d2fe">(open)</a>';

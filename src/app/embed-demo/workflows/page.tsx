@@ -14,7 +14,9 @@ export default function WorkflowsPage() {
             <h2 className="text-lg font-semibold">Workflow templates</h2>
             <p className="text-sm text-slate-400">Select a template, then customize trigger conditions and actions.</p>
           </div>
-          <button className="rounded-lg bg-indigo-500 px-3 py-2 text-sm font-semibold text-white">Start from blank</button>
+          <button type="button" className="rounded-lg bg-indigo-500 px-3 py-2 text-sm font-semibold text-white">
+            Start from blank
+          </button>
         </div>
       </FeatureCard>
 
@@ -33,7 +35,9 @@ export default function WorkflowsPage() {
           >
             <p className="font-semibold text-white">{title}</p>
             <p className="mt-1 text-sm text-slate-400">{description}</p>
-            <button className="mt-3 rounded-lg border border-white/20 px-3 py-1.5 text-xs">Use template</button>
+            <button type="button" className="mt-3 rounded-lg border border-white/20 px-3 py-1.5 text-xs">
+              Use template
+            </button>
           </FeatureCard>
         ))}
       </div>

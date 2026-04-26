@@ -10,7 +10,14 @@ export default function DeploymentsPage() {
         className="rounded-2xl border border-white/10 bg-slate-900 p-4"
       >
         <h2 className="text-lg font-semibold">Current rollout</h2>
-        <div className="mt-3 h-2 rounded-full bg-slate-800">
+        <div
+          className="mt-3 h-2 rounded-full bg-slate-800"
+          role="progressbar"
+          aria-label="Deployment progress"
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={75}
+        >
           <div className="h-2 w-3/4 rounded-full bg-emerald-400" />
         </div>
         <p className="mt-2 text-sm text-slate-400">75% complete · Production canary in progress</p>
@@ -37,8 +44,12 @@ export default function DeploymentsPage() {
           className="rounded-2xl border border-white/10 bg-slate-900 p-4"
         >
           <div className="flex gap-2">
-            <button className="rounded-lg border border-amber-400/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">Pause rollout</button>
-            <button className="rounded-lg border border-rose-400/40 bg-rose-500/10 px-3 py-2 text-xs text-rose-200">Rollback now</button>
+            <button type="button" className="rounded-lg border border-amber-400/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
+              Pause rollout
+            </button>
+            <button type="button" className="rounded-lg border border-rose-400/40 bg-rose-500/10 px-3 py-2 text-xs text-rose-200">
+              Rollback now
+            </button>
           </div>
         </FeatureCard>
       </div>

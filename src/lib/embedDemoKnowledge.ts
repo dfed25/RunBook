@@ -255,9 +255,8 @@ export function buildNorthstarDemoResponse(message: string, pageContext: string,
       steps: [
         "Open Integrations and connect GitHub or Slack first.",
         "Go to API Keys and generate a development key.",
-        "Open Workflows and create your first workflow from a template.",
-        "Run a test event, then deploy to staging from Deployments.",
-        "Review Settings to set safe defaults and teammate permissions."
+        "Open Workflows, create your first workflow, and run a test event.",
+        "Deploy to staging, then review Settings for safe defaults and permissions."
       ]
     });
   }

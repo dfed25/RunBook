@@ -7,6 +7,7 @@ import {
   type DemoManualSource,
   type ImportedDocument
 } from "@/lib/studioDemoStorage";
+import { MAX_BULLETS, MAX_SOURCES, MAX_STEPS, MAX_SUGGESTIONS } from "@/lib/embedStructured";
 
 type ChatResponse = {
   answer?: string;
@@ -259,10 +260,10 @@ export function EmbeddedRunbookAssistant({
           {
             role: "assistant",
             answer: data.answer,
-            bullets: (data.bullets || []).slice(0, 3),
-            steps: (data.steps || []).slice(0, 4),
-            sources: (data.sources || []).slice(0, 3),
-            suggestions: (data.suggestions || []).slice(0, 3),
+            bullets: (data.bullets || []).slice(0, MAX_BULLETS),
+            steps: (data.steps || []).slice(0, MAX_STEPS),
+            sources: (data.sources || []).slice(0, MAX_SOURCES),
+            suggestions: (data.suggestions || []).slice(0, MAX_SUGGESTIONS),
             text: !data.answer ? "No content." : undefined
           }
         ]);
@@ -429,7 +430,7 @@ export function EmbeddedRunbookAssistant({
                   )}
                   {msg.bullets && msg.bullets.length > 0 ? (
                     <ul className="mb-2 mt-1 space-y-1 text-xs text-slate-300">
-                      {msg.bullets.slice(0, 2).map((bullet, idx) => (
+                      {msg.bullets.slice(0, MAX_BULLETS).map((bullet, idx) => (
                         <li key={`${messageId}-b-${idx}`} className="flex gap-2">
                           <span>•</span>
                           <span>{bullet}</span>
@@ -440,7 +441,7 @@ export function EmbeddedRunbookAssistant({
                   {msg.steps && msg.steps.length > 0 ? (
                     <StepMode
                       messageId={messageId}
-                      steps={(msg.steps || []).slice(0, 4)}
+                      steps={msg.steps || []}
                       completedMap={completedStepsByMessage[messageId] || {}}
                       onToggle={toggleStep}
                     />

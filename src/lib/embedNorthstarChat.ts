@@ -3,18 +3,18 @@ import { demoDocs } from "./demoDocs";
 import type { SourceDoc } from "./types";
 import { buildNorthstarDemoResponse, type DemoChatResult } from "./embedDemoKnowledge";
 import { retrieveKeywordSources } from "./embedKeywordRetrieval";
-import { clipWords, MAX_ANSWER_WORDS, normalizeBullets, normalizeSuggestions, normalizeSteps } from "./embedStructured";
+import { clipWords, MAX_ANSWER_WORDS, MAX_SOURCES, normalizeBullets, normalizeSuggestions, normalizeSteps } from "./embedStructured";
 
 const NORTHSTAR_SYSTEM = `You are Runbook, an embedded in-app onboarding assistant for the "Northstar AI" demo product.
 Use ONLY the knowledge excerpts provided in the user message. If something is not in the excerpts, say briefly that it is not documented and suggest where to look next.
 Never output long paragraphs.
 Prioritize page and hovered feature context first, and use docs as background.
 Return a short scannable structure as compact JSON on one final line:
-RUNBOOK_JSON: {"answer":"<=12 words","bullets":["<=14 words","..."],"steps":["..."],"suggestions":["Guide me step-by-step","Explain this page","What can I do next?"]}
+RUNBOOK_JSON: {"answer":"<=10 words","bullets":["<=12 words","..."],"steps":["3-4 short items"],"suggestions":["Guide me step-by-step","Explain this page","What can I do next?"]}
 Rules:
-- answer max 12 words
+- answer max 10 words
 - bullets max 3
-- steps 3-6 short imperative items when actionable
+- steps 3-4 short imperative items when actionable
 - suggestions max 3
 - no markdown code fences.`;
 
@@ -34,7 +34,7 @@ function mergeSources(
     seen.add(k);
     out.push(s);
   }
-  return out.slice(0, 6);
+  return out.slice(0, MAX_SOURCES);
 }
 
 function parseStructured(raw: string): { answer: string; bullets: string[]; steps: string[]; suggestions: string[] } {
@@ -111,7 +111,7 @@ export async function runNorthstarEmbedChat(input: {
       "I then use imported repository code to explain behavior",
       "Ask about a specific button, flow, or API route for precision"
     ]),
-    sources: keywordSources.slice(0, 6),
+    sources: keywordSources.slice(0, MAX_SOURCES),
     steps: normalizeSteps([
       "Ask about the exact UI control or flow you are on.",
       "Include the visible label so I can map it to code behavior.",
@@ -119,11 +119,13 @@ export async function runNorthstarEmbedChat(input: {
     ]),
     suggestions: normalizeSuggestions(["Guide me step-by-step", "Explain this page", "What can I do next?"])
   };
+  const pickFallback = <K extends keyof DemoChatResult>(field: K): DemoChatResult[K] =>
+    hasImportedCodeContext ? importedFallback[field] : fallback[field];
 
   if (!isServerLlmConfigured()) {
     return {
       ...(hasImportedCodeContext ? importedFallback : fallback),
-      sources: hasImportedCodeContext ? keywordSources.slice(0, 6) : mergeSources(keywordSources, fallback.sources)
+      sources: hasImportedCodeContext ? keywordSources.slice(0, MAX_SOURCES) : mergeSources(keywordSources, pickFallback("sources"))
     };
   }
 
@@ -158,16 +160,16 @@ ${input.message}`;
             : ["Review the sources below.", "Ask a more specific follow-up.", "Check with your team lead if unsure."];
     return {
       answer,
-      bullets: bullets.length > 0 ? bullets : hasImportedCodeContext ? importedFallback.bullets : fallback.bullets,
-      sources: hasImportedCodeContext ? keywordSources.slice(0, 6) : mergeSources(keywordSources, fallback.sources),
+      bullets: bullets.length > 0 ? bullets : pickFallback("bullets"),
+      sources: hasImportedCodeContext ? keywordSources.slice(0, MAX_SOURCES) : mergeSources(keywordSources, pickFallback("sources")),
       steps: finalSteps,
-      suggestions: suggestions.length > 0 ? suggestions : hasImportedCodeContext ? importedFallback.suggestions : fallback.suggestions
+      suggestions: suggestions.length > 0 ? suggestions : pickFallback("suggestions")
     };
   } catch (e) {
     console.warn("northstar LLM fallback:", e);
     return {
       ...(hasImportedCodeContext ? importedFallback : fallback),
-      sources: hasImportedCodeContext ? keywordSources.slice(0, 6) : mergeSources(keywordSources, fallback.sources)
+      sources: hasImportedCodeContext ? keywordSources.slice(0, MAX_SOURCES) : mergeSources(keywordSources, pickFallback("sources"))
     };
   }
 }

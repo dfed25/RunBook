@@ -1,5 +1,14 @@
 import { FeatureCard } from "@/components/demo/FeatureCard";
 
+const INTEGRATIONS = [
+  ["GitHub", "Connected", "Source events from repos and PRs."],
+  ["Slack", "Connected", "Send status updates and approval prompts."],
+  ["Salesforce", "Not connected", "Sync lead lifecycle milestones."],
+  ["Zendesk", "Not connected", "Automate ticket triage workflows."],
+  ["PagerDuty", "Not connected", "Trigger incident response playbooks."],
+  ["HubSpot", "Connected", "Update CRM records in real-time."]
+] as const;
+
 export default function IntegrationsPage() {
   return (
     <div className="space-y-5">
@@ -14,14 +23,7 @@ export default function IntegrationsPage() {
       </FeatureCard>
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {[
-          ["GitHub", "Connected", "Source events from repos and PRs."],
-          ["Slack", "Connected", "Send status updates and approval prompts."],
-          ["Salesforce", "Not connected", "Sync lead lifecycle milestones."],
-          ["Zendesk", "Not connected", "Automate ticket triage workflows."],
-          ["PagerDuty", "Not connected", "Trigger incident response playbooks."],
-          ["HubSpot", "Connected", "Update CRM records in real-time."]
-        ].map(([name, status, description], idx) => (
+        {INTEGRATIONS.map(([name, status, description], idx) => (
           <FeatureCard
             key={name}
             feature={`integration-${idx + 1}`}
@@ -34,7 +36,7 @@ export default function IntegrationsPage() {
               <span className={status === "Connected" ? "text-emerald-300 text-xs" : "text-amber-300 text-xs"}>{status}</span>
             </div>
             <p className="mt-1 text-sm text-slate-400">{description}</p>
-            <button className="mt-3 rounded-lg border border-white/20 px-3 py-1.5 text-xs">
+            <button type="button" className="mt-3 rounded-lg border border-white/20 px-3 py-1.5 text-xs">
               {status === "Connected" ? "Manage" : "Connect"}
             </button>
           </FeatureCard>

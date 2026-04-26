@@ -21,8 +21,27 @@ export default function SettingsPage() {
           className="rounded-2xl border border-white/10 bg-slate-900 p-4"
         >
           <div className="space-y-2">
-            <input className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm" defaultValue="Runbook Assistant" />
-            <input className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm" defaultValue="#6366f1" />
+            <div>
+              <label htmlFor="assistantName" className="mb-1 block text-xs text-slate-400">
+                Assistant name
+              </label>
+              <input
+                id="assistantName"
+                className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+                defaultValue="Runbook Assistant"
+              />
+            </div>
+            <div>
+              <label htmlFor="brandColor" className="mb-1 block text-xs text-slate-400">
+                Brand color
+              </label>
+              <input
+                id="brandColor"
+                type="color"
+                className="h-10 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+                defaultValue="#6366f1"
+              />
+            </div>
           </div>
         </FeatureCard>
 

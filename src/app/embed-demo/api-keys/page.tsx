@@ -11,12 +11,18 @@ export default function ApiKeysPage() {
       >
         <h2 className="text-lg font-semibold">Create API key</h2>
         <div className="mt-3 grid gap-3 md:grid-cols-3">
-          <input className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm" placeholder="Key name (e.g. web-prod)" />
-          <select className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm">
+          <input
+            aria-label="API key name"
+            className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm"
+            placeholder="Key name (e.g. web-prod)"
+          />
+          <select aria-label="Environment selection" className="rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm">
             <option>Environment: Staging</option>
             <option>Environment: Production</option>
           </select>
-          <button className="rounded-lg bg-indigo-500 px-3 py-2 text-sm font-semibold text-white">Generate key</button>
+          <button type="button" className="rounded-lg bg-indigo-500 px-3 py-2 text-sm font-semibold text-white">
+            Generate key
+          </button>
         </div>
       </FeatureCard>
 
