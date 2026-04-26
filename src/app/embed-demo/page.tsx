@@ -13,6 +13,7 @@ type AppState = {
 
 type FeatureDetail = { feature: string; title: string; description: string };
 type TourStep = FeatureDetail & { id: string; selector: string; success: string };
+type UiAction = { type: "start_tour" | "start_step" | "highlight"; stepId?: string; feature?: string };
 
 const NUDGE_DISMISSED_KEY = "runbook_alive_nudge_dismissed";
 const APP_STATE_KEY = "runbook_embed_demo_state";
@@ -37,7 +38,7 @@ const TOUR_STEPS: TourStep[] = [
   {
     id: "build-workflow",
     feature: "workflow-builder",
-    selector: "[data-tour-target='workflow-builder-card']",
+    selector: "[data-tour-target='create-workflow-button']",
     title: "Build workflow",
     description: "Create a workflow that triggers from GitHub and deploys to staging.",
     success: "Nice - Workflow created."
@@ -121,7 +122,11 @@ export default function EmbedDemoPage() {
       setTourRect(null);
       return;
     }
-    const el = document.querySelector<HTMLElement>(currentTourStep.selector);
+    const selector =
+      currentTourStep.id === "build-workflow" && showWorkflowModal
+        ? "[data-tour-target='confirm-create-workflow-button']"
+        : currentTourStep.selector;
+    const el = document.querySelector<HTMLElement>(selector);
     if (!el) {
       if (tourStepIndex < TOUR_STEPS.length - 1) {
         setTourStepIndex((s) => s + 1);
@@ -133,7 +138,7 @@ export default function EmbedDemoPage() {
     }
     el.scrollIntoView({ behavior: "smooth", block: "center" });
     setTourRect(el.getBoundingClientRect());
-  }, [currentTourStep, tourActive, tourStepIndex]);
+  }, [currentTourStep, showWorkflowModal, tourActive, tourStepIndex]);
 
   const advanceTourAfterSuccess = useCallback(
     (step: TourStep) => {
@@ -242,6 +247,28 @@ export default function EmbedDemoPage() {
   }, [currentTourStep, hoveredFeature]);
 
   useEffect(() => {
+    const runAction = (action: UiAction) => {
+      if (!action) return;
+      if (action.type === "start_tour") {
+        setTourStepIndex(firstIncompleteTourStepIndex(appState));
+        setTourActive(true);
+        setTourHighlightFeature(null);
+        return;
+      }
+      if (action.type === "start_step" && action.stepId) {
+        const stepIdx = TOUR_STEPS.findIndex((s) => s.id === action.stepId);
+        if (stepIdx >= 0) {
+          setTourStepIndex(stepIdx);
+          setTourActive(true);
+          setTourHighlightFeature(null);
+          return;
+        }
+      }
+      if (action.type === "highlight") {
+        setTourActive(false);
+        setTourHighlightFeature(action.feature || nextBest?.feature || "workflow-builder");
+      }
+    };
     const onGuideMe = () => {
       setTourHighlightFeature(null);
       setTourFeedback(null);
@@ -263,11 +290,16 @@ export default function EmbedDemoPage() {
         emitRunbookSuggestion("You are ready to launch.");
       }
     };
+    const onUiAction = (evt: Event) => {
+      runAction((evt as CustomEvent<UiAction>).detail);
+    };
     window.addEventListener("runbook-start-tour", onGuideMe as EventListener);
     window.addEventListener("runbook-what-next", onWhatNext as EventListener);
+    window.addEventListener("runbook-ui-action", onUiAction as EventListener);
     return () => {
       window.removeEventListener("runbook-start-tour", onGuideMe as EventListener);
       window.removeEventListener("runbook-what-next", onWhatNext as EventListener);
+      window.removeEventListener("runbook-ui-action", onUiAction as EventListener);
     };
   }, [appState, nextBest]);
 
@@ -405,6 +437,7 @@ export default function EmbedDemoPage() {
           <button
             type="button"
             onClick={() => setShowWorkflowModal(true)}
+            data-tour-target="create-workflow-button"
             className="mt-3 inline-block rounded-lg bg-indigo-500 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-400"
           >
             New workflow
@@ -558,7 +591,12 @@ export default function EmbedDemoPage() {
           <div className="w-full max-w-md rounded-xl border border-white/20 bg-slate-900 p-4 text-sm text-slate-100">
             <p className="font-semibold">Create workflow</p>
             <p className="mt-1 text-xs text-slate-300">Create a GitHub {"->"} Deploy to staging workflow.</p>
-            <button type="button" onClick={createWorkflow} className="mt-3 rounded-md bg-indigo-500 px-3 py-1 text-xs font-semibold text-white">
+            <button
+              type="button"
+              onClick={createWorkflow}
+              data-tour-target="confirm-create-workflow-button"
+              className="mt-3 rounded-md bg-indigo-500 px-3 py-1 text-xs font-semibold text-white"
+            >
               Create workflow
             </button>
           </div>

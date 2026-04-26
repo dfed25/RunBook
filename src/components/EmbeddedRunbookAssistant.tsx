@@ -17,6 +17,7 @@ type ChatResponse = {
   steps?: string[];
   suggestions?: string[];
   mode?: string;
+  uiAction?: { type: "start_tour" | "start_step" | "highlight"; stepId?: string; feature?: string } | null;
 };
 
 type SourceItem = { title: string; excerpt?: string; url?: string };
@@ -298,6 +299,9 @@ export function EmbeddedRunbookAssistant({
             text: !data.answer ? "No content." : undefined
           }
         ]);
+        if (data.uiAction) {
+          window.dispatchEvent(new CustomEvent("runbook-ui-action", { detail: data.uiAction }));
+        }
         highlightCleanupRef.current();
         const highlightAttempt = maybeHighlightElementForQuestion(q, data);
         if (!highlightAttempt.cleanup) {
