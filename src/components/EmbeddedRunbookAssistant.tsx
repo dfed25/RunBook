@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   loadImportedDocs,
   loadProjectId,
@@ -13,6 +13,7 @@ type ChatResponse = {
   error?: string;
   sources?: SourceItem[];
   steps?: string[];
+  mode?: string;
 };
 
 type SourceItem = { title: string; excerpt?: string; url?: string };
@@ -56,6 +57,12 @@ export function EmbeddedRunbookAssistant({
   const [messages, setMessages] = useState<Message[]>([]);
   const [completedStepsByMessage, setCompletedStepsByMessage] = useState<Record<string, Record<number, boolean>>>({});
   const [activeSource, setActiveSource] = useState<SourceItem | null>(null);
+  const highlightCleanupRef = useRef<() => void>(() => undefined);
+  useEffect(() => {
+    return () => {
+      highlightCleanupRef.current?.();
+    };
+  }, []);
 
   const posWrap = position === "embedded" ? "relative h-full min-h-[360px] w-full overflow-hidden bg-slate-50" : "";
   const fixedLaunch = position === "page" ? "fixed bottom-5 right-5 z-[2147483000]" : "absolute bottom-4 right-4 z-20";
@@ -108,8 +115,22 @@ export function EmbeddedRunbookAssistant({
           setMessages((m) => [...m, { role: "assistant", text: data.error || `Request failed (${res.status})` }]);
           return;
         }
+        const sourceCount = Array.isArray(data.sources) ? data.sources.length : 0;
+        const missingIndexSignal =
+          data.mode === "unindexed" ||
+          /AI is not configured|no indexed chunks yet/i.test(data.answer || "") ||
+          sourceCount === 0;
+
         setMessages((m) => [
           ...m,
+          ...(missingIndexSignal
+            ? [
+                {
+                  role: "assistant" as const,
+                  text: "Codebase not indexed yet. Connect your GitHub repo in Studio and run Index repository for code-aware onboarding steps."
+                }
+              ]
+            : []),
           {
             role: "assistant",
             answer: data.answer,
@@ -118,6 +139,27 @@ export function EmbeddedRunbookAssistant({
             text: !data.answer ? "No content." : undefined
           }
         ]);
+        highlightCleanupRef.current();
+        const cleanup = maybeHighlightElementForQuestion(q, data);
+        if (!cleanup) {
+          const answerText = String(data.answer || "");
+          const looksLikeTargetedAnswer =
+            /(look for|labeled|labelled|button|cta|click|create account|sign up|get started|log in|register)/i.test(
+              answerText
+            ) || (Array.isArray(data.steps) && data.steps.length > 0);
+          if (isLocationIntent(q) && !looksLikeTargetedAnswer) {
+            setMessages((m) => [
+              ...m,
+              {
+                role: "assistant",
+                text: "I couldn't confidently find that element on this page. Try the exact label (e.g. Create account) or ask me to explain this page."
+              }
+            ]);
+          }
+          highlightCleanupRef.current = () => undefined;
+        } else {
+          highlightCleanupRef.current = cleanup;
+        }
       } catch {
         setMessages((m) => [...m, { role: "assistant", text: "Network error — try again." }]);
       } finally {
@@ -340,5 +382,141 @@ export function EmbeddedRunbookAssistant({
         </div>
       ) : null}
     </div>
+  );
+}
+function maybeHighlightElementForQuestion(question: string, data: ChatResponse): (() => void) | null {
+  if (typeof document === "undefined") return () => undefined;
+  if (!isLocationIntent(question)) return () => undefined;
+
+  ensureHighlightStyleTag();
+  const hint = [question, data.answer || "", (data.steps || []).join(" ")].join(" ");
+  const target = findBestTarget(hint, question);
+  if (!target) return null;
+
+  target.classList.add("rb-highlight-target");
+  target.scrollIntoView({ behavior: "smooth", block: "center" });
+
+  const overlay = document.createElement("div");
+  overlay.className = "rb-highlight-overlay";
+  overlay.textContent = data.steps?.[0] || "Start here for this action.";
+  const rect = target.getBoundingClientRect();
+  overlay.style.top = `${window.scrollY + rect.bottom + 8}px`;
+  overlay.style.left = `${window.scrollX + Math.max(12, rect.left)}px`;
+  document.body.appendChild(overlay);
+
+  const timeout = window.setTimeout(() => {
+    target.classList.remove("rb-highlight-target");
+    overlay.remove();
+  }, 8000);
+
+  return () => {
+    window.clearTimeout(timeout);
+    target.classList.remove("rb-highlight-target");
+    overlay.remove();
+  };
+}
+
+function ensureHighlightStyleTag(): void {
+  if (document.getElementById("rb-page-highlight-style")) return;
+  const styleTag = document.createElement("style");
+  styleTag.id = "rb-page-highlight-style";
+  styleTag.textContent =
+    "@keyframes rbPagePulse{0%{box-shadow:0 0 0 3px rgba(99,102,241,.95);}50%{box-shadow:0 0 0 8px rgba(99,102,241,.25);}100%{box-shadow:0 0 0 3px rgba(99,102,241,.95);}}" +
+    ".rb-highlight-target{animation:rbPagePulse 1.2s ease-in-out infinite !important;box-shadow:0 0 0 3px rgba(99,102,241,.95) !important;border-radius:8px !important;}" +
+    ".rb-highlight-overlay{position:absolute;z-index:2147483647;max-width:320px;background:#1e1b4b;color:#eef2ff;border:1px solid rgba(129,140,248,.5);border-radius:10px;padding:10px 12px;font:12px/1.4 system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;box-shadow:0 10px 30px rgba(30,27,75,.45);}";
+  document.head.appendChild(styleTag);
+}
+
+function findBestTarget(hint: string, question: string): HTMLElement | null {
+  const tokens = tokenize(hint).slice(0, 20);
+  if (tokens.length === 0) return null;
+  const intentCompact = compact(extractIntentPhrase(question));
+  const nodes = Array.from(
+    document.querySelectorAll<HTMLElement>(
+      "button,a,[role='button'],summary,label,h1,h2,h3,input,textarea,select,[data-testid],[aria-label],nav a"
+    )
+  );
+  let best: HTMLElement | null = null;
+  let bestScore = 0;
+
+  for (const node of nodes) {
+    const rect = node.getBoundingClientRect();
+    if (rect.width < 16 || rect.height < 10) continue;
+    const text = [
+      node.innerText || "",
+      node.getAttribute("aria-label") || "",
+      node.getAttribute("title") || "",
+      node.id || "",
+      node.getAttribute("name") || "",
+      node.getAttribute("placeholder") || "",
+      node.className || ""
+    ]
+      .join(" ")
+      .toLowerCase();
+    if (!text.trim()) continue;
+
+    let score = 0;
+    const compactText = compact(text);
+    for (const token of tokens) {
+      const compactToken = compact(token);
+      if (text.includes(token)) score += token.length > 5 ? 3 : 2;
+      if (compactToken && compactText.includes(compactToken)) score += token.length > 5 ? 3 : 2;
+    }
+    if (intentCompact && compactText.includes(intentCompact)) score += 8;
+    if (/(create|sign\s*up|signup|register|get\s*started|start|continue|next)/i.test(text)) score += 3;
+    if (node.tagName === "BUTTON" || node.tagName === "A") score += 2;
+    if (score > bestScore) {
+      bestScore = score;
+      best = node;
+    }
+  }
+
+  return bestScore >= 3 ? best : null;
+}
+
+function tokenize(text: string): string[] {
+  return String(text)
+    .toLowerCase()
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .replace(/[^a-z0-9\s]/g, " ")
+    .split(/\s+/)
+    .filter((token) => token.length >= 2);
+}
+
+function compact(text: string): string {
+  return String(text).toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function stripTrailingSentencePunctuation(input: string): string {
+  let end = input.length;
+  while (end > 0) {
+    const ch = input[end - 1];
+    if (ch === "." || ch === "!" || ch === "?") {
+      end -= 1;
+      continue;
+    }
+    break;
+  }
+  return input.slice(0, end);
+}
+
+function extractIntentPhrase(question: string): string {
+  const q = String(question || "");
+  const lower = q.toLowerCase();
+  const prefixes = ["where is ", "find ", "locate ", "click ", "open ", "go to "];
+  for (const prefix of prefixes) {
+    const idx = lower.indexOf(prefix);
+    if (idx >= 0) {
+      const rawTarget = q.slice(idx + prefix.length).trim();
+      const cleaned = stripTrailingSentencePunctuation(rawTarget).trim();
+      if (cleaned.length > 0) return cleaned;
+    }
+  }
+  return "";
+}
+
+function isLocationIntent(text: string): boolean {
+  return /(where|find|locate|click|open|go to|how do i|create account|sign up|signup|register|get started|log in|login)/i.test(
+    String(text || "")
   );
 }

@@ -25,7 +25,13 @@ function corsHeaders(originAllow: string | null): HeadersInit {
 
 function originAllowed(projectSite: string | undefined, origin: string | null): boolean {
   if (!projectSite || !origin) return true;
-  return origin.includes(projectSite) || projectSite.includes(origin.replace(/^https?:\/\//, ""));
+  try {
+    const allowed = new URL(projectSite.includes("://") ? projectSite : `https://${projectSite}`);
+    const actual = new URL(origin);
+    return actual.hostname === allowed.hostname || actual.hostname.endsWith(`.${allowed.hostname}`);
+  } catch {
+    return false;
+  }
 }
 
 export async function OPTIONS(req: NextRequest) {
@@ -121,7 +127,7 @@ export async function POST(req: NextRequest) {
 
     const customSources = [...sanitizeCustomSources(body.customSources), ...requestDocs];
     const payload = await runNorthstarEmbedChat({ message, pageContext, customSources });
-    return NextResponse.json(payload, { headers: corsHeaders(origin) });
+    return NextResponse.json({ ...payload, mode: "demo" }, { headers: corsHeaders(origin) });
   }
 
   const auth = req.headers.get("authorization") || "";
@@ -183,6 +189,7 @@ Also output 3-6 short imperative steps as a JSON array string at the very end on
         answer:
           "AI is not configured. Set GEMINI_API_KEY and/or OPENAI_API_KEY in .env.local for grounded answers from your indexed repository.",
         sources: baseSources,
+        mode: "unindexed",
         steps: [
           "Connect knowledge in Runbook Studio.",
           "Run **Index repository** so chunks exist in the vector store.",
@@ -218,6 +225,7 @@ Also output 3-6 short imperative steps as a JSON array string at the very end on
       {
         answer,
         sources: baseSources,
+        mode: "live",
         steps
       },
       { headers: corsHeaders(origin) }
@@ -225,8 +233,18 @@ Also output 3-6 short imperative steps as a JSON array string at the very end on
   } catch (e) {
     console.error(e);
     return NextResponse.json(
-      { error: "AI temporarily unavailable", sources: [], steps: [] },
-      { status: 503, headers: corsHeaders(origin) }
+      {
+        answer:
+          "Runbook AI is temporarily unavailable. I can still guide you from indexed docs below while full reasoning recovers.",
+        sources: baseSources,
+        mode: "error",
+        steps: [
+          "Open the most relevant source below and confirm the exact policy text.",
+          "Follow the documented path in order, then retry this question for a deeper walkthrough.",
+          "If the action is still blocked, share the exact error message with your onboarding owner."
+        ]
+      },
+      { headers: corsHeaders(origin) }
     );
   }
 }
