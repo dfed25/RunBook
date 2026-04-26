@@ -10,25 +10,42 @@ const EXCLUDED_PATH_RE = /(^|\/)(node_modules|dist|build|coverage|\.next|vendor|
 const MAX_DOCS = 80;
 const MAX_CHARS_PER_DOC = 20_000;
 const MAX_TOTAL_CHARS = 900_000;
+const GITHUB_REPO_SEGMENT_RE = /^[A-Za-z0-9_.-]{1,100}$/;
+
+function normalizeRepoSegment(input: string): string | null {
+  const value = input.trim().replace(/\.git$/i, "");
+  if (!value || value === "." || value === "..") return null;
+  if (!GITHUB_REPO_SEGMENT_RE.test(value)) return null;
+  return value;
+}
 
 function parseRepoUrl(repoUrl: string): { owner: string; name: string } | null {
   const raw = repoUrl.trim();
   const shorthand = raw.match(/^([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+)$/);
   if (shorthand) {
-    return { owner: shorthand[1]!, name: shorthand[2]!.replace(/\.git$/i, "") };
+    const owner = normalizeRepoSegment(shorthand[1]!);
+    const name = normalizeRepoSegment(shorthand[2]!);
+    if (!owner || !name) return null;
+    return { owner, name };
   }
   try {
     const u = new URL(raw);
-    if (!/github\.com$/i.test(u.hostname)) return null;
+    if (!["github.com", "www.github.com"].includes(u.hostname.toLowerCase())) return null;
     const parts = u.pathname.replace(/^\/+|\/+$/g, "").split("/");
     if (parts.length < 2) return null;
-    return { owner: parts[0]!, name: parts[1]!.replace(/\.git$/i, "") };
+    const owner = normalizeRepoSegment(parts[0]!);
+    const name = normalizeRepoSegment(parts[1]!);
+    if (!owner || !name) return null;
+    return { owner, name };
   } catch {
     return null;
   }
 }
 
 async function ghFetch(path: string): Promise<Response> {
+  if (!path.startsWith("/repos/") || path.includes("..") || path.includes("://") || path.startsWith("//")) {
+    throw new Error("Invalid GitHub API path");
+  }
   const headers: Record<string, string> = {
     Accept: "application/vnd.github+json",
     "User-Agent": "runbook-demo-importer"
