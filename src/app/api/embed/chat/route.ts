@@ -1,0 +1,213 @@
+import { NextRequest, NextResponse } from "next/server";
+import { generateFromGemini } from "@/lib/ai";
+import { EMBED_CHAT_SYSTEM_PROMPT } from "@/lib/prompts";
+import { retrieveDocsForEmbed } from "@/lib/embedRetrieval";
+import { resolveProjectFromApiKey } from "@/lib/embedStore";
+import { checkEmbedRateLimit } from "@/lib/embedRateLimit";
+import { NORTHSTAR_DEMO_PROJECT_ID } from "@/lib/embedDemoKnowledge";
+import { isServerLlmConfigured, runNorthstarEmbedChat } from "@/lib/embedNorthstarChat";
+
+export const runtime = "nodejs";
+
+function corsHeaders(originAllow: string | null): HeadersInit {
+  const headers: Record<string, string> = {
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization",
+    Vary: "Origin"
+  };
+  if (originAllow) {
+    headers["Access-Control-Allow-Origin"] = originAllow;
+  } else {
+    headers["Access-Control-Allow-Origin"] = "*";
+  }
+  return headers;
+}
+
+function originAllowed(projectSite: string | undefined, origin: string | null): boolean {
+  if (!projectSite || !origin) return true;
+  return origin.includes(projectSite) || projectSite.includes(origin.replace(/^https?:\/\//, ""));
+}
+
+export async function OPTIONS(req: NextRequest) {
+  const origin = req.headers.get("origin");
+  return new NextResponse(null, {
+    status: 204,
+    headers: corsHeaders(origin)
+  });
+}
+
+type ChatBody = {
+  projectId?: string;
+  message?: string;
+  question?: string;
+  pageContext?: string;
+  pageUrl?: string;
+  pageTitle?: string;
+  /** Optional manual sources from Studio (demo only). */
+  customSources?: unknown;
+};
+
+function sanitizeCustomSources(raw: unknown): { title: string; content: string }[] {
+  if (!Array.isArray(raw)) return [];
+  const out: { title: string; content: string }[] = [];
+  for (const item of raw.slice(0, 12)) {
+    if (!item || typeof item !== "object") continue;
+    const o = item as Record<string, unknown>;
+    const title = String(o.title ?? "").trim().slice(0, 200);
+    const content = String(o.content ?? "").trim().slice(0, 12_000);
+    if (title.length === 0 || content.length === 0) continue;
+    out.push({ title, content });
+  }
+  return out;
+}
+
+function normalizePageContext(body: ChatBody): string {
+  if (typeof body.pageContext === "string" && body.pageContext.trim()) {
+    return body.pageContext.trim();
+  }
+  const parts = [body.pageUrl, body.pageTitle].filter(Boolean) as string[];
+  return parts.join("\n");
+}
+
+export async function POST(req: NextRequest) {
+  const origin = req.headers.get("origin");
+
+  let body: ChatBody;
+  try {
+    body = await req.json();
+  } catch {
+    return NextResponse.json({ error: "Invalid JSON" }, { status: 400, headers: corsHeaders(origin) });
+  }
+
+  const projectId = String(body.projectId || "").trim();
+  const message = String(body.message || body.question || "").trim();
+  const pageContext = normalizePageContext(body);
+
+  if (!projectId) {
+    return NextResponse.json({ error: "projectId is required" }, { status: 400, headers: corsHeaders(origin) });
+  }
+  if (!message) {
+    return NextResponse.json({ error: "message is required" }, { status: 400, headers: corsHeaders(origin) });
+  }
+
+  /** Public demo — no Bearer key; rate limit by IP-ish bucket */
+  if (projectId === NORTHSTAR_DEMO_PROJECT_ID) {
+    const rl = checkEmbedRateLimit("northstar-demo-public");
+    if (!rl.ok) {
+      return NextResponse.json(
+        { error: "Rate limited", retryAfter: rl.retryAfter },
+        { status: 429, headers: { ...corsHeaders(origin), "Retry-After": String(rl.retryAfter) } }
+      );
+    }
+
+    const customSources = sanitizeCustomSources(body.customSources);
+    const payload = await runNorthstarEmbedChat({ message, pageContext, customSources });
+    return NextResponse.json(payload, { headers: corsHeaders(origin) });
+  }
+
+  const auth = req.headers.get("authorization") || "";
+  const token = auth.startsWith("Bearer ") ? auth.slice(7).trim() : "";
+  if (!token) {
+    return NextResponse.json({ error: "Missing Bearer token" }, { status: 401, headers: corsHeaders(origin) });
+  }
+
+  const resolved = await resolveProjectFromApiKey(token);
+  if (!resolved) {
+    return NextResponse.json({ error: "Invalid API key" }, { status: 401, headers: corsHeaders(origin) });
+  }
+
+  const { project, keyId } = resolved;
+  if (!originAllowed(project.siteUrl, origin)) {
+    return NextResponse.json({ error: "Origin not allowed for this project" }, { status: 403, headers: corsHeaders(origin) });
+  }
+
+  const rl = checkEmbedRateLimit(keyId);
+  if (!rl.ok) {
+    return NextResponse.json(
+      { error: "Rate limited", retryAfter: rl.retryAfter },
+      { status: 429, headers: { ...corsHeaders(origin), "Retry-After": String(rl.retryAfter) } }
+    );
+  }
+
+  if (projectId !== project.id) {
+    return NextResponse.json({ error: "projectId does not match API key" }, { status: 403, headers: corsHeaders(origin) });
+  }
+
+  const retrieved = await retrieveDocsForEmbed(message, project.id);
+  const context = retrieved
+    .map(
+      (r, i) =>
+        `[Source ${i + 1}] ${r.doc.title}\nURL: ${r.doc.url || "n/a"}\n${r.doc.content}`
+    )
+    .join("\n\n");
+
+  const userPrompt = `Repository: ${project.githubRepoFullName} (default branch hint: ${project.defaultBranch})
+Page context:
+${pageContext || "(not provided)"}
+
+Indexed sources:
+${context || "(no indexed chunks yet)"}
+
+User question: ${message}
+
+Also output 3-6 short imperative steps as a JSON array string at the very end on its own line prefixed exactly with RUNBOOK_STEPS_JSON: e.g. RUNBOOK_STEPS_JSON: ["step1","step2"]`;
+
+  const baseSources = retrieved.map((r) => ({
+    title: r.doc.title,
+    excerpt: r.doc.content.replace(/\s+/g, " ").trim().slice(0, 220),
+    url: r.doc.url || undefined
+  }));
+
+  if (!isServerLlmConfigured()) {
+    return NextResponse.json(
+      {
+        answer:
+          "AI is not configured. Set GEMINI_API_KEY and/or OPENAI_API_KEY in .env.local for grounded answers from your indexed repository.",
+        sources: baseSources,
+        steps: [
+          "Connect knowledge in Runbook Studio.",
+          "Run **Index repository** so chunks exist in the vector store.",
+          "Add GEMINI_API_KEY or OPENAI_API_KEY, then ask again."
+        ]
+      },
+      { headers: corsHeaders(origin) }
+    );
+  }
+
+  try {
+    const raw = await generateFromGemini(EMBED_CHAT_SYSTEM_PROMPT, userPrompt);
+    let answer = raw.trim();
+    let steps: string[] = [];
+    const idx = answer.lastIndexOf("RUNBOOK_STEPS_JSON:");
+    if (idx >= 0) {
+      const jsonPart = answer.slice(idx + "RUNBOOK_STEPS_JSON:".length).trim();
+      answer = answer.slice(0, idx).trim();
+      try {
+        const parsed = JSON.parse(jsonPart) as unknown;
+        if (Array.isArray(parsed)) {
+          steps = parsed.filter((x): x is string => typeof x === "string");
+        }
+      } catch {
+        /* ignore */
+      }
+    }
+    if (steps.length === 0) {
+      steps = ["Review the sources below for exact policy text.", "If anything is unclear, ask your team lead."];
+    }
+
+    return NextResponse.json(
+      {
+        answer,
+        sources: baseSources,
+        steps
+      },
+      { headers: corsHeaders(origin) }
+    );
+  } catch (e) {
+    console.error(e);
+    return NextResponse.json(
+      { error: "AI temporarily unavailable", sources: [], steps: [] },
+      { status: 503, headers: corsHeaders(origin) }
+    );
+  }
+}
