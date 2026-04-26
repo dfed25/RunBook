@@ -220,6 +220,7 @@ export async function POST(req: NextRequest) {
   const message = String(body.message || body.question || "").trim();
   const pageContext = normalizePageContext(body);
   const requestDocs = sanitizeDocuments(body.documents);
+  const customSourcesSanitized = sanitizeCustomSources(body.customSources);
   const uiAction = deriveUiAction(message, body.appState);
 
   if (!projectId) {
@@ -229,8 +230,17 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "message is required" }, { status: 400, headers: corsHeaders(origin) });
   }
 
-  /** Public demo/import path — no Bearer key; rate limit by project bucket */
-  if (projectId === NORTHSTAR_DEMO_PROJECT_ID || requestDocs.length > 0) {
+  /**
+   * Public demo / import / manual-source path — no Bearer key; rate limit by project bucket.
+   * - northstar-demo: default embed demo
+   * - documents: imported repo/docs from Studio
+   * - customSources: pasted manual knowledge (embed-demo bundles, EmbeddedRunbookAssistant)
+   */
+  if (
+    projectId === NORTHSTAR_DEMO_PROJECT_ID ||
+    requestDocs.length > 0 ||
+    customSourcesSanitized.length > 0
+  ) {
     const rl = checkEmbedRateLimit(`${projectId || "public"}-public`);
     if (!rl.ok) {
       return NextResponse.json(
@@ -239,7 +249,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const customSources = [...sanitizeCustomSources(body.customSources), ...requestDocs];
+    const customSources = [...customSourcesSanitized, ...requestDocs];
     const payload = await runNorthstarEmbedChat({
       message,
       pageContext,
