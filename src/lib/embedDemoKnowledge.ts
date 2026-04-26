@@ -126,8 +126,54 @@ function inferActionsFromContext(ctx: string, hovered: string): { bullets: strin
   };
 }
 
+function inferNextActionFromContext(appState?: unknown): { answer: string; feature: string; step: string } {
+  const state = appState && typeof appState === "object" ? (appState as Record<string, unknown>) : {};
+  const githubConnected = Boolean(state.githubConnected);
+  const apiKeyCreated = Boolean(state.apiKeyCreated);
+  const workflowCreated = Boolean(state.workflowCreated);
+  const deployed = Boolean(state.deployed);
+  if (!githubConnected) {
+    return {
+      answer: "Connect GitHub first, then continue with setup.",
+      feature: "integrations",
+      step: "Open Integrations and connect GitHub."
+    };
+  }
+  if (!apiKeyCreated) {
+    return {
+      answer: "Generate a development API key next.",
+      feature: "api-keys",
+      step: "Open API Keys and create a development key."
+    };
+  }
+  if (!workflowCreated) {
+    return {
+      answer: "Build your first workflow now.",
+      feature: "workflow-builder",
+      step: "Open Workflow Builder and create one trigger-action flow."
+    };
+  }
+  if (!deployed) {
+    return {
+      answer: "Deploy to staging to validate your flow.",
+      feature: "deployments",
+      step: "Open Deployments and run a staging deploy."
+    };
+  }
+  return {
+    answer: "Your assistant is live and ready to guide users.",
+    feature: "workflow-builder",
+    step: "Try asking what users can do on this page."
+  };
+}
+
 /** Deterministic demo responses for hackathon reliability. */
-export function buildNorthstarDemoResponse(message: string, pageContext: string, hoveredFeature?: string): DemoChatResult {
+export function buildNorthstarDemoResponse(
+  message: string,
+  pageContext: string,
+  hoveredFeature?: string,
+  appState?: unknown
+): DemoChatResult {
   const m = message.toLowerCase().trim();
   const ctx = (pageContext || "").toLowerCase();
   const hovered = (hoveredFeature || "").trim();
@@ -246,17 +292,17 @@ export function buildNorthstarDemoResponse(message: string, pageContext: string,
     m.includes("start") ||
     m.includes("week one")
   ) {
+    const next = inferNextActionFromContext(appState);
     return createResult({
-      answer: "Start with product setup milestones in this order.",
-      bullets: ["Connect integrations", "Create API key", "Build and deploy first workflow"],
+      answer: next.answer,
+      bullets: [`Focus on ${next.feature} first`, "Complete one action before moving on", "Ask again for the next step"],
       sources: product
         ? [{ title: product.title, excerpt: excerptFromContent(product.content), url: undefined }]
         : [],
       steps: [
-        "Open Integrations and connect GitHub or Slack first.",
-        "Go to API Keys and generate a development key.",
-        "Open Workflows, create your first workflow, and run a test event.",
-        "Deploy to staging, then review Settings for safe defaults and permissions."
+        next.step,
+        "Confirm the status updates successfully.",
+        "Ask What should I do next? to continue."
       ]
     });
   }
@@ -312,6 +358,33 @@ export function buildNorthstarDemoResponse(message: string, pageContext: string,
         "Store the key in your env file or secret manager — not in the repo.",
         "Rotate the key if it is ever exposed."
       ]
+    });
+  }
+
+  if (m.includes("connect github")) {
+    return createResult({
+      answer: "Open Integrations and click Connect on GitHub.",
+      bullets: ["Use the GitHub card", "Click Connect once", "Confirm Connected status appears"],
+      sources: product ? [{ title: product.title, excerpt: excerptFromContent(product.content), url: undefined }] : [],
+      steps: ["Open Integrations section.", "Click Connect on the GitHub card.", "Confirm the status changes to Connected."]
+    });
+  }
+
+  if (m.includes("build workflow") || m.includes("create workflow")) {
+    return createResult({
+      answer: "Open workflow builder and create your first flow.",
+      bullets: ["Use New workflow", "Pick GitHub trigger", "Set deploy action"],
+      sources: product ? [{ title: product.title, excerpt: excerptFromContent(product.content), url: undefined }] : [],
+      steps: ["Click New workflow.", "Choose GitHub trigger and deploy action.", "Save the workflow to continue setup."]
+    });
+  }
+
+  if (/\b(deploy to staging|deploy now|push to staging)\b/.test(m)) {
+    return createResult({
+      answer: "Deploy to staging from the Deployments card.",
+      bullets: ["Open Deployments", "Click Deploy to staging", "Wait for healthy status"],
+      sources: product ? [{ title: product.title, excerpt: excerptFromContent(product.content), url: undefined }] : [],
+      steps: ["Open Deployments.", "Click Deploy to staging.", "Wait until status shows Staging healthy."]
     });
   }
 

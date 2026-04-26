@@ -90,6 +90,20 @@ function compactSentence(text: string, max = 170): string {
   return text.replace(/\s+/g, " ").trim().slice(0, max);
 }
 
+function firstSentence(text: string): string {
+  const clean = String(text || "").replace(/\s+/g, " ").trim();
+  const abbreviationPattern = /\b(?:e\.g|i\.e|mr|mrs|ms|dr|prof)\.$/i;
+  const sentenceEndPattern = /[.!?](?:\s|$)/g;
+  let match: RegExpExecArray | null;
+  while ((match = sentenceEndPattern.exec(clean)) !== null) {
+    const candidate = clean.slice(0, match.index + 1).trim();
+    if (candidate.split(/\s+/).length < 3) continue;
+    if (abbreviationPattern.test(candidate)) continue;
+    return candidate;
+  }
+  return clean;
+}
+
 function tokenize(text: string): string[] {
   return String(text)
     .toLowerCase()
@@ -160,36 +174,53 @@ function buildFeatureExplanationMap(docs: ImportedDocument[]): Record<string, st
     const bestSentence = extractPrimarySentence(sourceDoc.content || "", hints);
     if (!bestSentence) continue;
     const signals = extractCodeSignals(sourceDoc);
-    const signalText = signals.length > 0 ? ` ${signals.join(" · ")}.` : "";
-    out[feature] = `${compactSentence(bestSentence)}.${signalText}`.trim();
+    const signalText = signals.length > 0 ? ` (${signals.join(" · ")})` : "";
+    out[feature] = firstSentence(`${compactSentence(bestSentence)}${signalText}`);
   }
   return out;
 }
 
 export default function EmbedDemoLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const initialAgent = useMemo(() => getInitialAgentFromUrl(), []);
-  const [bundle, setBundle] = useState<DemoBundle>(() => (initialAgent ? initialAgent.assistantConfig : loadDemoBundle()));
-  const [projectId, setProjectId] = useState(() => (initialAgent ? initialAgent.projectId : loadProjectId()));
-  const [repoInfo, setRepoInfo] = useState<ImportedRepoInfo | null>(() => (initialAgent ? initialAgent.repo : loadImportedRepo()));
-  const [importedDocs, setImportedDocs] = useState<ImportedDocument[]>(() => (initialAgent ? initialAgent.documents : loadImportedDocs()));
-  const [savedAgents, setSavedAgents] = useState<TestAgentProfile[]>(() => loadTestAgents());
+  const [bundle, setBundle] = useState<DemoBundle>({
+    assistantName: "Runbook Assistant",
+    welcome: "I can help you get started quickly.",
+    primaryColor: "#6366f1",
+    suggestedQuestions: ["What can I do here?", "Guide me step-by-step", "What should I do next?"],
+    manualSources: []
+  });
+  const [projectId, setProjectId] = useState("northstar-demo");
+  const [repoInfo, setRepoInfo] = useState<ImportedRepoInfo | null>(null);
+  const [importedDocs, setImportedDocs] = useState<ImportedDocument[]>([]);
+  const [savedAgents, setSavedAgents] = useState<TestAgentProfile[]>([]);
   const [hoverInfo, setHoverInfo] = useState<HoverInfo | null>(null);
-  const [hintsEnabled, setHintsEnabled] = useState<boolean>(() => getStoredBoolean(HINTS_TOGGLE_KEY, true));
-  const [assistantEnabled, setAssistantEnabled] = useState<boolean>(() => getStoredBoolean(ASSISTANT_TOGGLE_KEY, true));
+  const [hintsEnabled, setHintsEnabled] = useState<boolean>(true);
+  const [assistantEnabled, setAssistantEnabled] = useState<boolean>(true);
   const hoverWrapRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     const refresh = () => {
-      setBundle(loadDemoBundle());
-      setProjectId(loadProjectId());
-      setRepoInfo(loadImportedRepo());
-      setImportedDocs(loadImportedDocs());
+      const initialAgent = getInitialAgentFromUrl();
+      if (initialAgent) {
+        setBundle(initialAgent.assistantConfig);
+        setProjectId(initialAgent.projectId);
+        setRepoInfo(initialAgent.repo);
+        setImportedDocs(initialAgent.documents);
+      } else {
+        setBundle(loadDemoBundle());
+        setProjectId(loadProjectId());
+        setRepoInfo(loadImportedRepo());
+        setImportedDocs(loadImportedDocs());
+      }
       setSavedAgents(loadTestAgents());
+      setHintsEnabled(getStoredBoolean(HINTS_TOGGLE_KEY, true));
+      setAssistantEnabled(getStoredBoolean(ASSISTANT_TOGGLE_KEY, true));
     };
+    const initTimer = window.setTimeout(refresh, 0);
     window.addEventListener("storage", refresh);
     window.addEventListener("runbook-demo-update", refresh);
     return () => {
+      window.clearTimeout(initTimer);
       window.removeEventListener("storage", refresh);
       window.removeEventListener("runbook-demo-update", refresh);
     };
@@ -283,7 +314,7 @@ export default function EmbedDemoLayout({ children }: { children: React.ReactNod
             </div>
           </div>
           <div className="hidden rounded-full border border-indigo-400/30 bg-indigo-500/10 px-3 py-1 text-xs text-indigo-100 lg:block">
-            Active knowledge: <span className="font-semibold">{environmentLabel}</span>
+            Active knowledge: <span suppressHydrationWarning className="font-semibold">{environmentLabel}</span>
           </div>
           <div className="hidden items-center gap-2 md:flex">
             <button
@@ -296,7 +327,7 @@ export default function EmbedDemoLayout({ children }: { children: React.ReactNod
               }}
               className="rounded-lg border border-white/20 px-2.5 py-1 text-[11px] text-slate-200 hover:border-white/40"
             >
-              {hintsEnabled ? "Hints on" : "Hints off"}
+              <span suppressHydrationWarning>{hintsEnabled ? "Hints on" : "Hints off"}</span>
             </button>
           </div>
         </div>
@@ -395,7 +426,7 @@ export default function EmbedDemoLayout({ children }: { children: React.ReactNod
           }}
           className="rounded-full border border-white/25 bg-slate-900/90 px-3 py-1.5 text-xs font-semibold text-slate-100 shadow-lg hover:border-white/50"
         >
-          {hintsEnabled ? "Hints: on" : "Hints: off"}
+          <span suppressHydrationWarning>{hintsEnabled ? "Hints: on" : "Hints: off"}</span>
         </button>
         <button
           type="button"
@@ -406,7 +437,7 @@ export default function EmbedDemoLayout({ children }: { children: React.ReactNod
           }}
           className="rounded-full border border-white/25 bg-slate-900/90 px-3 py-1.5 text-xs font-semibold text-slate-100 shadow-lg hover:border-white/50"
         >
-          {assistantEnabled ? "Widget: on" : "Widget: off"}
+          <span suppressHydrationWarning>{assistantEnabled ? "Widget: on" : "Widget: off"}</span>
         </button>
       </div>
 

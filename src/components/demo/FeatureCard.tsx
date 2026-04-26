@@ -6,11 +6,19 @@ type FeatureCardProps = {
   description: string;
   className?: string;
   children: ReactNode;
-};
+} & React.HTMLAttributes<HTMLElement>;
 
-export function FeatureCard({ feature, title, description, className = "", children }: FeatureCardProps) {
+export function FeatureCard({
+  feature,
+  title,
+  description,
+  className = "",
+  children,
+  ...rest
+}: FeatureCardProps) {
   return (
     <section
+      {...rest}
       className={className}
       data-runbook-feature={feature}
       data-runbook-title={title}

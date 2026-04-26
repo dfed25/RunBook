@@ -6,6 +6,7 @@ import { resolveProjectFromApiKey } from "@/lib/embedStore";
 import { checkEmbedRateLimit } from "@/lib/embedRateLimit";
 import { NORTHSTAR_DEMO_PROJECT_ID } from "@/lib/embedDemoKnowledge";
 import { isServerLlmConfigured, runNorthstarEmbedChat } from "@/lib/embedNorthstarChat";
+import { getNextAction, type DemoAppState } from "@/lib/embedDemoNextAction";
 import {
   bulletsFromText,
   clipWords,
@@ -65,6 +66,7 @@ type ChatBody = {
   /** Optional imported repository docs from Studio/embed demo. */
   documents?: unknown;
   hoveredFeature?: unknown;
+  appState?: unknown;
 };
 
 type StructuredChatPayload = {
@@ -73,6 +75,7 @@ type StructuredChatPayload = {
   steps: string[];
   sources: { title: string; excerpt?: string; url?: string }[];
   suggestions: string[];
+  uiAction?: { type: "start_tour" | "start_step" | "highlight"; stepId?: string; feature?: string } | null;
 };
 
 function sanitizeCustomSources(raw: unknown): { title: string; content: string }[] {
@@ -107,17 +110,18 @@ function sanitizeDocuments(raw: unknown): { title: string; content: string }[] {
 
 function normalizePageContext(body: ChatBody): string {
   const hovered = sanitizeHoveredFeature(body.hoveredFeature);
-  if (typeof body.pageContext === "string" && body.pageContext.trim()) {
-    return [
-      `Page URL: ${body.pageUrl || "n/a"}`,
-      `Page title: ${body.pageTitle || "n/a"}`,
-      body.pageContext.trim()
-    ]
-      .filter(Boolean)
-      .join("\n");
-  }
-  const parts = [body.pageUrl, body.pageTitle, hovered].filter(Boolean) as string[];
-  return parts.join("\n");
+  const appState =
+    body.appState && typeof body.appState === "object" ? JSON.stringify(body.appState).slice(0, 400) : "(none)";
+  const pageBody = typeof body.pageContext === "string" ? body.pageContext.trim() : "";
+  const pageSection = [
+    "Page context:",
+    `Page URL: ${body.pageUrl || "n/a"}`,
+    `Page title: ${body.pageTitle || "n/a"}`,
+    pageBody || "(none)"
+  ].join("\n");
+  const hoverSection = ["Hovered feature context:", hovered || "(none)"].join("\n");
+  const appStateSection = ["App state:", appState].join("\n");
+  return [pageSection, appStateSection, hoverSection].join("\n\n");
 }
 
 function sanitizeHoveredFeature(raw: unknown): string {
@@ -144,8 +148,46 @@ function normalizeStructured(payload: Partial<StructuredChatPayload>): Structure
     bullets: normalizedBullets.length > 0 ? normalizedBullets : normalizeBullets(fallbackBullets),
     steps: normalizeSteps(payload.steps || []),
     sources: (payload.sources || []).slice(0, MAX_SOURCES),
-    suggestions: normalizeSuggestions(payload.suggestions || DEFAULT_SUGGESTIONS)
+    suggestions: normalizeSuggestions(payload.suggestions || DEFAULT_SUGGESTIONS),
+    uiAction: payload.uiAction ?? null
   };
+}
+
+function nextStepFromAppState(appState: unknown): { feature: string; stepId: string } {
+  const raw = appState && typeof appState === "object" ? (appState as Partial<DemoAppState>) : {};
+  const normalized: DemoAppState = {
+    githubConnected: Boolean(raw.githubConnected),
+    apiKeyCreated: Boolean(raw.apiKeyCreated),
+    workflowCreated: Boolean(raw.workflowCreated),
+    deployed: Boolean(raw.deployed)
+  };
+  const next = getNextAction(normalized);
+  if (next.id === "connect-github") return { feature: "integrations", stepId: "connect-github" };
+  if (next.id === "create-api-key") return { feature: "api-keys", stepId: "create-api-key" };
+  if (next.id === "build-workflow") return { feature: "workflow-builder", stepId: "build-workflow" };
+  if (next.id === "deploy") return { feature: "deployments", stepId: "deploy-staging" };
+  return { feature: "workflow-builder", stepId: "build-workflow" };
+}
+
+function deriveUiAction(message: string, appState: unknown): StructuredChatPayload["uiAction"] {
+  const m = String(message || "").toLowerCase();
+  if (/start guided tour|guide me|step by step/.test(m)) {
+    const next = nextStepFromAppState(appState);
+    return { type: "start_step", stepId: next.stepId, feature: next.feature };
+  }
+  if (/what should i do next|what can i do next|next step/.test(m)) {
+    const next = nextStepFromAppState(appState);
+    return { type: "highlight", feature: next.feature, stepId: next.stepId };
+  }
+  if (/\b(connect|link)\s+github\b/.test(m)) return { type: "start_step", stepId: "connect-github", feature: "integrations" };
+  if (/\b(create|generate)\s+(an?\s+)?api\s*key\b/.test(m) || /\b(create|generate)\s+key\b/.test(m)) {
+    return { type: "start_step", stepId: "create-api-key", feature: "api-keys" };
+  }
+  if (/build workflow|create workflow/.test(m)) return { type: "start_step", stepId: "build-workflow", feature: "workflow-builder" };
+  if (/\b(deploy(?:\s+now)?|push\s+to\s+staging|deploy\s+to\s+staging)\b/.test(m)) {
+    return { type: "start_step", stepId: "deploy-staging", feature: "deployments" };
+  }
+  return null;
 }
 
 function parseStructuredFromRaw(raw: string): Partial<StructuredChatPayload> {
@@ -178,6 +220,7 @@ export async function POST(req: NextRequest) {
   const message = String(body.message || body.question || "").trim();
   const pageContext = normalizePageContext(body);
   const requestDocs = sanitizeDocuments(body.documents);
+  const uiAction = deriveUiAction(message, body.appState);
 
   if (!projectId) {
     return NextResponse.json({ error: "projectId is required" }, { status: 400, headers: corsHeaders(origin) });
@@ -201,9 +244,10 @@ export async function POST(req: NextRequest) {
       message,
       pageContext,
       hoveredFeature: sanitizeHoveredFeature(body.hoveredFeature),
+      appState: body.appState,
       customSources
     });
-    return NextResponse.json(normalizeStructured(payload), { headers: corsHeaders(origin) });
+    return NextResponse.json(normalizeStructured({ ...payload, uiAction }), { headers: corsHeaders(origin) });
   }
 
   const auth = req.headers.get("authorization") || "";
@@ -293,7 +337,7 @@ RUNBOOK_JSON: {"answer":"<=10 words","bullets":["<=12 words"],"steps":["2-4 conc
       sources: baseSources
     });
 
-    return NextResponse.json(normalized, { headers: corsHeaders(origin) });
+    return NextResponse.json({ ...normalized, uiAction }, { headers: corsHeaders(origin) });
   } catch (e) {
     console.error(e);
     return NextResponse.json(
@@ -301,7 +345,8 @@ RUNBOOK_JSON: {"answer":"<=10 words","bullets":["<=12 words"],"steps":["2-4 conc
         answer: "AI unavailable; showing grounded fallback.",
         bullets: ["Use source cards below", "Follow step mode checklist", "Retry in a moment"],
         sources: baseSources,
-        steps: ["Review the top source card.", "Complete the first checklist step.", "Retry your question."]
+        steps: ["Review the top source card.", "Complete the first checklist step.", "Retry your question."],
+        uiAction
       }),
       { status: 503, headers: corsHeaders(origin) }
     );
