@@ -20,7 +20,8 @@
   var apiKey = script.getAttribute("data-key") || "";
   var includeBodyText =
     script.hasAttribute("data-include-body-text") ||
-    !!document.querySelector('script[src*="runbook-embed.js"][data-include-body-text]');
+    !!document.querySelector('script[src*="runbook-embed.js"][data-include-body-text]') ||
+    true;
   var originAttr = (script.getAttribute("data-runbook-origin") || "").trim().replace(/\/$/, "");
   var base = originAttr || script.src.replace(/\/runbook-embed\.js.*$/, "");
   if (!projectId) {
@@ -170,6 +171,8 @@
       ".rb-chips{display:flex;flex-wrap:wrap;gap:6px;padding:10px 12px;border-bottom:1px solid rgba(148,163,184,.2);}" +
       ".rb-chip{font-size:11px;padding:6px 10px;border-radius:999px;border:1px solid rgba(129,140,248,.45);background:rgba(79,70,229,.15);color:#c7d2fe;cursor:pointer;}" +
       ".rb-chip:hover{background:rgba(79,70,229,.3);}" +
+      ".rb-hover{padding:6px 12px;border-bottom:1px solid rgba(148,163,184,.2);font-size:11px;color:#cbd5e1;display:none;}" +
+      ".rb-hover strong{color:#86efac;}" +
       ".rb-body{flex:1;overflow:auto;padding:12px 14px;display:flex;flex-direction:column;gap:10px;}" +
       ".rb-msg{max-width:100%;padding:10px 12px;border-radius:12px;font-size:13px;line-height:1.5;white-space:pre-wrap;}" +
       ".rb-user{align-self:flex-end;background:linear-gradient(135deg,#a78bfa,#6366f1);color:#0f172a;}" +
@@ -195,6 +198,8 @@
     if (titleEl) titleEl.textContent = assistantName;
     var chipsWrap = document.createElement("div");
     chipsWrap.className = "rb-chips";
+    var hoverCtx = document.createElement("div");
+    hoverCtx.className = "rb-hover";
     var body = document.createElement("div");
     body.className = "rb-body";
     var foot = document.createElement("div");
@@ -203,6 +208,7 @@
       '<input class="rb-inp" placeholder="Ask anything about this product…" /><button type="button" class="rb-send">Send</button>';
     panel.appendChild(head);
     panel.appendChild(chipsWrap);
+    panel.appendChild(hoverCtx);
     panel.appendChild(body);
     panel.appendChild(foot);
 
@@ -222,6 +228,37 @@
     var inp = foot.querySelector(".rb-inp");
     var sendBtn = foot.querySelector(".rb-send");
     var closeBtn = head.querySelector(".rb-close");
+    var hoveredFeature = null;
+    function updateHoveredFeature(next) {
+      hoveredFeature = next;
+      if (next && (next.title || next.feature)) {
+        hoverCtx.style.display = "block";
+        hoverCtx.innerHTML = "Looking at: <strong>" + escapeHtml(next.title || next.feature) + "</strong>";
+      } else {
+        hoverCtx.style.display = "none";
+        hoverCtx.innerHTML = "";
+      }
+    }
+
+    function trackHoverEvents() {
+      function handleOver(evt) {
+        var target = evt.target instanceof Element ? evt.target : null;
+        if (!target) return;
+        var el = target.closest("[data-runbook-feature],[data-runbook-title],[data-runbook-description]");
+        if (!el) return;
+        updateHoveredFeature({
+          feature: (el.getAttribute("data-runbook-feature") || "").trim(),
+          title: (el.getAttribute("data-runbook-title") || "").trim(),
+          description: (el.getAttribute("data-runbook-description") || "").trim()
+        });
+      }
+      function handleOut() {
+        updateHoveredFeature(null);
+      }
+      document.addEventListener("pointerover", handleOver, true);
+      document.addEventListener("pointerout", handleOut, true);
+    }
+
     var highlightTimeout = null;
     var highlightedEl = null;
     var overlayEl = null;
@@ -450,6 +487,15 @@
       });
       chipsWrap.appendChild(c);
     });
+    var pageActions = document.createElement("button");
+    pageActions.type = "button";
+    pageActions.className = "rb-chip";
+    pageActions.textContent = "What can I do here?";
+    pageActions.addEventListener("click", function () {
+      inp.value = "What can I do here?";
+      void doSend();
+    });
+    chipsWrap.insertBefore(pageActions, chipsWrap.firstChild);
 
     async function doSend() {
       var q = (inp.value || "").trim();
@@ -463,7 +509,10 @@
         var body = {
           projectId: projectId,
           message: q,
-          pageContext: pageContext()
+          pageContext: pageContext(),
+          pageTitle: document.title || "",
+          pageUrl: location.href || "",
+          hoveredFeature: hoveredFeature
         };
         if (projectId === DEMO_ID) {
           var custom = manualSourcesFromBundle(bundle);
@@ -563,6 +612,7 @@
     } else {
       addBot("<strong>Runbook</strong><br/>Ask a question. Answers use your indexed knowledge.");
     }
+    trackHoverEvents();
   }
 
   if (document.body) mount();

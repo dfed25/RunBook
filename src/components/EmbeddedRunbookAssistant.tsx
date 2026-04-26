@@ -19,6 +19,7 @@ type ChatResponse = {
 };
 
 type SourceItem = { title: string; excerpt?: string; url?: string };
+type HoveredFeatureContext = { feature?: string; title?: string; description?: string };
 
 type Message =
   | { role: "user"; text: string }
@@ -130,10 +131,48 @@ export function EmbeddedRunbookAssistant({
   const [messages, setMessages] = useState<Message[]>([]);
   const [completedStepsByMessage, setCompletedStepsByMessage] = useState<Record<string, Record<number, boolean>>>({});
   const [activeSource, setActiveSource] = useState<SourceItem | null>(null);
+  const [hoveredFeature, setHoveredFeature] = useState<HoveredFeatureContext | null>(null);
   const highlightCleanupRef = useRef<() => void>(() => undefined);
+  const hoveredFeatureRef = useRef<HoveredFeatureContext | null>(null);
+  const hoverDebounceRef = useRef<number | null>(null);
   useEffect(() => {
     return () => {
       highlightCleanupRef.current?.();
+      if (hoverDebounceRef.current) window.clearTimeout(hoverDebounceRef.current);
+    };
+  }, []);
+
+  useEffect(() => {
+    hoveredFeatureRef.current = hoveredFeature;
+  }, [hoveredFeature]);
+
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    const handlePointerOver = (evt: Event) => {
+      const target = evt.target instanceof Element ? evt.target : null;
+      if (!target) return;
+      const el = target.closest<HTMLElement>("[data-runbook-feature],[data-runbook-title],[data-runbook-description]");
+      if (!el) return;
+      if (hoverDebounceRef.current) window.clearTimeout(hoverDebounceRef.current);
+      hoverDebounceRef.current = window.setTimeout(() => {
+        const next: HoveredFeatureContext = {
+          feature: (el.getAttribute("data-runbook-feature") || "").trim() || undefined,
+          title: (el.getAttribute("data-runbook-title") || "").trim() || undefined,
+          description: (el.getAttribute("data-runbook-description") || "").trim() || undefined
+        };
+        if (!next.feature && !next.title && !next.description) return;
+        setHoveredFeature(next);
+      }, 80);
+    };
+    const clearHovered = () => {
+      if (hoverDebounceRef.current) window.clearTimeout(hoverDebounceRef.current);
+      hoverDebounceRef.current = window.setTimeout(() => setHoveredFeature(null), 120);
+    };
+    document.addEventListener("pointerover", handlePointerOver, true);
+    document.addEventListener("pointerout", clearHovered, true);
+    return () => {
+      document.removeEventListener("pointerover", handlePointerOver, true);
+      document.removeEventListener("pointerout", clearHovered, true);
     };
   }, []);
 
@@ -170,15 +209,25 @@ export function EmbeddedRunbookAssistant({
       setLoading(true);
       try {
         const customSources = manualSources.map(({ title, content }) => ({ title, content }));
+        const pageBody =
+          typeof document !== "undefined"
+            ? document.body.innerText.replace(/\s+/g, " ").trim().slice(0, 10_000)
+            : "";
+        const pageContext =
+          pageContextOverride ||
+          (typeof window !== "undefined"
+            ? [window.location.href, document.title, pageBody].filter(Boolean).join("\n")
+            : pageBody);
         const res = await fetch(`${base}/api/embed/chat`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             projectId,
             message: q,
-            pageContext:
-              pageContextOverride ||
-              (typeof window !== "undefined" ? `${window.location.href}\n${document.title}` : ""),
+            pageContext,
+            pageTitle: typeof document !== "undefined" ? document.title : "",
+            pageUrl: typeof window !== "undefined" ? window.location.href : "",
+            hoveredFeature: hoveredFeatureRef.current,
             customSources,
             documents: effectiveImportedDocs
           })
@@ -306,9 +355,9 @@ export function EmbeddedRunbookAssistant({
 
       {open ? (
         <div
-          className={`flex w-[min(100%,380px)] max-h-[min(78vh,520px)] flex-col overflow-hidden rounded-2xl border border-slate-600/60 bg-slate-900 shadow-2xl ${fixedPanel}`}
+          className={`flex w-[min(100%,360px)] max-h-[min(76vh,500px)] flex-col overflow-hidden rounded-2xl border border-slate-700/70 bg-slate-900 shadow-2xl ${fixedPanel}`}
         >
-          <div className="flex items-center justify-between border-b border-slate-700 px-3 py-2.5">
+          <div className="flex items-center justify-between border-b border-slate-700 px-3 py-2">
             <div>
               <p className="text-[10px] font-bold uppercase tracking-wider text-indigo-300">Runbook</p>
               <p className="text-sm font-semibold text-white">{assistantName}</p>
@@ -322,12 +371,20 @@ export function EmbeddedRunbookAssistant({
               ×
             </button>
           </div>
+          {hoveredFeature ? (
+            <div className="border-b border-slate-800 px-3 py-1.5 text-[10px] text-slate-300">
+              Looking at:{" "}
+              <span className="font-semibold text-emerald-300">
+                {hoveredFeature.title || hoveredFeature.feature || "Current feature"}
+              </span>
+            </div>
+          ) : null}
           {!hideQuickActions && chips.length > 0 ? (
             <div className="grid grid-cols-2 gap-1.5 border-b border-slate-800 px-2 py-2">
               <button
                 type="button"
                 className="col-span-2 rounded-md border border-emerald-500/50 bg-emerald-900/30 px-2.5 py-1.5 text-[10px] font-semibold text-emerald-100 hover:bg-emerald-800/50"
-                onClick={explainThisPage}
+                onClick={() => void send("What can I do here?")}
               >
                 What can I do here?
               </button>

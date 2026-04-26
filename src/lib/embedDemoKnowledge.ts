@@ -87,15 +87,38 @@ function extractLocationTarget(text: string): string {
 }
 
 /** Deterministic demo responses for hackathon reliability. */
-export function buildNorthstarDemoResponse(message: string, pageContext: string): DemoChatResult {
+export function buildNorthstarDemoResponse(message: string, pageContext: string, hoveredFeature?: string): DemoChatResult {
   const m = message.toLowerCase().trim();
   const ctx = (pageContext || "").toLowerCase();
+  const hovered = (hoveredFeature || "").trim();
 
   const eng = docById("engineering-setup");
   const first = docById("first-week");
   const sec = docById("security-policy");
   const product = docById("product-overview");
   const expense = docById("expense-policy");
+
+  if (hovered && (m.includes("what is this") || m.includes("explain this") || m.includes("what does this do"))) {
+    return createResult({
+      answer: "This hovered feature helps complete your current page workflow.",
+      bullets: [
+        hovered.split("—")[0]?.trim() || "Feature details available",
+        "Use it to progress the flow",
+        "Ask Guide me for step-by-step help"
+      ],
+      sources: product ? [{ title: product.title, excerpt: excerptFromContent(product.content), url: undefined }] : [],
+      steps: ["Review the hovered feature label.", "Click it to continue the flow.", "Ask for the next step if blocked."]
+    });
+  }
+
+  if (m.includes("what can i do here")) {
+    return createResult({
+      answer: "Here are the key actions available on this page.",
+      bullets: ["Create a workflow", "Connect integrations", "Set up API keys"],
+      sources: product ? [{ title: product.title, excerpt: excerptFromContent(product.content), url: undefined }] : [],
+      steps: ["Start with the primary CTA on this page.", "Complete one setup action.", "Ask What next? for guided progression."]
+    });
+  }
 
   if (isLocationIntent(m)) {
     const target = extractLocationTarget(message);
