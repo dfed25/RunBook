@@ -1,0 +1,11 @@
+{
+  "name": "runbook-demo2",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Static demo blog article with AI-friendly components.",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js",
+    "stop": "node stop.js"
+  }
+}

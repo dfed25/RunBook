@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SignalPress Ultra Article Demo</title>
+    <meta
+      name="description"
+      content="Demo blog article with like/save interactions and AI-friendly ultra components."
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="page-wrap">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">SignalPress Demo</p>
+          <h1>Ultra Blog Article</h1>
+        </div>
+        <div class="header-actions">
+          <button id="resetDemoBtn" class="ghost-btn">Reset Demo State</button>
+        </div>
+      </header>
+
+      <main class="layout">
+        <article
+          class="article"
+          data-ai-doc-type="blog-article"
+          data-ai-title="How to Build AI-Readable Content Without Losing Human UX"
+          data-ai-author="Mina Rowe"
+          data-ai-topic="content strategy"
+        >
+          <header class="article-header">
+            <p class="meta">By Mina Rowe • 8 min read • Updated today</p>
+            <h2>How to Build AI-Readable Content Without Losing Human UX</h2>
+            <p class="lede">
+              Teams now write for two readers: people and AI systems. This demo shows
+              how you can support both with structured “ultra components.”
+            </p>
+
+            <div class="engagement-row" data-runbook-feature="engagement" data-runbook-title="Engagement" data-runbook-description="Like, save, and track reading state for this article.">
+              <button id="likeBtn" class="primary-btn" data-ai-action="like-article" data-runbook-action="like-article" data-tour-target="like-article" data-runbook-title="Like article" data-runbook-description="Increment the public like counter.">Like</button>
+              <button id="saveBtn" class="ghost-btn" data-ai-action="save-article" data-runbook-action="save-article" data-tour-target="save-article" data-runbook-title="Save article" data-runbook-description="Toggle saved / reading list state.">Save</button>
+              <span id="likeCountLabel" class="stat-pill" data-runbook-state="like-count">0 likes</span>
+              <span id="saveStateLabel" class="stat-pill" data-runbook-state="save-label">Not saved</span>
+            </div>
+          </header>
+
+          <section class="ultra-card" data-ai-block="quick-summary" data-runbook-feature="quick-summary" data-runbook-title="Quick Summary" data-runbook-description="Skimmable bullets for humans and extraction for AI.">
+            <div class="card-head">
+              <h3>Ultra Component: Quick Summary</h3>
+            </div>
+            <p class="muted">
+              Short summary for human skimming and AI extraction.
+            </p>
+            <ul class="bullet-list">
+              <li>Use semantic sections with clear labels.</li>
+              <li>Add explicit metadata via `data-ai-*` attributes.</li>
+              <li>Keep key facts in compact, machine-friendly bullet points.</li>
+            </ul>
+          </section>
+
+          <section class="content-section" data-ai-section="problem">
+            <h3>The Problem</h3>
+            <p>
+              Traditional blog pages hide important context across long paragraphs.
+              That works for careful readers, but tools that summarize content may miss
+              critical details.
+            </p>
+          </section>
+
+          <section class="ultra-card" data-ai-block="decision-matrix">
+            <div class="card-head">
+              <h3>Ultra Component: Decision Matrix</h3>
+            </div>
+            <div class="matrix-grid">
+              <div class="matrix-col">
+                <h4>Approach</h4>
+                <p>Plain text only</p>
+                <p>Structured blocks</p>
+              </div>
+              <div class="matrix-col">
+                <h4>Human UX</h4>
+                <p>Good for storytelling</p>
+                <p>Good for scanning + storytelling</p>
+              </div>
+              <div class="matrix-col">
+                <h4>AI Parse Quality</h4>
+                <p>Often inconsistent</p>
+                <p>High and predictable</p>
+              </div>
+            </div>
+          </section>
+
+          <section class="content-section" data-ai-section="implementation">
+            <h3>Implementation Tips</h3>
+            <ol class="number-list">
+              <li>Keep one topic per section and label each section clearly.</li>
+              <li>Add compact recap blocks after long sections.</li>
+              <li>Attach stable IDs to interactive controls like Like and Save.</li>
+            </ol>
+          </section>
+
+          <section class="ultra-card" data-ai-block="key-facts">
+            <div class="card-head">
+              <h3>Ultra Component: Key Facts</h3>
+            </div>
+            <dl class="facts-grid">
+              <div><dt>Audience</dt><dd>Content teams, product writers, SEO leads</dd></div>
+              <div><dt>Best For</dt><dd>Hybrid reading + summarization workflows</dd></div>
+              <div><dt>Risk</dt><dd>Over-structuring can hurt writing flow</dd></div>
+              <div><dt>Mitigation</dt><dd>Use structure only where clarity matters most</dd></div>
+            </dl>
+          </section>
+
+          <footer class="article-footer" data-runbook-feature="highlights-footer" data-runbook-title="Highlights" data-runbook-description="Add demo highlight notes to the article.">
+            <button id="addHighlightBtn" class="ghost-btn" data-runbook-action="add-highlight" data-tour-target="add-highlight" data-runbook-title="Add highlight" data-runbook-description="Append a canned highlight note to the list.">Add Highlight Note</button>
+            <ul id="highlightsList" class="bullet-list"></ul>
+          </footer>
+        </article>
+
+        <aside class="side-panel">
+          <section class="panel">
+            <h3>Reader Dashboard</h3>
+            <p class="muted">Live demo state (stored in localStorage)</p>
+            <ul class="bullet-list">
+              <li>Likes: <strong id="dashboardLikes">0</strong></li>
+              <li>Saved: <strong id="dashboardSaved">No</strong></li>
+              <li>Highlights: <strong id="dashboardHighlights">0</strong></li>
+            </ul>
+            <p class="muted" style="margin-top: 10px; font-size: 12px">Try it yourself</p>
+            <p id="onboardingProgressText" class="muted" style="margin-top: 4px; font-size: 12px">0 / 3 complete</p>
+            <ol id="onboardingSteps" class="checklist"></ol>
+          </section>
+
+          <section class="panel ai-panel" data-ai-block="machine-outline">
+            <h3>AI-Friendly Outline</h3>
+            <p class="muted">
+              Compact structure that an AI can parse quickly:
+            </p>
+            <pre id="aiOutline"></pre>
+          </section>
+        </aside>
+      </main>
+    </div>
+    <script>
+      window.RUNBOOK_DEMO_STEPS = [
+        {
+          id: "like",
+          label: "Like this article",
+          target: "[data-runbook-action='like-article']",
+          successText: "Thanks for the like"
+        },
+        {
+          id: "save",
+          label: "Save to reading list",
+          target: "[data-runbook-action='save-article']",
+          successText: "Saved"
+        },
+        {
+          id: "highlight",
+          label: "Add a highlight note",
+          target: "[data-runbook-action='add-highlight']",
+          successText: "Highlight added"
+        },
+        {
+          id: "reset-demo",
+          label: "Reset demo (optional)",
+          target: "[data-runbook-action='reset-demo']",
+          successText: "Demo reset"
+        }
+      ];
+    </script>
+    <script
+      src="http://localhost:3000/runbook-embed.js"
+      data-project-id="northstar-demo"
+      data-runbook-origin="http://localhost:3000"
+      data-include-body-text
+    ></script>
+    <div id="tourCoach" class="tour-coach hidden" aria-live="polite">
+      <p id="tourCoachTitle" class="tour-title"></p>
+      <p id="tourCoachText" class="tour-text"></p>
+      <div class="tour-actions">
+        <button id="tourSkipBtn" type="button" class="tour-skip">Skip guided steps</button>
+      </div>
+    </div>
+    <script src="./app.js"></script>
+  </body>
+</html>

@@ -2,8 +2,18 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { FakeCursor } from "@/components/FakeCursor";
 import { FeatureCard } from "@/components/demo/FeatureCard";
 import { getNextAction, type DemoAppState } from "@/lib/embedDemoNextAction";
+import {
+  animateCursorTo,
+  countWatchMeMilestonesRemaining,
+  getNextWatchMeOperation,
+  waitMs,
+  WATCH_ME_SELECTORS,
+  WATCH_ME_SUCCESS_LABEL,
+  type WatchMeOperationId
+} from "@/lib/embedDemoWatchMe";
 
 type AppState = DemoAppState;
 
@@ -101,6 +111,16 @@ export default function EmbedDemoPage() {
   const [interrupt, setInterrupt] = useState<InterruptState | null>(null);
   const [activityFeed, setActivityFeed] = useState<ActivityItem[]>([]);
   const [widgetPulse, setWidgetPulse] = useState(false);
+  const [watchMeActive, setWatchMeActive] = useState(false);
+  const [watchMeCursor, setWatchMeCursor] = useState({ x: 0, y: 0, visible: false, clicking: false });
+  const [watchMeCaption, setWatchMeCaption] = useState("");
+  const [watchMeHighlight, setWatchMeHighlight] = useState<DOMRect | null>(null);
+  const [watchMeProgress, setWatchMeProgress] = useState<string | null>(null);
+  const [watchMeToast, setWatchMeToast] = useState<string | null>(null);
+  const watchMeCancelledRef = useRef(false);
+  const appStateRef = useRef(appState);
+  const showWorkflowModalRef = useRef(showWorkflowModal);
+  const watchMeRunningRef = useRef(false);
   const completedStepIdsRef = useRef<Record<string, boolean>>({});
   const hydrationLoadedRef = useRef(false);
   const activityIdRef = useRef(1);
@@ -237,6 +257,14 @@ export default function EmbedDemoPage() {
   }, []);
 
   useEffect(() => {
+    appStateRef.current = appState;
+  }, [appState]);
+
+  useEffect(() => {
+    showWorkflowModalRef.current = showWorkflowModal;
+  }, [showWorkflowModal]);
+
+  useEffect(() => {
     if (!hydrationLoadedRef.current) return;
     try {
       window.localStorage.setItem(APP_STATE_KEY, JSON.stringify(appState));
@@ -358,7 +386,122 @@ export default function EmbedDemoPage() {
     setShowNudge(false);
   };
 
-  const resetDemoState = () => {
+  const highlightRecommended = useCallback((feature: string | null) => {
+    if (!feature) return;
+    setTourActive(false);
+    setTourHighlightFeature(feature === "create-workflow" ? "workflow-builder" : feature);
+  }, []);
+
+  const showInterrupt = useCallback(
+    (message: string, targetFeature: string | null) => {
+      setInterrupt({ type: "warning", message, targetFeature, primaryAction: "guide" });
+      setStatus(message);
+      highlightRecommended(targetFeature);
+    },
+    [highlightRecommended, setStatus]
+  );
+
+  const connectGithub = useCallback(() => {
+    setAppState((s) => ({ ...s, githubConnected: true }));
+    setTourHighlightFeature("github-card");
+    setStatus("Nice - GitHub connected. Next: create an API key.");
+    addActivity("GitHub connected");
+    if (tourActive && currentTourStep?.id === "connect-github") advanceTourAfterSuccess(currentTourStep);
+  }, [addActivity, advanceTourAfterSuccess, currentTourStep, setStatus, tourActive]);
+
+  const createApiKey = useCallback(() => {
+    const token = `rk_live_${createSecureTokenSuffix(12)}`;
+    setApiKeyValue(token);
+    setAppState((s) => ({ ...s, apiKeyCreated: true }));
+    setTourHighlightFeature("api-keys");
+    setStatus("Key created. Next: build your first workflow.");
+    addActivity("API key generated");
+    if (tourActive && currentTourStep?.id === "create-api-key") advanceTourAfterSuccess(currentTourStep);
+  }, [addActivity, advanceTourAfterSuccess, currentTourStep, setStatus, tourActive]);
+
+  const createWorkflow = useCallback(() => {
+    setAppState((s) => ({ ...s, workflowCreated: true }));
+    setShowWorkflowModal(false);
+    setTourHighlightFeature("workflow-builder");
+    setStatus("Workflow created. Next: deploy to staging.");
+    addActivity("Workflow created");
+    if (tourActive && currentTourStep?.id === "build-workflow") advanceTourAfterSuccess(currentTourStep);
+  }, [addActivity, advanceTourAfterSuccess, currentTourStep, setStatus, tourActive]);
+
+  const deployStaging = useCallback(() => {
+    setDeploymentStatus("deploying");
+    setStatus("Deploying...");
+    addActivity("Deploy started");
+    window.setTimeout(() => {
+      setDeploymentStatus("healthy");
+      setAppState((s) => ({ ...s, deployed: true }));
+      setTourHighlightFeature("deployments");
+      addActivity("Staging healthy");
+      addActivity("Assistant activated on staging");
+      addActivity("Workflow ready to guide users");
+      setWidgetPulse(true);
+      window.dispatchEvent(new CustomEvent("runbook-widget-pulse", { detail: true }));
+      setStatus("Your assistant is live. Ask what users can do here.");
+      if (tourActive && currentTourStep?.id === "deploy-staging") advanceTourAfterSuccess(currentTourStep);
+    }, 900);
+  }, [addActivity, advanceTourAfterSuccess, currentTourStep, setStatus, tourActive]);
+
+  const handleUserIntent = useCallback(
+    (
+      intentId: "connect-github" | "create-api-key" | "new-workflow" | "deploy" | "open-builder" | "manage-integrations"
+    ): boolean => {
+      if (intentId === "connect-github") {
+        setInterrupt(null);
+        connectGithub();
+        return true;
+      }
+      if (intentId === "create-api-key") {
+        if (!appState.githubConnected) {
+          showInterrupt("Connect your source first, then create the key.", "integrations");
+          return false;
+        }
+        setInterrupt(null);
+        createApiKey();
+        return true;
+      }
+      if (intentId === "new-workflow" || intentId === "open-builder") {
+        if (!appState.githubConnected) {
+          showInterrupt("Connect GitHub first so your workflow has a trigger.", "integrations");
+          return false;
+        }
+        setInterrupt(null);
+        setShowWorkflowModal(true);
+        setStatus("Create the workflow");
+        return true;
+      }
+      if (intentId === "deploy") {
+        if (!appState.workflowCreated) {
+          showInterrupt("Almost — build a workflow before deploying.", "create-workflow");
+          return false;
+        }
+        setInterrupt(null);
+        deployStaging();
+        return true;
+      }
+      if (intentId === "manage-integrations") {
+        setInterrupt(null);
+        setShowIntegrationsPanel(true);
+        return true;
+      }
+      return true;
+    },
+    [
+      appState.githubConnected,
+      appState.workflowCreated,
+      connectGithub,
+      createApiKey,
+      deployStaging,
+      setStatus,
+      showInterrupt
+    ]
+  );
+
+  const resetDemoState = useCallback(() => {
     const reset: AppState = {
       githubConnected: false,
       apiKeyCreated: false,
@@ -389,111 +532,224 @@ export default function EmbedDemoPage() {
     setShowNudge(true);
     setStatus("Ready to guide");
     addActivity("Demo reset");
-  };
+  }, [addActivity, setStatus]);
 
-  const highlightRecommended = useCallback((feature: string | null) => {
-    if (!feature) return;
-    setTourActive(false);
-    setTourHighlightFeature(feature === "create-workflow" ? "workflow-builder" : feature);
+  const watchMeHandlersRef = useRef({
+    connectGithub: () => {},
+    createApiKey: () => {},
+    createWorkflow: () => {},
+    deployStaging: () => {},
+    handleUserIntent: (() => false) as (
+      intentId: "connect-github" | "create-api-key" | "new-workflow" | "deploy" | "open-builder" | "manage-integrations"
+    ) => boolean,
+    resetDemoState: () => {}
+  });
+
+  useEffect(() => {
+    watchMeHandlersRef.current = {
+      connectGithub,
+      createApiKey,
+      createWorkflow,
+      deployStaging,
+      handleUserIntent,
+      resetDemoState
+    };
+  }, [connectGithub, createApiKey, createWorkflow, deployStaging, handleUserIntent, resetDemoState]);
+
+  useEffect(() => {
+    const hideWatchMeUi = () => {
+      setWatchMeActive(false);
+      setWatchMeCursor((c) => ({ ...c, visible: false, clicking: false }));
+      setWatchMeCaption("");
+      setWatchMeHighlight(null);
+      setWatchMeProgress(null);
+      watchMeRunningRef.current = false;
+    };
+
+    const onCancel = () => {
+      watchMeCancelledRef.current = true;
+      hideWatchMeUi();
+    };
+
+    const waitForState = (predicate: (s: AppState) => boolean, timeout = 2800) =>
+      new Promise<void>((resolve) => {
+        const start = Date.now();
+        const id = window.setInterval(() => {
+          const s = appStateRef.current;
+          if (watchMeCancelledRef.current || predicate(s)) {
+            window.clearInterval(id);
+            resolve();
+          } else if (Date.now() - start >= timeout) {
+            window.clearInterval(id);
+            resolve();
+          }
+        }, 45);
+      });
+
+    const waitForModal = (wantOpen: boolean, timeout = 2400) =>
+      new Promise<void>((resolve) => {
+        const start = Date.now();
+        const id = window.setInterval(() => {
+          if (watchMeCancelledRef.current) {
+            window.clearInterval(id);
+            resolve();
+            return;
+          }
+          if (showWorkflowModalRef.current === wantOpen) {
+            window.clearInterval(id);
+            resolve();
+            return;
+          }
+          if (Date.now() - start >= timeout) {
+            window.clearInterval(id);
+            resolve();
+          }
+        }, 45);
+      });
+
+    const runOneOp = async (op: WatchMeOperationId, cursorPos: { x: number; y: number }) => {
+      const h = watchMeHandlersRef.current;
+      if (watchMeCancelledRef.current) return cursorPos;
+      const sel = WATCH_ME_SELECTORS[op];
+      let el = document.querySelector<HTMLElement>(sel);
+      if (!el) {
+        setWatchMeCaption("Could not find that control on the page.");
+        await waitMs(1400, () => watchMeCancelledRef.current);
+        return cursorPos;
+      }
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+      await waitMs(400, () => watchMeCancelledRef.current);
+      el = document.querySelector<HTMLElement>(sel);
+      if (!el || watchMeCancelledRef.current) return cursorPos;
+      const r = el.getBoundingClientRect();
+      setWatchMeHighlight(r);
+      const target = { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+      setWatchMeCaption("Runbook is showing this step");
+      let cx = cursorPos.x;
+      let cy = cursorPos.y;
+      await animateCursorTo(
+        { x: cx, y: cy },
+        target,
+        600,
+        (x, y) => {
+          cx = x;
+          cy = y;
+          setWatchMeCursor({ x, y, visible: true, clicking: false });
+        },
+        () => watchMeCancelledRef.current
+      );
+      if (watchMeCancelledRef.current) return target;
+      await waitMs(480, () => watchMeCancelledRef.current);
+      setWatchMeCursor({ x: target.x, y: target.y, visible: true, clicking: true });
+      await waitMs(240, () => watchMeCancelledRef.current);
+      if (watchMeCancelledRef.current) return target;
+      switch (op) {
+        case "connect-github":
+          h.connectGithub();
+          break;
+        case "create-api-key":
+          h.createApiKey();
+          break;
+        case "build-workflow-open":
+          h.handleUserIntent("new-workflow");
+          break;
+        case "build-workflow-confirm":
+          h.createWorkflow();
+          break;
+        case "deploy":
+          h.deployStaging();
+          break;
+      }
+      setWatchMeCursor({ x: target.x, y: target.y, visible: true, clicking: false });
+      const success = WATCH_ME_SUCCESS_LABEL[op];
+      if (success) {
+        setWatchMeToast(success);
+        window.dispatchEvent(new CustomEvent("runbook-assistant-status", { detail: success }));
+        window.setTimeout(() => setWatchMeToast(null), 2200);
+      }
+      if (op === "deploy") {
+        await waitMs(1300, () => watchMeCancelledRef.current);
+        await waitForState((s) => s.deployed, 3200);
+      } else {
+        await waitMs(750, () => watchMeCancelledRef.current);
+        if (op === "connect-github") await waitForState((s) => s.githubConnected);
+        if (op === "create-api-key") await waitForState((s) => s.apiKeyCreated);
+        if (op === "build-workflow-confirm") await waitForState((s) => s.workflowCreated);
+      }
+      setWatchMeHighlight(null);
+      return target;
+    };
+
+    const onWatch = (evt: Event) => {
+      const d = (evt as CustomEvent<{ operationId?: WatchMeOperationId; full?: boolean; reset?: boolean }>).detail || {};
+      if (watchMeRunningRef.current) return;
+      watchMeRunningRef.current = true;
+      watchMeCancelledRef.current = false;
+      void (async () => {
+        const h = watchMeHandlersRef.current;
+        setTourActive(false);
+        setInterrupt(null);
+        setShowNudge(false);
+        setWatchMeActive(true);
+        let cursorPos = { x: Math.round(window.innerWidth / 2), y: Math.round(window.innerHeight / 2) };
+        setWatchMeCursor({ x: cursorPos.x, y: cursorPos.y, visible: true, clicking: false });
+
+        if (d.full && d.reset) {
+          h.resetDemoState();
+          await waitMs(650, () => watchMeCancelledRef.current);
+        } else if (d.full) {
+          const st0 = appStateRef.current;
+          if (st0.githubConnected && st0.apiKeyCreated && st0.workflowCreated && st0.deployed) {
+            h.resetDemoState();
+            await waitMs(650, () => watchMeCancelledRef.current);
+          }
+        }
+
+        const runStep = async (op: WatchMeOperationId | null) => {
+          if (!op || watchMeCancelledRef.current) return;
+          const stBefore = appStateRef.current;
+          const remaining = countWatchMeMilestonesRemaining(stBefore);
+          setWatchMeProgress(remaining > 0 ? `Step ${5 - remaining} of 4` : null);
+          cursorPos = await runOneOp(op, cursorPos);
+        };
+
+        try {
+          if (d.operationId) {
+            await runStep(d.operationId);
+          } else if (d.full) {
+            for (let i = 0; i < 14 && !watchMeCancelledRef.current; i++) {
+              const st = appStateRef.current;
+              const op = getNextWatchMeOperation(st, showWorkflowModalRef.current);
+              if (!op) break;
+              await runStep(op);
+              if (op === "build-workflow-open") await waitForModal(true);
+              await waitMs(220, () => watchMeCancelledRef.current);
+            }
+          } else {
+            const st = appStateRef.current;
+            const op = getNextWatchMeOperation(st, showWorkflowModalRef.current);
+            await runStep(op);
+          }
+        } finally {
+          if (!watchMeCancelledRef.current) {
+            window.dispatchEvent(new CustomEvent("runbook-assistant-suggestion", { detail: "Done — now you try" }));
+            window.dispatchEvent(new CustomEvent("runbook-assistant-status", { detail: "Done — now you try" }));
+            setWatchMeToast("Done — now you try");
+            window.setTimeout(() => setWatchMeToast(null), 2800);
+          }
+          hideWatchMeUi();
+          watchMeRunningRef.current = false;
+        }
+      })();
+    };
+
+    window.addEventListener("runbook-watch-me", onWatch as EventListener);
+    window.addEventListener("runbook-watch-me-cancel", onCancel);
+    return () => {
+      window.removeEventListener("runbook-watch-me", onWatch as EventListener);
+      window.removeEventListener("runbook-watch-me-cancel", onCancel);
+    };
   }, []);
-
-  const showInterrupt = useCallback(
-    (message: string, targetFeature: string | null) => {
-      setInterrupt({ type: "warning", message, targetFeature, primaryAction: "guide" });
-      setStatus(message);
-      highlightRecommended(targetFeature);
-    },
-    [highlightRecommended, setStatus]
-  );
-
-  const connectGithub = () => {
-    setAppState((s) => ({ ...s, githubConnected: true }));
-    setTourHighlightFeature("github-card");
-    setStatus("Nice - GitHub connected. Next: create an API key.");
-    addActivity("GitHub connected");
-    if (tourActive && currentTourStep?.id === "connect-github") advanceTourAfterSuccess(currentTourStep);
-  };
-
-  const createApiKey = () => {
-    const token = `rk_live_${createSecureTokenSuffix(12)}`;
-    setApiKeyValue(token);
-    setAppState((s) => ({ ...s, apiKeyCreated: true }));
-    setTourHighlightFeature("api-keys");
-    setStatus("Key created. Next: build your first workflow.");
-    addActivity("API key generated");
-    if (tourActive && currentTourStep?.id === "create-api-key") advanceTourAfterSuccess(currentTourStep);
-  };
-
-  const createWorkflow = () => {
-    setAppState((s) => ({ ...s, workflowCreated: true }));
-    setShowWorkflowModal(false);
-    setTourHighlightFeature("workflow-builder");
-    setStatus("Workflow created. Next: deploy to staging.");
-    addActivity("Workflow created");
-    if (tourActive && currentTourStep?.id === "build-workflow") advanceTourAfterSuccess(currentTourStep);
-  };
-
-  const deployStaging = () => {
-    setDeploymentStatus("deploying");
-    setStatus("Deploying...");
-    addActivity("Deploy started");
-    window.setTimeout(() => {
-      setDeploymentStatus("healthy");
-      setAppState((s) => ({ ...s, deployed: true }));
-      setTourHighlightFeature("deployments");
-      addActivity("Staging healthy");
-      addActivity("Assistant activated on staging");
-      addActivity("Workflow ready to guide users");
-      setWidgetPulse(true);
-      window.dispatchEvent(new CustomEvent("runbook-widget-pulse", { detail: true }));
-      setStatus("Your assistant is live. Ask what users can do here.");
-      if (tourActive && currentTourStep?.id === "deploy-staging") advanceTourAfterSuccess(currentTourStep);
-    }, 900);
-  };
-
-  const handleUserIntent = (
-    intentId: "connect-github" | "create-api-key" | "new-workflow" | "deploy" | "open-builder" | "manage-integrations"
-  ): boolean => {
-    if (intentId === "connect-github") {
-      setInterrupt(null);
-      connectGithub();
-      return true;
-    }
-    if (intentId === "create-api-key") {
-      if (!appState.githubConnected) {
-        showInterrupt("Connect your source first, then create the key.", "integrations");
-        return false;
-      }
-      setInterrupt(null);
-      createApiKey();
-      return true;
-    }
-    if (intentId === "new-workflow" || intentId === "open-builder") {
-      if (!appState.githubConnected) {
-        showInterrupt("Connect GitHub first so your workflow has a trigger.", "integrations");
-        return false;
-      }
-      setInterrupt(null);
-      setShowWorkflowModal(true);
-      setStatus("Create the workflow");
-      return true;
-    }
-    if (intentId === "deploy") {
-      if (!appState.workflowCreated) {
-        showInterrupt("Almost — build a workflow before deploying.", "create-workflow");
-        return false;
-      }
-      setInterrupt(null);
-      deployStaging();
-      return true;
-    }
-    if (intentId === "manage-integrations") {
-      setInterrupt(null);
-      setShowIntegrationsPanel(true);
-      return true;
-    }
-    return true;
-  };
 
   const outlinedFeature = useMemo(
     () => (tourHighlightFeature && !tourActive ? tourHighlightFeature : currentTourStep?.feature || null),
@@ -507,6 +763,47 @@ export default function EmbedDemoPage() {
 
   return (
     <div className="relative space-y-5 pb-28">
+      {watchMeActive ? (
+        <div className="fixed inset-0 z-[2147483638] bg-black/40 pointer-events-none" aria-hidden />
+      ) : null}
+      {watchMeHighlight ? (
+        <div
+          className="pointer-events-none fixed z-[2147483639] rounded-xl border-2 border-amber-300/90 shadow-[0_0_0_4px_rgba(251,191,36,0.25)]"
+          style={{
+            top: watchMeHighlight.top - 6,
+            left: watchMeHighlight.left - 6,
+            width: watchMeHighlight.width + 12,
+            height: watchMeHighlight.height + 12
+          }}
+        />
+      ) : null}
+      <FakeCursor
+        visible={watchMeCursor.visible}
+        x={watchMeCursor.x}
+        y={watchMeCursor.y}
+        clicking={watchMeCursor.clicking}
+        caption={watchMeCaption}
+      />
+      {watchMeProgress ? (
+        <div className="pointer-events-none fixed left-1/2 top-[4.5rem] z-[2147483641] -translate-x-1/2 rounded-full border border-indigo-400/50 bg-slate-950/95 px-3 py-1 text-[11px] font-semibold text-indigo-100 shadow-lg">
+          {watchMeProgress}
+        </div>
+      ) : null}
+      {watchMeToast ? (
+        <div className="pointer-events-none fixed bottom-32 left-1/2 z-[2147483641] -translate-x-1/2 rounded-xl border border-emerald-400/50 bg-slate-950/95 px-4 py-2 text-sm font-medium text-emerald-100 shadow-xl">
+          {watchMeToast}
+        </div>
+      ) : null}
+      {watchMeActive ? (
+        <button
+          type="button"
+          onClick={() => window.dispatchEvent(new CustomEvent("runbook-watch-me-cancel"))}
+          className="fixed right-5 top-[4.5rem] z-[2147483642] rounded-lg border border-white/30 bg-slate-900/95 px-3 py-1.5 text-xs font-semibold text-white shadow-lg hover:bg-slate-800"
+        >
+          Cancel
+        </button>
+      ) : null}
+
       {showNudge ? (
         <div className="fixed bottom-24 right-6 z-[2147483000] w-[300px] rounded-xl border border-indigo-400/40 bg-slate-900/95 p-3 text-sm text-slate-100 shadow-2xl">
           <p className="text-sm font-semibold">Want help getting started?</p>
@@ -533,6 +830,16 @@ export default function EmbedDemoPage() {
               className="rounded-md bg-indigo-500 px-2 py-1 text-xs font-semibold text-white"
             >
               Start guided tour
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setShowNudge(false);
+                window.dispatchEvent(new CustomEvent("runbook-watch-me", { detail: { full: true } }));
+              }}
+              className="rounded-md border border-amber-400/50 bg-amber-500/15 px-2 py-1 text-xs font-semibold text-amber-100"
+            >
+              Watch full setup
             </button>
             <button type="button" onClick={dismissNudge} className="ml-auto text-xs text-slate-400 hover:text-slate-200">
               Dismiss
@@ -613,6 +920,7 @@ export default function EmbedDemoPage() {
             type="button"
             onClick={() => handleUserIntent("new-workflow")}
             data-tour-target="create-workflow-button"
+            data-runbook-action="open-workflow-modal"
             className="mt-3 inline-block rounded-lg bg-indigo-500 px-3 py-1.5 text-xs font-semibold text-white hover:bg-indigo-400"
           >
             New workflow
@@ -655,7 +963,12 @@ export default function EmbedDemoPage() {
         >
           <p className="text-xs uppercase tracking-wide text-slate-400">API Keys</p>
           <p className="mt-1 text-xs text-slate-300">{apiKeyValue ? `Latest: ${apiKeyValue}` : "No key generated yet"}</p>
-          <button type="button" onClick={() => handleUserIntent("create-api-key")} className="mt-3 inline-block rounded-lg border border-white/20 px-3 py-1.5 text-xs font-semibold hover:border-white/40">
+          <button
+            type="button"
+            onClick={() => handleUserIntent("create-api-key")}
+            data-runbook-action="create-api-key"
+            className="mt-3 inline-block rounded-lg border border-white/20 px-3 py-1.5 text-xs font-semibold hover:border-white/40"
+          >
             Generate key
           </button>
         </FeatureCard>
@@ -718,7 +1031,12 @@ export default function EmbedDemoPage() {
             <ul className="mt-3 space-y-2 text-sm" data-runbook-feature="github-card" data-runbook-title="GitHub integration" data-runbook-description="Connect GitHub so workflows can trigger from commits and pull requests." data-tour-target="github-integration-card">
               <li className="flex items-center justify-between rounded-lg bg-slate-950/60 px-3 py-2">
                 <span>GitHub</span>
-                <button type="button" onClick={() => handleUserIntent("connect-github")} className={`rounded-md px-2 py-1 text-xs ${appState.githubConnected ? "bg-emerald-500/20 text-emerald-200" : "bg-amber-500/20 text-amber-200"}`}>
+                <button
+                  type="button"
+                  onClick={() => handleUserIntent("connect-github")}
+                  data-runbook-action="connect-github"
+                  className={`rounded-md px-2 py-1 text-xs ${appState.githubConnected ? "bg-emerald-500/20 text-emerald-200" : "bg-amber-500/20 text-amber-200"}`}
+                >
                   {appState.githubConnected ? "Connected" : "Connect"}
                 </button>
               </li>
@@ -798,6 +1116,7 @@ export default function EmbedDemoPage() {
                 type="button"
                 onClick={createWorkflow}
                 data-tour-target="confirm-create-workflow-button"
+                data-runbook-action="confirm-workflow"
                 className="rounded-md bg-indigo-500 px-3 py-1 text-xs font-semibold text-white"
               >
                 Create workflow
@@ -833,7 +1152,7 @@ export default function EmbedDemoPage() {
             <p className="font-semibold">{currentTourStep?.title}</p>
             <p className="mt-1 text-slate-300">{currentTourStep?.description}</p>
             {tourFeedback ? <p className="mt-2 text-emerald-300">{tourFeedback}</p> : null}
-            <div className="mt-3 flex justify-between">
+            <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
               <button
                 type="button"
                 onClick={() => setTourStepIndex((s) => Math.max(0, s - 1))}
@@ -851,6 +1170,22 @@ export default function EmbedDemoPage() {
                 className={`rounded-md px-2 py-1 ${stepComplete ? "bg-emerald-500 text-white" : "bg-slate-700 text-slate-300"}`}
               >
                 {stepComplete ? "Continue" : currentTourStep?.id === "connect-github" ? "Click Connect to continue" : currentTourStep?.id === "create-api-key" ? "Generate a key to move forward" : currentTourStep?.id === "build-workflow" ? "Create the workflow" : "Deploy when ready"}
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (!currentTourStep) return;
+                  const detail =
+                    currentTourStep.id === "deploy-staging"
+                      ? { operationId: "deploy" as WatchMeOperationId }
+                      : currentTourStep.id === "build-workflow"
+                        ? {}
+                        : { operationId: currentTourStep.id as WatchMeOperationId };
+                  window.dispatchEvent(new CustomEvent("runbook-watch-me", { detail }));
+                }}
+                className="rounded-md border border-amber-400/50 bg-amber-500/20 px-2 py-1 text-[11px] font-semibold text-amber-100"
+              >
+                Watch me
               </button>
               <button type="button" onClick={() => setTourActive(false)} className="rounded-md border border-white/20 px-2 py-1">
                 {tourStepIndex === TOUR_STEPS.length - 1 ? "Done" : "Skip"}

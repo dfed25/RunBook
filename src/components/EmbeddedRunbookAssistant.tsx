@@ -139,6 +139,7 @@ export function EmbeddedRunbookAssistant({
   const [externalFeature, setExternalFeature] = useState<ExternalFeatureContext | null>(null);
   const [statusChip, setStatusChip] = useState("Ready to guide");
   const [pulseLaunch, setPulseLaunch] = useState(false);
+  const [embedDemoState, setEmbedDemoState] = useState<DemoAppState | null>(null);
   const highlightCleanupRef = useRef<() => void>(() => undefined);
   const chatBodyRef = useRef<HTMLDivElement | null>(null);
   const hoveredFeatureRef = useRef<HoveredFeatureContext | null>(null);
@@ -203,6 +204,16 @@ export function EmbeddedRunbookAssistant({
   useEffect(() => {
     hoveredFeatureRef.current = hoveredFeature;
   }, [hoveredFeature]);
+
+  useEffect(() => {
+    const sync = () => {
+      const w = (window as Window & { __runbookAppState?: DemoAppState }).__runbookAppState;
+      setEmbedDemoState(w ? { ...w } : null);
+    };
+    sync();
+    window.addEventListener("runbook-app-state", sync as EventListener);
+    return () => window.removeEventListener("runbook-app-state", sync as EventListener);
+  }, []);
 
   useEffect(() => {
     const node = chatBodyRef.current;
@@ -428,7 +439,10 @@ export function EmbeddedRunbookAssistant({
         role: "assistant",
         answer: answerById[next.id],
         bullets: actionBullets[next.id],
-        suggestions: ["Guide me", "What can I do here?"]
+        suggestions:
+          next.id === "complete"
+            ? ["Watch full setup", "What can I do here?"]
+            : ["Guide me", "Watch me", "What can I do here?"]
       }
     ]);
   };
@@ -518,6 +532,52 @@ export function EmbeddedRunbookAssistant({
                 : statusChip}
             </span>
           </div>
+          {open && embedDemoState ? (
+            <div className="border-b border-slate-800 px-3 py-2">
+              {(() => {
+                const next = getNextAction(embedDemoState);
+                if (next.id === "complete") {
+                  return (
+                    <div className="flex flex-wrap items-center gap-2 text-[10px] text-slate-300">
+                      <span className="font-semibold text-emerald-300">Your assistant is live.</span>
+                      <button
+                        type="button"
+                        className="rounded-md border border-amber-400/40 bg-amber-500/15 px-2 py-1 text-[10px] font-semibold text-amber-100 hover:bg-amber-500/25"
+                        onClick={() =>
+                          window.dispatchEvent(
+                            new CustomEvent("runbook-watch-me", { detail: { full: true, reset: true } })
+                          )
+                        }
+                      >
+                        Replay Watch full setup
+                      </button>
+                    </div>
+                  );
+                }
+                return (
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-[10px] text-slate-400">
+                      Next: <span className="font-semibold text-white">{next.title}</span>
+                    </span>
+                    <button
+                      type="button"
+                      className="rounded-md border border-indigo-400/50 bg-indigo-500/20 px-2 py-1 text-[10px] font-semibold text-indigo-100 hover:bg-indigo-500/30"
+                      onClick={triggerGuideMe}
+                    >
+                      Guide me
+                    </button>
+                    <button
+                      type="button"
+                      className="rounded-md border border-amber-400/50 bg-amber-500/15 px-2 py-1 text-[10px] font-semibold text-amber-100 hover:bg-amber-500/25"
+                      onClick={() => window.dispatchEvent(new CustomEvent("runbook-watch-me", { detail: {} }))}
+                    >
+                      Watch me
+                    </button>
+                  </div>
+                );
+              })()}
+            </div>
+          ) : null}
           {showQuickActions ? (
             <div className="grid grid-cols-2 gap-1.5 border-b border-slate-800 px-2 py-2">
               <button
@@ -526,6 +586,13 @@ export function EmbeddedRunbookAssistant({
                 onClick={() => void send("What can I do here?")}
               >
                 What can I do here?
+              </button>
+              <button
+                type="button"
+                className="col-span-2 rounded-md border border-amber-500/45 bg-amber-900/25 px-2.5 py-1.5 text-[10px] font-semibold text-amber-100 hover:bg-amber-800/45"
+                onClick={() => window.dispatchEvent(new CustomEvent("runbook-watch-me", { detail: { full: true } }))}
+              >
+                Watch full setup
               </button>
               <button
                 type="button"
@@ -619,7 +686,12 @@ export function EmbeddedRunbookAssistant({
                         type="button"
                         onClick={() => {
                           if (/^guide me\b/i.test(action)) triggerGuideMe();
-                          else if (/what should i do next/i.test(action) || /what can i do next/i.test(action)) triggerWhatNext();
+                          else if (/^watch me$/i.test(action.trim()))
+                            window.dispatchEvent(new CustomEvent("runbook-watch-me", { detail: {} }));
+                          else if (/watch full setup/i.test(action))
+                            window.dispatchEvent(new CustomEvent("runbook-watch-me", { detail: { full: true } }));
+                          else if (/what should i do next/i.test(action) || /what can i do next/i.test(action))
+                            triggerWhatNext();
                           else if (isExplainPageIntent(action)) explainThisPage();
                           else void send(action);
                         }}
