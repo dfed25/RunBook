@@ -3,15 +3,19 @@ import { demoDocs } from "./demoDocs";
 import type { SourceDoc } from "./types";
 import { buildNorthstarDemoResponse, type DemoChatResult } from "./embedDemoKnowledge";
 import { retrieveKeywordSources } from "./embedKeywordRetrieval";
+import { clipWords, MAX_ANSWER_WORDS, normalizeBullets, normalizeSuggestions, normalizeSteps } from "./embedStructured";
 
 const NORTHSTAR_SYSTEM = `You are Runbook, an embedded in-app onboarding assistant for the "Northstar AI" demo product.
 Use ONLY the knowledge excerpts provided in the user message. If something is not in the excerpts, say briefly that it is not documented and suggest where to look next.
-Be practical and concise (under 180 words for the main answer).
-For onboarding/how-to questions, infer likely end-user flow from the provided excerpts: where to begin in UI, what to click/type next, and how to verify success.
-For location intents (where/find/locate/create account/sign up/get started/login), keep the answer short and action-first so a page highlighter can guide the user immediately.
-After your answer, on a NEW final line, output exactly this format (single line):
-RUNBOOK_STEPS_JSON: ["imperative step 1", "step 2", ...]
-Use 3-6 short imperative steps. No markdown code fences.`;
+Never output long paragraphs.
+Return a short scannable structure as compact JSON on one final line:
+RUNBOOK_JSON: {"answer":"<=12 words","bullets":["<=14 words","..."],"steps":["..."],"suggestions":["Guide me step-by-step","Explain this page","What can I do next?"]}
+Rules:
+- answer max 12 words
+- bullets max 3
+- steps 3-6 short imperative items when actionable
+- suggestions max 3
+- no markdown code fences.`;
 
 export function isServerLlmConfigured(): boolean {
   return Boolean(process.env.GEMINI_API_KEY?.trim() || process.env.OPENAI_API_KEY?.trim());
@@ -32,23 +36,38 @@ function mergeSources(
   return out.slice(0, 6);
 }
 
-function parseSteps(raw: string): { answer: string; steps: string[] } {
+function parseStructured(raw: string): { answer: string; bullets: string[]; steps: string[]; suggestions: string[] } {
   let answer = raw.trim();
+  let bullets: string[] = [];
   let steps: string[] = [];
-  const idx = answer.lastIndexOf("RUNBOOK_STEPS_JSON:");
+  let suggestions: string[] = [];
+  const idx = answer.lastIndexOf("RUNBOOK_JSON:");
   if (idx >= 0) {
-    const jsonPart = answer.slice(idx + "RUNBOOK_STEPS_JSON:".length).trim();
+    const jsonPart = answer.slice(idx + "RUNBOOK_JSON:".length).trim();
     answer = answer.slice(0, idx).trim();
     try {
       const parsed = JSON.parse(jsonPart) as unknown;
-      if (Array.isArray(parsed)) {
-        steps = parsed.filter((x): x is string => typeof x === "string" && x.trim().length > 0).map((s) => s.trim());
+      if (parsed && typeof parsed === "object") {
+        const obj = parsed as Record<string, unknown>;
+        if (typeof obj.answer === "string" && obj.answer.trim()) answer = obj.answer.trim();
+        if (Array.isArray(obj.bullets)) bullets = obj.bullets.filter((x): x is string => typeof x === "string");
+        if (Array.isArray(obj.steps)) {
+          steps = obj.steps.filter((x): x is string => typeof x === "string" && x.trim().length > 0).map((s) => s.trim());
+        }
+        if (Array.isArray(obj.suggestions)) {
+          suggestions = obj.suggestions.filter((x): x is string => typeof x === "string" && x.trim().length > 0).map((s) => s.trim());
+        }
       }
     } catch {
       /* ignore */
     }
   }
-  return { answer, steps };
+  return {
+    answer: clipWords(answer, MAX_ANSWER_WORDS),
+    bullets: normalizeBullets(bullets),
+    steps: normalizeSteps(steps),
+    suggestions: normalizeSuggestions(suggestions)
+  };
 }
 
 export async function runNorthstarEmbedChat(input: {
@@ -94,7 +113,7 @@ export async function runNorthstarEmbedChat(input: {
 
   try {
     const raw = await generateFromGemini(NORTHSTAR_SYSTEM, userBlock);
-    const { answer, steps } = parseSteps(raw);
+    const { answer, bullets, steps, suggestions } = parseStructured(raw);
     if (!answer) throw new Error("empty answer");
     const finalSteps =
       steps.length > 0
@@ -104,8 +123,10 @@ export async function runNorthstarEmbedChat(input: {
           : ["Review the sources below.", "Ask a more specific follow-up.", "Check with your team lead if unsure."];
     return {
       answer,
+      bullets: bullets.length > 0 ? bullets : fallback.bullets,
       sources: mergeSources(keywordSources, fallback.sources),
-      steps: finalSteps
+      steps: finalSteps,
+      suggestions: suggestions.length > 0 ? suggestions : fallback.suggestions
     };
   } catch (e) {
     console.warn("northstar LLM fallback:", e);

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   loadImportedDocs,
   loadProjectId,
@@ -11,8 +11,10 @@ import {
 type ChatResponse = {
   answer?: string;
   error?: string;
+  bullets?: string[];
   sources?: SourceItem[];
   steps?: string[];
+  suggestions?: string[];
   mode?: string;
 };
 
@@ -20,7 +22,16 @@ type SourceItem = { title: string; excerpt?: string; url?: string };
 
 type Message =
   | { role: "user"; text: string }
-  | { role: "assistant"; text?: string; answer?: string; steps?: string[]; sources?: SourceItem[]; isWelcome?: boolean };
+  | {
+      role: "assistant";
+      text?: string;
+      answer?: string;
+      bullets?: string[];
+      steps?: string[];
+      sources?: SourceItem[];
+      suggestions?: string[];
+      isWelcome?: boolean;
+    };
 
 export type EmbeddedRunbookAssistantProps = {
   projectId?: string;
@@ -32,10 +43,71 @@ export type EmbeddedRunbookAssistantProps = {
   suggestedQuestions: string[];
   manualSources?: DemoManualSource[];
   importedDocuments?: ImportedDocument[];
+  hideQuickActions?: boolean;
   /** `page` = fixed to viewport; `embedded` = inside a positioned preview box */
   position?: "page" | "embedded";
   className?: string;
 };
+
+type StepModeProps = {
+  messageId: string;
+  steps: string[];
+  completedMap: Record<number, boolean>;
+  onToggle: (messageId: string, stepIndex: number) => void;
+};
+
+const StepMode = memo(function StepMode({ messageId, steps, completedMap, onToggle }: StepModeProps) {
+  const completeCount = Object.values(completedMap).filter(Boolean).length;
+  const firstIncomplete = steps.findIndex((_, i2) => !Boolean(completedMap[i2]));
+  return (
+    <div className="mt-2 rounded-lg border border-slate-700 bg-slate-900/60 p-2">
+      <div className="mb-1 flex items-center justify-between">
+        <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Step Mode</p>
+        <p className="text-[10px] text-emerald-300">
+          {completeCount}/{steps.length}
+        </p>
+      </div>
+      <ul className="space-y-1">
+        {steps.map((step, idx) => {
+          const checked = Boolean(completedMap[idx]);
+          return (
+            <li
+              key={`${messageId}-s-${idx}`}
+              className={`flex items-start gap-2 text-xs ${
+                idx === firstIncomplete && !checked ? "text-emerald-200" : "text-slate-300"
+              }`}
+            >
+              <button
+                type="button"
+                onClick={() => onToggle(messageId, idx)}
+                className={`mt-0.5 h-4 w-4 shrink-0 rounded border ${
+                  checked ? "border-emerald-400 bg-emerald-500/30" : "border-slate-500 bg-transparent"
+                }`}
+                aria-label={`Toggle step ${idx + 1}`}
+              />
+              <span className={checked ? "text-slate-500 line-through" : ""}>{step}</span>
+            </li>
+          );
+        })}
+      </ul>
+      <button
+        type="button"
+        disabled={firstIncomplete < 0}
+        onClick={() => {
+          if (firstIncomplete >= 0) onToggle(messageId, firstIncomplete);
+        }}
+        className="mt-2 rounded bg-emerald-600/20 px-2 py-1 text-[10px] font-semibold text-emerald-200 disabled:cursor-not-allowed disabled:opacity-40"
+      >
+        {firstIncomplete < 0 ? "All steps complete" : "Mark next step complete"}
+      </button>
+    </div>
+  );
+});
+
+function isExplainPageIntent(action: string): boolean {
+  const normalized = action.toLowerCase().replace(/[.!?]+$/g, "").trim();
+  return normalized === "explain this page" || normalized === "explain the current page";
+}
 
 export function EmbeddedRunbookAssistant({
   projectId = "northstar-demo",
@@ -46,6 +118,7 @@ export function EmbeddedRunbookAssistant({
   suggestedQuestions,
   manualSources = [],
   importedDocuments,
+  hideQuickActions = false,
   position = "page",
   className = ""
 }: EmbeddedRunbookAssistantProps) {
@@ -134,8 +207,10 @@ export function EmbeddedRunbookAssistant({
           {
             role: "assistant",
             answer: data.answer,
+            bullets: (data.bullets || []).slice(0, 3),
             steps: data.steps || [],
             sources: (data.sources || []).slice(0, 6),
+            suggestions: (data.suggestions || []).slice(0, 3),
             text: !data.answer ? "No content." : undefined
           }
         ]);
@@ -197,7 +272,19 @@ export function EmbeddedRunbookAssistant({
     }));
   };
 
-  const chips = suggestedQuestions.filter(Boolean).slice(0, 8);
+  const actionTiles = [
+    { label: "Get GitHub access", prompt: "Get GitHub access" },
+    { label: "Set up first workflow", prompt: "Set up first workflow" },
+    { label: "Connect integrations", prompt: "Connect integrations" },
+    { label: "Explore features", prompt: "What features can I use here?" }
+  ];
+
+  const mappedSuggestedActions = suggestedQuestions
+    .filter(Boolean)
+    .slice(0, 4)
+    .map((s) => ({ label: s.replace(/\?+$/, "").trim(), prompt: s }));
+
+  const chips = [...actionTiles, ...mappedSuggestedActions].slice(0, 8);
 
   return (
     <div className={`${posWrap} ${className}`}>
@@ -235,30 +322,30 @@ export function EmbeddedRunbookAssistant({
               ×
             </button>
           </div>
-          {chips.length > 0 ? (
-            <div className="flex flex-wrap gap-1.5 border-b border-slate-800 px-2 py-2">
+          {!hideQuickActions && chips.length > 0 ? (
+            <div className="grid grid-cols-2 gap-1.5 border-b border-slate-800 px-2 py-2">
               <button
                 type="button"
-                className="rounded-full border border-emerald-500/50 bg-emerald-900/30 px-2.5 py-1 text-[10px] font-semibold text-emerald-100 hover:bg-emerald-800/50"
+                className="col-span-2 rounded-md border border-emerald-500/50 bg-emerald-900/30 px-2.5 py-1.5 text-[10px] font-semibold text-emerald-100 hover:bg-emerald-800/50"
                 onClick={explainThisPage}
               >
-                Explain this page
+                What can I do here?
               </button>
               <button
                 type="button"
-                className="rounded-full border border-amber-500/50 bg-amber-900/30 px-2.5 py-1 text-[10px] font-semibold text-amber-100 hover:bg-amber-800/50"
+                className="col-span-2 rounded-md border border-amber-500/50 bg-amber-900/30 px-2.5 py-1.5 text-[10px] font-semibold text-amber-100 hover:bg-amber-800/50"
                 onClick={() => void send("What should I do next?")}
               >
                 What should I do next?
               </button>
               {chips.map((c) => (
                 <button
-                  key={c}
+                  key={`${c.label}-${c.prompt}`}
                   type="button"
-                  className="rounded-full border border-indigo-500/40 bg-indigo-950/50 px-2.5 py-1 text-[10px] font-medium text-indigo-100 hover:bg-indigo-900/70"
-                  onClick={() => void send(c)}
+                  className="rounded-md border border-indigo-500/40 bg-indigo-950/50 px-2.5 py-1.5 text-[10px] font-medium text-indigo-100 hover:bg-indigo-900/70"
+                  onClick={() => void send(c.prompt)}
                 >
-                  {c}
+                  {c.label}
                 </button>
               ))}
             </div>
@@ -276,32 +363,27 @@ export function EmbeddedRunbookAssistant({
               return (
                 <div key={messageId} className="mr-4 rounded-xl border border-slate-700/80 bg-slate-800/90 px-3 py-2 text-left">
                   {msg.answer ? (
-                    <p className="mb-1 text-sm leading-relaxed text-slate-200">{msg.answer}</p>
+                    <p className="mb-1 text-sm font-semibold leading-snug text-slate-100">{msg.answer}</p>
                   ) : (
                     <p className="text-sm text-slate-200">{msg.text}</p>
                   )}
+                  {msg.bullets && msg.bullets.length > 0 ? (
+                    <ul className="mb-2 mt-1 space-y-1 text-xs text-slate-300">
+                      {msg.bullets.slice(0, 3).map((bullet, idx) => (
+                        <li key={`${messageId}-b-${idx}`} className="flex gap-2">
+                          <span>•</span>
+                          <span>{bullet}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
                   {msg.steps && msg.steps.length > 0 ? (
-                    <div className="mt-2 rounded-lg border border-slate-700 bg-slate-900/60 p-2">
-                      <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">Step Mode</p>
-                      <ul className="space-y-1">
-                        {msg.steps.map((step, idx) => {
-                          const checked = Boolean(completedStepsByMessage[messageId]?.[idx]);
-                          return (
-                            <li key={`${messageId}-s-${idx}`} className="flex items-start gap-2 text-xs text-slate-300">
-                              <button
-                                type="button"
-                                onClick={() => toggleStep(messageId, idx)}
-                                className={`mt-0.5 h-4 w-4 shrink-0 rounded border ${
-                                  checked ? "border-emerald-400 bg-emerald-500/30" : "border-slate-500 bg-transparent"
-                                }`}
-                                aria-label={`Toggle step ${idx + 1}`}
-                              />
-                              <span className={checked ? "text-slate-500 line-through" : ""}>{step}</span>
-                            </li>
-                          );
-                        })}
-                      </ul>
-                    </div>
+                    <StepMode
+                      messageId={messageId}
+                      steps={msg.steps || []}
+                      completedMap={completedStepsByMessage[messageId] || {}}
+                      onToggle={toggleStep}
+                    />
                   ) : null}
                   {msg.sources && msg.sources.length > 0 ? (
                     <div className="mt-3 border-t border-slate-700/80 pt-2">
@@ -324,6 +406,24 @@ export function EmbeddedRunbookAssistant({
                       </div>
                     </div>
                   ) : null}
+                  <div className="mt-2 flex flex-wrap gap-1.5 border-t border-slate-700/70 pt-2">
+                    {(msg.suggestions && msg.suggestions.length > 0
+                      ? msg.suggestions
+                      : ["Guide me step-by-step", "Explain this page", "What can I do next?"]
+                    ).map((action, actionIdx) => (
+                      <button
+                        key={`${messageId}-q-${actionIdx}-${action}`}
+                        type="button"
+                        onClick={() => {
+                          if (isExplainPageIntent(action)) explainThisPage();
+                          else void send(action);
+                        }}
+                        className="rounded-full border border-slate-500/50 px-2 py-1 text-[10px] font-medium text-slate-200 hover:bg-slate-700"
+                      >
+                        {action}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               );
             })}

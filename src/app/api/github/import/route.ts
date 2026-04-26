@@ -55,13 +55,48 @@ async function ghFetch(path: string): Promise<Response> {
   return fetch(`https://api.github.com${path}`, { headers });
 }
 
+async function readGitHubError(res: Response): Promise<string> {
+  const limit = res.headers.get("x-ratelimit-limit");
+  const remaining = res.headers.get("x-ratelimit-remaining");
+  const reset = res.headers.get("x-ratelimit-reset");
+  let bodyText = "";
+  try {
+    bodyText = await res.text();
+  } catch {
+    bodyText = "";
+  }
+
+  if (res.status === 403 && remaining === "0") {
+    const resetSec = reset ? Number(reset) : NaN;
+    const resetMsg = Number.isFinite(resetSec)
+      ? ` Resets at ${new Date(resetSec * 1000).toISOString()} (${Math.max(
+          0,
+          Math.round((resetSec * 1000 - Date.now()) / 60_000)
+        )}m).`
+      : "";
+    return `GitHub API rate limit hit (remaining 0/${limit || "?"}). Add GITHUB_TOKEN in .env.local for higher limits.${resetMsg}`;
+  }
+
+  if (res.status === 404) {
+    return "Repository not found or private. Use a public repo URL like https://github.com/owner/repo.";
+  }
+
+  if (res.status === 401) {
+    return "GitHub authentication failed. If you set GITHUB_TOKEN, verify it is valid.";
+  }
+
+  return `GitHub API error (${res.status}). ${bodyText.slice(0, 220)}`;
+}
+
 function decodeBase64Content(content: string): string {
   return Buffer.from(content.replace(/\n/g, ""), "base64").toString("utf8");
 }
 
 async function loadContentFile(owner: string, repo: string, filePath: string): Promise<ImportedDocument | null> {
   const res = await ghFetch(`/repos/${owner}/${repo}/contents/${encodeURIComponent(filePath).replace(/%2F/g, "/")}`);
-  if (!res.ok) return null;
+  if (!res.ok) {
+    throw new Error(await readGitHubError(res));
+  }
   const j = (await res.json()) as { type?: string; content?: string; encoding?: string; name?: string; path?: string; size?: number };
   if (j.type !== "file" || j.encoding !== "base64" || typeof j.content !== "string") return null;
   if ((j.size ?? 0) > 200_000) return null;
@@ -72,7 +107,9 @@ async function loadContentFile(owner: string, repo: string, filePath: string): P
 
 async function getDefaultBranch(owner: string, repo: string): Promise<string> {
   const res = await ghFetch(`/repos/${owner}/${repo}`);
-  if (!res.ok) return "main";
+  if (!res.ok) {
+    throw new Error(await readGitHubError(res));
+  }
   const j = (await res.json()) as { default_branch?: string };
   return j.default_branch || "main";
 }
@@ -118,11 +155,13 @@ export async function POST(req: NextRequest) {
         content: decodeBase64Content(j.content).slice(0, MAX_CHARS_PER_DOC)
       });
     }
+  } else if (readmeRes.status !== 404) {
+    return NextResponse.json({ error: await readGitHubError(readmeRes) }, { status: 400 });
   }
 
   const rootRes = await ghFetch(`/repos/${owner}/${name}/contents`);
   if (!rootRes.ok) {
-    const msg = rootRes.status === 404 ? "Repository not found or is private." : "GitHub import failed.";
+    const msg = await readGitHubError(rootRes);
     return NextResponse.json({ error: msg }, { status: 400 });
   }
   const root = (await rootRes.json()) as Array<{ type: string; name: string; path: string }>;
@@ -146,26 +185,32 @@ export async function POST(req: NextRequest) {
   }
 
   // Pull a broader codebase snapshot via recursive tree.
-  const defaultBranch = await getDefaultBranch(owner, name);
+  let defaultBranch = "main";
+  try {
+    defaultBranch = await getDefaultBranch(owner, name);
+  } catch (error) {
+    return NextResponse.json({ error: error instanceof Error ? error.message : "GitHub import failed." }, { status: 400 });
+  }
   const treeRes = await ghFetch(`/repos/${owner}/${name}/git/trees/${encodeURIComponent(defaultBranch)}?recursive=1`);
-  if (treeRes.ok) {
-    const treeJson = (await treeRes.json()) as { tree?: Array<{ path: string; type: string; size?: number }> };
-    const tree = Array.isArray(treeJson.tree) ? treeJson.tree : [];
-    const selectedPaths = tree
-      .filter((t) => {
-        if (t.type !== "blob") return false;
-        if (!t.path || EXCLUDED_PATH_RE.test(t.path)) return false;
-        const looksReadable = DOC_FILE_RE.test(t.path) || CODE_FILE_RE.test(t.path);
-        if (!looksReadable) return false;
-        if ((t.size ?? 0) > 180_000) return false;
-        return true;
-      })
-      .sort((a, b) => scorePath(b.path) - scorePath(a.path))
-      .slice(0, MAX_DOCS);
+  if (!treeRes.ok) {
+    return NextResponse.json({ error: await readGitHubError(treeRes) }, { status: 400 });
+  }
+  const treeJson = (await treeRes.json()) as { tree?: Array<{ path: string; type: string; size?: number }> };
+  const tree = Array.isArray(treeJson.tree) ? treeJson.tree : [];
+  const selectedPaths = tree
+    .filter((t) => {
+      if (t.type !== "blob") return false;
+      if (!t.path || EXCLUDED_PATH_RE.test(t.path)) return false;
+      const looksReadable = DOC_FILE_RE.test(t.path) || CODE_FILE_RE.test(t.path);
+      if (!looksReadable) return false;
+      if ((t.size ?? 0) > 180_000) return false;
+      return true;
+    })
+    .sort((a, b) => scorePath(b.path) - scorePath(a.path))
+    .slice(0, MAX_DOCS);
 
-    for (const item of selectedPaths) {
-      candidatePaths.add(item.path);
-    }
+  for (const item of selectedPaths) {
+    candidatePaths.add(item.path);
   }
 
   const sortedCandidates = Array.from(candidatePaths)
@@ -175,7 +220,12 @@ export async function POST(req: NextRequest) {
 
   for (const p of sortedCandidates) {
     if (docs.some((d) => d.path === p)) continue;
-    const doc = await loadContentFile(owner, name, p);
+    let doc: ImportedDocument | null = null;
+    try {
+      doc = await loadContentFile(owner, name, p);
+    } catch (error) {
+      return NextResponse.json({ error: error instanceof Error ? error.message : "GitHub import failed." }, { status: 400 });
+    }
     if (doc) {
       const nextTotal = totalChars + doc.content.length;
       if (nextTotal > MAX_TOTAL_CHARS) continue;
