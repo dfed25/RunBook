@@ -93,7 +93,6 @@ export default function EmbedDemoPage() {
   const [showCompletionBanner, setShowCompletionBanner] = useState(false);
   const [interrupt, setInterrupt] = useState<InterruptState | null>(null);
   const [activityFeed, setActivityFeed] = useState<ActivityItem[]>([]);
-  const [widgetStatus, setWidgetStatus] = useState("Ready to guide");
   const [widgetPulse, setWidgetPulse] = useState(false);
   const completedStepIdsRef = useRef<Record<string, boolean>>({});
   const hydrationLoadedRef = useRef(false);
@@ -133,9 +132,15 @@ export default function EmbedDemoPage() {
   }, []);
 
   const setStatus = useCallback((text: string) => {
-    setWidgetStatus(text);
     window.dispatchEvent(new CustomEvent("runbook-assistant-status", { detail: text }));
   }, []);
+
+  const statusLine = useMemo(() => {
+    if (hoveredFeature?.title) return `Looking at: ${hoveredFeature.title}`;
+    if (interrupt?.message) return interrupt.message;
+    if (nextAction.id === "complete") return "Live in staging";
+    return `Next: ${nextAction.title}`;
+  }, [hoveredFeature, interrupt, nextAction]);
 
   const updateTourTarget = useCallback(() => {
     if (!tourActive || !currentTourStep) {
@@ -269,21 +274,6 @@ export default function EmbedDemoPage() {
   }, [currentTourStep, hoveredFeature]);
 
   useEffect(() => {
-    if (hoveredFeature?.title) {
-      setStatus(`Looking at: ${hoveredFeature.title}`);
-    }
-  }, [hoveredFeature, setStatus]);
-
-  useEffect(() => {
-    if (hoveredFeature || interrupt) return;
-    if (nextAction.id === "complete") {
-      setStatus("Live in staging");
-      return;
-    }
-    setStatus(`Next: ${nextAction.title}`);
-  }, [hoveredFeature, interrupt, nextAction, setStatus]);
-
-  useEffect(() => {
     const runAction = (action: UiAction) => {
       if (!action) return;
       if (action.type === "start_tour") {
@@ -365,7 +355,6 @@ export default function EmbedDemoPage() {
     setShowCompletionBanner(false);
     setInterrupt(null);
     setActivityFeed([]);
-    setWidgetStatus("Ready to guide");
     setWidgetPulse(false);
     completedStepIdsRef.current = {};
     try {
@@ -762,7 +751,7 @@ export default function EmbedDemoPage() {
         description="Live actions captured during setup."
         className="rounded-2xl border border-white/10 bg-slate-900 p-4"
       >
-        <p className="text-xs text-slate-400">{widgetStatus}</p>
+        <p className="text-xs text-slate-400">{statusLine}</p>
         <ul className="mt-2 space-y-1 text-xs text-slate-300">
           {activityFeed.length === 0 ? <li>No activity yet.</li> : activityFeed.map((item) => <li key={item.id}>- {item.text}</li>)}
         </ul>
