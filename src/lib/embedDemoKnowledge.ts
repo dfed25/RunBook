@@ -5,8 +5,10 @@ export const NORTHSTAR_DEMO_PROJECT_ID = "northstar-demo";
 
 export type DemoChatResult = {
   answer: string;
+  bullets: string[];
   sources: { title: string; excerpt: string; url?: string }[];
   steps: string[];
+  suggestions: string[];
 };
 
 function docById(id: string) {
@@ -15,6 +17,27 @@ function docById(id: string) {
 
 function excerptFromContent(content: string, max = 180): string {
   return content.replace(/\s+/g, " ").trim().slice(0, max) + (content.length > max ? "…" : "");
+}
+
+function compact(text: string, words = 12): string {
+  const parts = text.replace(/\s+/g, " ").trim().split(" ").filter(Boolean);
+  return parts.slice(0, words).join(" ");
+}
+
+function createResult(input: {
+  answer: string;
+  bullets: string[];
+  sources: { title: string; excerpt: string; url?: string }[];
+  steps: string[];
+  suggestions?: string[];
+}): DemoChatResult {
+  return {
+    answer: compact(input.answer, 12),
+    bullets: input.bullets.slice(0, 3).map((b) => compact(b, 14)),
+    sources: input.sources,
+    steps: input.steps.slice(0, 7),
+    suggestions: (input.suggestions || ["Guide me step-by-step", "Explain this page", "What can I do next?"]).slice(0, 3)
+  };
 }
 
 /** Deterministic demo responses for hackathon reliability. */
@@ -35,35 +58,35 @@ export function buildNorthstarDemoResponse(message: string, pageContext: string)
     (m.includes("explain") && m.includes("page"));
 
   if (explainPage) {
-    return {
-      answer:
-        "This is the **Northstar AI Developer Portal** — your hub for getting started, managing API keys, connecting GitHub, and shipping your first workflow. Use the sections on the left as a checklist: finish **Getting Started**, then **API Keys**, then wire up **GitHub** before you deploy.",
+    return createResult({
+      answer: "This page helps you launch quickly in the Northstar portal.",
+      bullets: ["Create dev keys", "Connect GitHub", "Deploy first workflow"],
       sources: product
         ? [{ title: product.title, excerpt: excerptFromContent(product.content), url: undefined }]
         : [],
       steps: [
-        "Skim **Getting Started** for prerequisites and timelines.",
-        "Open **API Keys** and confirm you have a development key (or create one).",
-        "Follow **GitHub Setup** so Runbook can sync workflows from your repo.",
-        "Use **Deploying Your First Workflow** when you are ready to go to staging."
+        "Open Getting Started and review prerequisites.",
+        "Create a development API key in API Keys.",
+        "Connect GitHub repository access.",
+        "Deploy your first workflow to staging."
       ]
-    };
+    });
   }
 
   if (m.includes("github") && (m.includes("access") || m.includes("permission") || m.includes("repo"))) {
-    return {
-      answer:
-        "Here is how new engineers at Northstar typically get GitHub access. Your org may vary slightly — follow your manager’s guidance if it conflicts.",
+    return createResult({
+      answer: "GitHub access takes four quick onboarding actions.",
+      bullets: ["Request org access", "Share GitHub username", "Wait for approval"],
       sources: eng
         ? [{ title: eng.title, excerpt: excerptFromContent(eng.content), url: undefined }]
         : [],
       steps: [
-        "Ask your manager for approval to join the engineering GitHub org.",
-        "Post your GitHub username in **#eng-access** (from the Engineering Setup Guide).",
-        "Wait for DevOps or your onboarding buddy to confirm you have been added.",
+        "Ask your manager for org access approval.",
+        "Post your GitHub username in #eng-access.",
+        "Wait for DevOps confirmation.",
         "Clone the starter repo, run `npm install`, then `npm run dev` to verify access."
       ]
-    };
+    });
   }
 
   if (
@@ -73,19 +96,19 @@ export function buildNorthstarDemoResponse(message: string, pageContext: string)
     m.includes("dev setup") ||
     m.includes("machine")
   ) {
-    return {
-      answer:
-        "For a smooth local setup, mirror what the Engineering Setup Guide recommends: join the right Slack channels first, then clone and install.",
+    return createResult({
+      answer: "Local setup is quick when done in this order.",
+      bullets: ["Install Node LTS", "Clone starter repo", "Run install and dev"],
       sources: eng
         ? [{ title: eng.title, excerpt: excerptFromContent(eng.content), url: undefined }]
         : [],
       steps: [
-        "Install Node.js LTS and Git if you have not already.",
+        "Install Node.js LTS and Git.",
         "Clone the starter repository after GitHub access is granted.",
         "Run `npm install` in the repo root, then `npm run dev`.",
-        "If the dev server fails, paste the error in **#dev-help** and tag your onboarding buddy."
+        "If blocked, post the error in #dev-help."
       ]
-    };
+    });
   }
 
   if (
@@ -97,9 +120,9 @@ export function buildNorthstarDemoResponse(message: string, pageContext: string)
     m.includes("start") ||
     m.includes("week one")
   ) {
-    return {
-      answer:
-        "Your first week is designed to ramp context, tooling, and safety. Use this portal alongside the First Week Onboarding Plan.",
+    return createResult({
+      answer: "Start with first-week milestones in this order.",
+      bullets: ["Day 1 admin + intro", "Day 2 tooling setup", "Day 3-5 ship and review"],
       sources: first
         ? [{ title: first.title, excerpt: excerptFromContent(first.content), url: undefined }]
         : [],
@@ -110,7 +133,7 @@ export function buildNorthstarDemoResponse(message: string, pageContext: string)
         "Day 4: Small pull request + read the security policy.",
         "Day 5: First-week retro with your manager and goals for week two."
       ]
-    };
+    });
   }
 
   if (
@@ -120,9 +143,9 @@ export function buildNorthstarDemoResponse(message: string, pageContext: string)
     m.includes("password") ||
     m.includes("secret")
   ) {
-    return {
-      answer:
-        "Security basics for Northstar engineers: enable 2FA, never paste secrets in chat, and complete training before shipping to production.",
+    return createResult({
+      answer: "Follow these security rules before shipping anything.",
+      bullets: ["Enable 2FA", "Never share secrets", "Finish required training"],
       sources: sec
         ? [{ title: sec.title, excerpt: excerptFromContent(sec.content), url: undefined }]
         : [],
@@ -132,13 +155,13 @@ export function buildNorthstarDemoResponse(message: string, pageContext: string)
         "Do not paste API keys or tokens into Slack, email, or public GitHub issues.",
         "Complete security training before merging production-bound code."
       ]
-    };
+    });
   }
 
   if (m.includes("expense") || m.includes("ramp") || m.includes("reimburs")) {
-    return {
-      answer:
-        "Expense submissions use Ramp with clear thresholds for receipts and approvals.",
+    return createResult({
+      answer: "Expense reimbursement follows a simple Ramp process.",
+      bullets: ["Submit within 14 days", "Attach receipts over $25", "Get approval over $100"],
       sources: expense
         ? [{ title: expense.title, excerpt: excerptFromContent(expense.content), url: undefined }]
         : [],
@@ -148,13 +171,13 @@ export function buildNorthstarDemoResponse(message: string, pageContext: string)
         "Get manager approval for expenses over $100.",
         "Use the Ramp reimbursement form; ask **#people-ops** if blocked."
       ]
-    };
+    });
   }
 
   if (m.includes("api key") || m.includes("apikey") || ctx.includes("api key")) {
-    return {
-      answer:
-        "API keys for Northstar are created from this portal’s **API Keys** section (demo). In production you would rotate keys, scope them to environments, and never commit them to git.",
+    return createResult({
+      answer: "Create and secure API keys from this page.",
+      bullets: ["Generate dev key first", "Store in env manager", "Rotate if exposed"],
       sources: product
         ? [{ title: product.title, excerpt: excerptFromContent(product.content), url: undefined }]
         : [],
@@ -164,7 +187,7 @@ export function buildNorthstarDemoResponse(message: string, pageContext: string)
         "Store the key in your env file or secret manager — not in the repo.",
         "Rotate the key if it is ever exposed."
       ]
-    };
+    });
   }
 
   // Default: blend product + first week
@@ -172,16 +195,16 @@ export function buildNorthstarDemoResponse(message: string, pageContext: string)
   if (product) sources.push({ title: product.title, excerpt: excerptFromContent(product.content) });
   if (first) sources.push({ title: first.title, excerpt: excerptFromContent(first.content) });
 
-  return {
-    answer:
-      "I matched your question to our **Northstar** knowledge base (demo). For the strongest answers, ask about GitHub access, local setup, your first week, security, expenses, or say **explain this page** for a tour of this portal.",
+  return createResult({
+    answer: "Here are the main things you can do right now.",
+    bullets: ["Set up local environment", "Get GitHub access", "Explore page capabilities"],
     sources,
     steps: [
-      "Check **Getting Started** for prerequisites.",
-      "Skim **Engineering Setup** if you are blocked on tooling or access.",
-      "Say **explain this page** anytime you want a guided tour of what you are looking at."
+      "Check Getting Started for prerequisites.",
+      "Use Engineering Setup for tooling blockers.",
+      "Click Explain this page for guided discovery."
     ]
-  };
+  });
 }
 
 export function getDemoKnowledgeContextBlock(): string {

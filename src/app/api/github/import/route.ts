@@ -55,6 +55,33 @@ async function ghFetch(path: string): Promise<Response> {
   return fetch(`https://api.github.com${path}`, { headers });
 }
 
+async function readGitHubError(res: Response): Promise<string> {
+  const limit = res.headers.get("x-ratelimit-limit");
+  const remaining = res.headers.get("x-ratelimit-remaining");
+  const reset = res.headers.get("x-ratelimit-reset");
+  let bodyText = "";
+  try {
+    bodyText = await res.text();
+  } catch {
+    bodyText = "";
+  }
+
+  if (res.status === 403 && remaining === "0") {
+    const resetMsg = reset ? ` Resets at unix ${reset}.` : "";
+    return `GitHub API rate limit hit (remaining 0/${limit || "?"}). Add GITHUB_TOKEN in .env.local for higher limits.${resetMsg}`;
+  }
+
+  if (res.status === 404) {
+    return "Repository not found or private. Use a public repo URL like https://github.com/owner/repo.";
+  }
+
+  if (res.status === 401) {
+    return "GitHub authentication failed. If you set GITHUB_TOKEN, verify it is valid.";
+  }
+
+  return `GitHub API error (${res.status}). ${bodyText.slice(0, 220)}`;
+}
+
 function decodeBase64Content(content: string): string {
   return Buffer.from(content.replace(/\n/g, ""), "base64").toString("utf8");
 }
@@ -122,7 +149,7 @@ export async function POST(req: NextRequest) {
 
   const rootRes = await ghFetch(`/repos/${owner}/${name}/contents`);
   if (!rootRes.ok) {
-    const msg = rootRes.status === 404 ? "Repository not found or is private." : "GitHub import failed.";
+    const msg = await readGitHubError(rootRes);
     return NextResponse.json({ error: msg }, { status: 400 });
   }
   const root = (await rootRes.json()) as Array<{ type: string; name: string; path: string }>;

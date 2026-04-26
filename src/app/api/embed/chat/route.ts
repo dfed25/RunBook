@@ -49,6 +49,14 @@ type ChatBody = {
   documents?: unknown;
 };
 
+type StructuredChatPayload = {
+  answer: string;
+  bullets: string[];
+  steps: string[];
+  sources: { title: string; excerpt?: string; url?: string }[];
+  suggestions: string[];
+};
+
 function sanitizeCustomSources(raw: unknown): { title: string; content: string }[] {
   if (!Array.isArray(raw)) return [];
   const out: { title: string; content: string }[] = [];
@@ -87,6 +95,52 @@ function normalizePageContext(body: ChatBody): string {
   return parts.join("\n");
 }
 
+function clipWords(text: string, maxWords: number): string {
+  return text
+    .replace(/\s+/g, " ")
+    .trim()
+    .split(" ")
+    .filter(Boolean)
+    .slice(0, maxWords)
+    .join(" ");
+}
+
+function normalizeStructured(payload: Partial<StructuredChatPayload>): StructuredChatPayload {
+  const fallbackSuggestions = ["Guide me step-by-step", "Explain this page", "What can I do next?"];
+  const normalizedBullets = (payload.bullets || []).map((b) => clipWords(String(b), 14)).filter(Boolean).slice(0, 3);
+  const fallbackBullet = payload.answer ? [clipWords(String(payload.answer), 14)] : ["Explore key actions", "Follow guided steps", "Open trusted sources"];
+  return {
+    answer: clipWords(payload.answer || "Here is what you can do next.", 12),
+    bullets: normalizedBullets.length > 0 ? normalizedBullets : fallbackBullet,
+    steps: (payload.steps || []).map((s) => String(s).trim()).filter(Boolean).slice(0, 7),
+    sources: (payload.sources || []).slice(0, 6),
+    suggestions: (payload.suggestions || fallbackSuggestions).map((s) => String(s).trim()).filter(Boolean).slice(0, 3)
+  };
+}
+
+function bulletsFromText(text: string): string[] {
+  const lines = text
+    .split(/[.\n]/g)
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+  return lines.slice(0, 3).map((l) => clipWords(l, 14));
+}
+
+function parseStructuredFromRaw(raw: string): Partial<StructuredChatPayload> {
+  const trimmed = raw.trim();
+  const idx = trimmed.lastIndexOf("RUNBOOK_JSON:");
+  if (idx >= 0) {
+    const jsonPart = trimmed.slice(idx + "RUNBOOK_JSON:".length).trim();
+    try {
+      const parsed = JSON.parse(jsonPart) as Partial<StructuredChatPayload>;
+      return parsed;
+    } catch {
+      /* ignore */
+    }
+  }
+  return { answer: trimmed, bullets: bulletsFromText(trimmed) };
+}
+
 export async function POST(req: NextRequest) {
   const origin = req.headers.get("origin");
 
@@ -121,7 +175,7 @@ export async function POST(req: NextRequest) {
 
     const customSources = [...sanitizeCustomSources(body.customSources), ...requestDocs];
     const payload = await runNorthstarEmbedChat({ message, pageContext, customSources });
-    return NextResponse.json(payload, { headers: corsHeaders(origin) });
+    return NextResponse.json(normalizeStructured(payload), { headers: corsHeaders(origin) });
   }
 
   const auth = req.headers.get("authorization") || "";
@@ -168,8 +222,8 @@ Indexed sources:
 ${context || "(no indexed chunks yet)"}
 
 User question: ${message}
-
-Also output 3-6 short imperative steps as a JSON array string at the very end on its own line prefixed exactly with RUNBOOK_STEPS_JSON: e.g. RUNBOOK_STEPS_JSON: ["step1","step2"]`;
+Return compact JSON on one final line:
+RUNBOOK_JSON: {"answer":"<=12 words","bullets":["<=14 words"],"steps":["..."],"suggestions":["Guide me step-by-step","Explain this page","What can I do next?"]}`;
 
   const baseSources = retrieved.map((r) => ({
     title: r.doc.title,
@@ -179,53 +233,39 @@ Also output 3-6 short imperative steps as a JSON array string at the very end on
 
   if (!isServerLlmConfigured()) {
     return NextResponse.json(
-      {
-        answer:
-          "AI is not configured. Set GEMINI_API_KEY and/or OPENAI_API_KEY in .env.local for grounded answers from your indexed repository.",
+      normalizeStructured({
+        answer: "AI setup missing; use docs mode for now.",
+        bullets: ["Connect knowledge in Studio", "Index repository chunks", "Set GEMINI_API_KEY or OPENAI_API_KEY"],
         sources: baseSources,
-        steps: [
-          "Connect knowledge in Runbook Studio.",
-          "Run **Index repository** so chunks exist in the vector store.",
-          "Add GEMINI_API_KEY or OPENAI_API_KEY, then ask again."
-        ]
-      },
+        steps: ["Connect knowledge in Studio.", "Run repository indexing.", "Add AI key and retry."]
+      }),
       { headers: corsHeaders(origin) }
     );
   }
 
   try {
     const raw = await generateFromGemini(EMBED_CHAT_SYSTEM_PROMPT, userPrompt);
-    let answer = raw.trim();
-    let steps: string[] = [];
-    const idx = answer.lastIndexOf("RUNBOOK_STEPS_JSON:");
-    if (idx >= 0) {
-      const jsonPart = answer.slice(idx + "RUNBOOK_STEPS_JSON:".length).trim();
-      answer = answer.slice(0, idx).trim();
-      try {
-        const parsed = JSON.parse(jsonPart) as unknown;
-        if (Array.isArray(parsed)) {
-          steps = parsed.filter((x): x is string => typeof x === "string");
-        }
-      } catch {
-        /* ignore */
-      }
-    }
-    if (steps.length === 0) {
-      steps = ["Review the sources below for exact policy text.", "If anything is unclear, ask your team lead."];
-    }
+    const parsed = parseStructuredFromRaw(raw);
+    const normalized = normalizeStructured({
+      ...parsed,
+      bullets: parsed.bullets && parsed.bullets.length > 0 ? parsed.bullets : bulletsFromText(parsed.answer || ""),
+      steps:
+        parsed.steps && parsed.steps.length > 0
+          ? parsed.steps
+          : ["Review highlighted sources.", "Follow the next action.", "Ask follow-up if blocked."],
+      sources: baseSources
+    });
 
-    return NextResponse.json(
-      {
-        answer,
-        sources: baseSources,
-        steps
-      },
-      { headers: corsHeaders(origin) }
-    );
+    return NextResponse.json(normalized, { headers: corsHeaders(origin) });
   } catch (e) {
     console.error(e);
     return NextResponse.json(
-      { error: "AI temporarily unavailable", sources: [], steps: [] },
+      normalizeStructured({
+        answer: "AI unavailable; showing grounded fallback.",
+        bullets: ["Use source cards below", "Follow step mode checklist", "Retry in a moment"],
+        sources: baseSources,
+        steps: ["Review the top source card.", "Complete the first checklist step.", "Retry your question."]
+      }),
       { status: 503, headers: corsHeaders(origin) }
     );
   }

@@ -11,15 +11,26 @@ import {
 type ChatResponse = {
   answer?: string;
   error?: string;
+  bullets?: string[];
   sources?: SourceItem[];
   steps?: string[];
+  suggestions?: string[];
 };
 
 type SourceItem = { title: string; excerpt?: string; url?: string };
 
 type Message =
   | { role: "user"; text: string }
-  | { role: "assistant"; text?: string; answer?: string; steps?: string[]; sources?: SourceItem[]; isWelcome?: boolean };
+  | {
+      role: "assistant";
+      text?: string;
+      answer?: string;
+      bullets?: string[];
+      steps?: string[];
+      sources?: SourceItem[];
+      suggestions?: string[];
+      isWelcome?: boolean;
+    };
 
 export type EmbeddedRunbookAssistantProps = {
   projectId?: string;
@@ -56,6 +67,7 @@ export function EmbeddedRunbookAssistant({
   const [messages, setMessages] = useState<Message[]>([]);
   const [completedStepsByMessage, setCompletedStepsByMessage] = useState<Record<string, Record<number, boolean>>>({});
   const [activeSource, setActiveSource] = useState<SourceItem | null>(null);
+  const [expandedByMessage, setExpandedByMessage] = useState<Record<string, boolean>>({});
 
   const posWrap = position === "embedded" ? "relative h-full min-h-[360px] w-full overflow-hidden bg-slate-50" : "";
   const fixedLaunch = position === "page" ? "fixed bottom-5 right-5 z-[2147483000]" : "absolute bottom-4 right-4 z-20";
@@ -113,8 +125,10 @@ export function EmbeddedRunbookAssistant({
           {
             role: "assistant",
             answer: data.answer,
+            bullets: (data.bullets || []).slice(0, 6),
             steps: data.steps || [],
             sources: (data.sources || []).slice(0, 6),
+            suggestions: (data.suggestions || []).slice(0, 3),
             text: !data.answer ? "No content." : undefined
           }
         ]);
@@ -155,7 +169,19 @@ export function EmbeddedRunbookAssistant({
     }));
   };
 
-  const chips = suggestedQuestions.filter(Boolean).slice(0, 8);
+  const actionTiles = [
+    { label: "Get GitHub access", prompt: "Get GitHub access" },
+    { label: "Set up first workflow", prompt: "Set up first workflow" },
+    { label: "Connect integrations", prompt: "Connect integrations" },
+    { label: "Explore features", prompt: "What features can I use here?" }
+  ];
+
+  const mappedSuggestedActions = suggestedQuestions
+    .filter(Boolean)
+    .slice(0, 4)
+    .map((s) => ({ label: s.replace(/\?+$/, "").trim(), prompt: s }));
+
+  const chips = [...actionTiles, ...mappedSuggestedActions].slice(0, 8);
 
   return (
     <div className={`${posWrap} ${className}`}>
@@ -194,29 +220,29 @@ export function EmbeddedRunbookAssistant({
             </button>
           </div>
           {chips.length > 0 ? (
-            <div className="flex flex-wrap gap-1.5 border-b border-slate-800 px-2 py-2">
+            <div className="grid grid-cols-2 gap-1.5 border-b border-slate-800 px-2 py-2">
               <button
                 type="button"
-                className="rounded-full border border-emerald-500/50 bg-emerald-900/30 px-2.5 py-1 text-[10px] font-semibold text-emerald-100 hover:bg-emerald-800/50"
+                className="col-span-2 rounded-md border border-emerald-500/50 bg-emerald-900/30 px-2.5 py-1.5 text-[10px] font-semibold text-emerald-100 hover:bg-emerald-800/50"
                 onClick={explainThisPage}
               >
-                Explain this page
+                What can I do here?
               </button>
               <button
                 type="button"
-                className="rounded-full border border-amber-500/50 bg-amber-900/30 px-2.5 py-1 text-[10px] font-semibold text-amber-100 hover:bg-amber-800/50"
+                className="col-span-2 rounded-md border border-amber-500/50 bg-amber-900/30 px-2.5 py-1.5 text-[10px] font-semibold text-amber-100 hover:bg-amber-800/50"
                 onClick={() => void send("What should I do next?")}
               >
                 What should I do next?
               </button>
               {chips.map((c) => (
                 <button
-                  key={c}
+                  key={`${c.label}-${c.prompt}`}
                   type="button"
-                  className="rounded-full border border-indigo-500/40 bg-indigo-950/50 px-2.5 py-1 text-[10px] font-medium text-indigo-100 hover:bg-indigo-900/70"
-                  onClick={() => void send(c)}
+                  className="rounded-md border border-indigo-500/40 bg-indigo-950/50 px-2.5 py-1.5 text-[10px] font-medium text-indigo-100 hover:bg-indigo-900/70"
+                  onClick={() => void send(c.prompt)}
                 >
-                  {c}
+                  {c.label}
                 </button>
               ))}
             </div>
@@ -234,18 +260,69 @@ export function EmbeddedRunbookAssistant({
               return (
                 <div key={messageId} className="mr-4 rounded-xl border border-slate-700/80 bg-slate-800/90 px-3 py-2 text-left">
                   {msg.answer ? (
-                    <p className="mb-1 text-sm leading-relaxed text-slate-200">{msg.answer}</p>
+                    <p className="mb-1 text-sm font-semibold leading-snug text-slate-100">{msg.answer}</p>
                   ) : (
                     <p className="text-sm text-slate-200">{msg.text}</p>
                   )}
+                  {msg.bullets && msg.bullets.length > 0 ? (
+                    <ul className="mb-2 mt-1 space-y-1 text-xs text-slate-300">
+                      {msg.bullets.slice(0, 3).map((bullet, idx) => (
+                        <li key={`${messageId}-b-${idx}`} className="flex gap-2">
+                          <span>•</span>
+                          <span>{bullet}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
+                  {msg.bullets && msg.bullets.length > 3 ? (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setExpandedByMessage((prev) => ({
+                          ...prev,
+                          [messageId]: !prev[messageId]
+                        }))
+                      }
+                      className="mb-1 text-[11px] font-medium text-indigo-300 underline"
+                    >
+                      {expandedByMessage[messageId] ? "Hide more" : "Show more"}
+                    </button>
+                  ) : null}
+                  {expandedByMessage[messageId] && msg.bullets && msg.bullets.length > 3 ? (
+                    <ul className="mb-2 space-y-1 text-xs text-slate-400">
+                      {msg.bullets.slice(3).map((bullet, idx) => (
+                        <li key={`${messageId}-bmore-${idx}`} className="flex gap-2">
+                          <span>•</span>
+                          <span>{bullet}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
                   {msg.steps && msg.steps.length > 0 ? (
                     <div className="mt-2 rounded-lg border border-slate-700 bg-slate-900/60 p-2">
-                      <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-400">Step Mode</p>
+                      {(() => {
+                        const stepItems = msg.steps || [];
+                        const completedMap = completedStepsByMessage[messageId] || {};
+                        const completeCount = Object.values(completedMap).filter(Boolean).length;
+                        const firstIncomplete = stepItems.findIndex((_, i2) => !Boolean(completedMap[i2]));
+                        return (
+                          <>
+                      <div className="mb-1 flex items-center justify-between">
+                        <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Step Mode</p>
+                        <p className="text-[10px] text-emerald-300">
+                          {completeCount}/{stepItems.length}
+                        </p>
+                      </div>
                       <ul className="space-y-1">
-                        {msg.steps.map((step, idx) => {
-                          const checked = Boolean(completedStepsByMessage[messageId]?.[idx]);
+                        {stepItems.map((step, idx) => {
+                          const checked = Boolean(completedMap[idx]);
                           return (
-                            <li key={`${messageId}-s-${idx}`} className="flex items-start gap-2 text-xs text-slate-300">
+                            <li
+                              key={`${messageId}-s-${idx}`}
+                              className={`flex items-start gap-2 text-xs ${
+                                idx === firstIncomplete && !checked ? "text-emerald-200" : "text-slate-300"
+                              }`}
+                            >
                               <button
                                 type="button"
                                 onClick={() => toggleStep(messageId, idx)}
@@ -259,6 +336,18 @@ export function EmbeddedRunbookAssistant({
                           );
                         })}
                       </ul>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (firstIncomplete >= 0) toggleStep(messageId, firstIncomplete);
+                        }}
+                        className="mt-2 rounded bg-emerald-600/20 px-2 py-1 text-[10px] font-semibold text-emerald-200"
+                      >
+                        Mark complete
+                      </button>
+                          </>
+                        );
+                      })()}
                     </div>
                   ) : null}
                   {msg.sources && msg.sources.length > 0 ? (
@@ -282,6 +371,24 @@ export function EmbeddedRunbookAssistant({
                       </div>
                     </div>
                   ) : null}
+                  <div className="mt-2 flex flex-wrap gap-1.5 border-t border-slate-700/70 pt-2">
+                    {(msg.suggestions && msg.suggestions.length > 0
+                      ? msg.suggestions
+                      : ["Guide me step-by-step", "Explain this page", "What can I do next?"]
+                    ).map((action) => (
+                      <button
+                        key={`${messageId}-q-${action}`}
+                        type="button"
+                        onClick={() => {
+                          if (action === "Explain this page") explainThisPage();
+                          else void send(action);
+                        }}
+                        className="rounded-full border border-slate-500/50 px-2 py-1 text-[10px] font-medium text-slate-200 hover:bg-slate-700"
+                      >
+                        {action}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               );
             })}
