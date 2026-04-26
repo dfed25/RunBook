@@ -17,6 +17,23 @@ function excerptFromContent(content: string, max = 180): string {
   return content.replace(/\s+/g, " ").trim().slice(0, max) + (content.length > max ? "…" : "");
 }
 
+function isLocationIntent(text: string): boolean {
+  return /(where|find|locate|click|open|go to|how do i|create account|sign up|signup|register|get started|log in|login)/i.test(
+    text
+  );
+}
+
+function extractLocationTarget(text: string): string {
+  const m = text.match(/(?:where\s+is|find|locate|click|open|go\s+to)\s+(.+)$/i);
+  if (m && m[1]) return m[1].trim().replace(/[?.!]+$/, "");
+  if (/create\s*account/i.test(text)) return "Create account";
+  if (/sign\s*up|signup/i.test(text)) return "Sign up";
+  if (/get\s*started/i.test(text)) return "Get started";
+  if (/log\s*in|login/i.test(text)) return "Log in";
+  if (/register/i.test(text)) return "Register";
+  return "the relevant action button";
+}
+
 /** Deterministic demo responses for hackathon reliability. */
 export function buildNorthstarDemoResponse(message: string, pageContext: string): DemoChatResult {
   const m = message.toLowerCase().trim();
@@ -27,6 +44,23 @@ export function buildNorthstarDemoResponse(message: string, pageContext: string)
   const sec = docById("security-policy");
   const product = docById("product-overview");
   const expense = docById("expense-policy");
+
+  if (isLocationIntent(m)) {
+    const target = extractLocationTarget(message);
+    return {
+      answer:
+        "I can help you locate that action on this page. The exact account creation flow is not documented in the current demo excerpts, so I will guide by visible UI labels.",
+      sources: product
+        ? [{ title: product.title, excerpt: excerptFromContent(product.content), url: undefined }]
+        : [],
+      steps: [
+        `Look for a control labeled **${target}** on the current page.`,
+        "Use the highlighted element as your starting point if one appears.",
+        "If multiple matches exist, choose the most prominent primary CTA in the onboarding section.",
+        "If nothing is highlighted, ask with the exact visible label (for example: find Create account button)."
+      ]
+    };
+  }
 
   const explainPage =
     m.includes("explain this page") ||
