@@ -12,7 +12,7 @@
   "dependencies": {
     "@notionhq/client": "^5.20.0",
     "@octokit/rest": "^21.1.1",
-    "@slack/web-api": "^7.15.1",
+    "@slack/web-api": "^7.15.2",
     "@supabase/ssr": "^0.10.2",
     "@supabase/supabase-js": "^2.104.1",
     "googleapis": "^171.4.0",
